@@ -56,7 +56,7 @@ if ($dailyId !== null) {
 }
 
 // ==================================================
-// SAVE SHOP / WALK-IN ONLY
+// SAVE SHOP / WALK-IN + STATION EXPENSE
 // ==================================================
 
 if (
@@ -67,6 +67,9 @@ if (
     try {
         $inputCustomers = trim($_POST['walk_in_customers'] ?? '');
         $inputMoney = trim($_POST['walk_in_money'] ?? '');
+        $expenseCategory = trim($_POST['expense_category'] ?? '');
+        $expenseName = trim($_POST['expense_name'] ?? '');
+        $expenseAmount = trim($_POST['expense_amount'] ?? '');
 
         if ($inputCustomers !== '') {
             if (!ctype_digit($inputCustomers)) {
@@ -95,6 +98,35 @@ if (
         } else {
             $customersValue = 0;
             $moneyValue = 0;
+        }
+
+        // Expense is optional. If an amount is entered, require a valid expense type.
+        if ($expenseAmount !== '') {
+            if (!is_numeric($expenseAmount) || (float)$expenseAmount < 0) {
+                throw new Exception('Expense amount must be a valid amount.');
+            }
+
+            $expenseAmountValue = (float)$expenseAmount;
+
+            $allowedCategories = [
+                'Food' => 'Food',
+                'Gas' => 'Gas',
+                'Cash Advance' => 'Cash Advance',
+                'Others' => 'Miscellaneous'
+            ];
+
+            if (!isset($allowedCategories[$expenseCategory])) {
+                throw new Exception('Please select an expense type.');
+            }
+
+            if (($expenseCategory === 'Cash Advance' || $expenseCategory === 'Others') && $expenseName === '') {
+                throw new Exception('Please enter a name or description for this expense.');
+            }
+
+            $expenseDescription = in_array($expenseCategory, ['Cash Advance', 'Others'], true)
+                ? $expenseName
+                : $expenseCategory;
+            $expenseDbCategory = $allowedCategories[$expenseCategory];
         }
 
         $stmt = $pdo->prepare("
@@ -136,9 +168,32 @@ if (
             ]);
         }
 
+        if ($expenseAmount !== '') {
+            $stmt = $pdo->prepare("
+                INSERT INTO expenses (
+                    expense_date,
+                    category,
+                    description,
+                    amount,
+                    daily_id,
+                    expense_location
+                )
+                VALUES (?, ?, ?, ?, ?, 'Station')
+            ");
+            $stmt->execute([
+                $businessDate,
+                $expenseDbCategory,
+                $expenseDescription,
+                $expenseAmountValue,
+                $dailyId
+            ]);
+        }
+
         $walkInCustomers = $customersValue;
         $walkInSales = $customersValue * $walkInPrice;
-        $message = 'Shop / Walk-in sales saved successfully.';
+        $message = $expenseAmount !== ''
+            ? 'Shop / Walk-in sales and station expense saved successfully.'
+            : 'Shop / Walk-in sales saved successfully.';
         $messageType = 'success';
     } catch (Throwable $e) {
         $message = $e->getMessage();
@@ -154,6 +209,51 @@ if (
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daily Closing - Marcid Blue</title>
     <link rel="stylesheet" href="../assets/css/app.css">
+    <style>
+        .shop-walkin-grid {
+            display: grid;
+            grid-template-columns: minmax(110px, 0.7fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(170px, 0.9fr);
+            gap: 16px;
+            align-items: end;
+        }
+
+        .shop-customers-field {
+            max-width: 150px;
+        }
+
+        .shop-money-field {
+            max-width: 230px;
+        }
+
+        .expense-name-field {
+            margin-top: 12px;
+        }
+
+        .shop-computed-sales {
+            padding-left: 8px;
+        }
+
+        @media (max-width: 1050px) {
+            .shop-walkin-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .shop-computed-sales {
+                padding-left: 0;
+            }
+        }
+
+        @media (max-width: 650px) {
+            .shop-walkin-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .shop-customers-field,
+            .shop-money-field {
+                max-width: none;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -287,7 +387,7 @@ if (
                         <div>
                             <div class="card-title">Shop / Walk-in</div>
                             <div class="section-description">
-                                Record regular customers and money received at the shop.
+                                Record regular customers, money received, and station expenses.
                             </div>
                         </div>
                     </div>
@@ -303,10 +403,10 @@ if (
                         <form method="POST" id="shopWalkInForm">
                             <input type="hidden" name="action" value="save_shop_walkin">
 
-                            <div class="summary-grid">
-                                <div>
+                            <div class="shop-walkin-grid">
+                                <div class="shop-customers-field">
                                     <label for="walk_in_customers" class="form-label">
-                                        Customers
+                                        Customers <span class="summary-description">(× ₱30)</span>
                                     </label>
                                     <input
                                         type="number"
@@ -320,7 +420,7 @@ if (
                                     >
                                 </div>
 
-                                <div>
+                                <div class="shop-money-field">
                                     <label for="walk_in_money" class="form-label">
                                         Money Received
                                     </label>
@@ -337,13 +437,52 @@ if (
                                 </div>
 
                                 <div>
-                                    <div class="summary-label">Price per Customer</div>
-                                    <div class="summary-value" id="shopPrice">
-                                        ₱<?= number_format($walkInPrice, 2) ?>
+                                    <label for="expense_category" class="form-label">
+                                        Expense
+                                    </label>
+                                    <select
+                                        id="expense_category"
+                                        name="expense_category"
+                                        class="form-input"
+                                    >
+                                        <option value="">No Expense</option>
+                                        <option value="Food">Food</option>
+                                        <option value="Gas">Gas</option>
+                                        <option value="Cash Advance">Cash Advance</option>
+                                        <option value="Others">Others</option>
+                                    </select>
+
+                                    <div id="expenseNameWrap" class="expense-name-field" style="display: none;">
+                                        <label for="expense_name" class="form-label" id="expenseNameLabel">
+                                            Name / Description
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="expense_name"
+                                            name="expense_name"
+                                            class="form-input"
+                                            maxlength="255"
+                                            placeholder="Enter name or description"
+                                        >
                                     </div>
                                 </div>
 
                                 <div>
+                                    <label for="expense_amount" class="form-label">
+                                        Expense Amount
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="expense_amount"
+                                        name="expense_amount"
+                                        class="form-input"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="Example: 500"
+                                    >
+                                </div>
+
+                                <div class="shop-computed-sales">
                                     <div class="summary-label">Computed Sales</div>
                                     <div class="summary-value" id="shopComputedSales">
                                         ₱<?= number_format($walkInSales, 2) ?>
@@ -391,6 +530,10 @@ if (
 document.addEventListener('DOMContentLoaded', function () {
     const customersInput = document.getElementById('walk_in_customers');
     const moneyInput = document.getElementById('walk_in_money');
+    const expenseCategory = document.getElementById('expense_category');
+    const expenseNameWrap = document.getElementById('expenseNameWrap');
+    const expenseNameInput = document.getElementById('expense_name');
+    const expenseNameLabel = document.getElementById('expenseNameLabel');
     const computeButton = document.getElementById('shopComputeButton');
     const computedSales = document.getElementById('shopComputedSales');
     const computeMessage = document.getElementById('shopComputeMessage');
@@ -408,6 +551,31 @@ document.addEventListener('DOMContentLoaded', function () {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+    }
+
+    function updateExpenseName() {
+        if (!expenseCategory || !expenseNameWrap) {
+            return;
+        }
+
+        const needsName = expenseCategory.value === 'Cash Advance' || expenseCategory.value === 'Others';
+        expenseNameWrap.style.display = needsName ? 'block' : 'none';
+
+        if (!needsName && expenseNameInput) {
+            expenseNameInput.value = '';
+        }
+
+        if (expenseNameLabel) {
+            expenseNameLabel.textContent = expenseCategory.value === 'Cash Advance'
+                ? 'Name'
+                : 'Name / Description';
+        }
+
+        if (expenseNameInput) {
+            expenseNameInput.placeholder = expenseCategory.value === 'Cash Advance'
+                ? 'Enter name'
+                : 'Enter name or description';
+        }
     }
 
     function computeShop() {
@@ -476,6 +644,11 @@ document.addEventListener('DOMContentLoaded', function () {
             customersInput.value = '';
         }
     });
+
+    if (expenseCategory) {
+        expenseCategory.addEventListener('change', updateExpenseName);
+        updateExpenseName();
+    }
 
     computeButton.addEventListener('click', computeShop);
 });
