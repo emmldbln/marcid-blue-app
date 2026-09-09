@@ -105,38 +105,20 @@ a {
     height: 72px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 22px;
-    border-bottom: 1px solid var(--border);
-}
-
-.brand-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
     justify-content: center;
-    background: var(--primary);
-    color: white;
-    border-radius: var(--radius-sm);
-    font-size: 20px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--border);
     overflow: hidden;
 }
 
-.brand-icon img {
-    width: 28px !important;
-    height: 28px !important;
-    max-width: 100%;
-    max-height: 100%;
+.sidebar-brand img {
+    width: 90px;
+    height: 90px;
     object-fit: contain;
     display: block;
+    flex-shrink: 0;
 }
-
-.brand-text {
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-}
+/* ---------- Sidebar Navigation ---------- */
 
 .sidebar-nav {
     padding: 20px 12px;
@@ -438,16 +420,16 @@ a {
 
 @media (max-width: 900px) {
 
-    .sidebar {
-        width: 200px;
-    }
-
-    .main {
-        margin-left: 200px;
+    :root {
+        --sidebar-width: 200px;
     }
 
     .summary-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .topbar {
+        padding: 0 24px;
     }
 
 }
@@ -458,6 +440,8 @@ a {
         position: static;
         width: 100%;
         min-height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
     }
 
     .app {
@@ -466,6 +450,15 @@ a {
 
     .main {
         margin-left: 0;
+    }
+
+    .sidebar-brand {
+        height: 72px;
+    }
+
+    .sidebar-brand img {
+        width: 102px;
+        height: 100px;
     }
 
     .topbar {

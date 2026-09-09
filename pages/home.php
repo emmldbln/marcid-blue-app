@@ -24,7 +24,9 @@ requireAdmin();
     <aside class="sidebar">
 
         <div class="sidebar-brand">
-            <img src="../assets/images/mb-logo.png" alt="Marcid Blue Logo">
+            <div class="brand-icon">
+        <img src="../assets/images/mb-logo.png" alt="Marcid Blue Logo">
+    </div>
         </div>
 
         <nav class="sidebar-nav">
@@ -48,7 +50,7 @@ requireAdmin();
                 <span>Daily Records</span>
             </a>
 
-            <a href="daily.php" class="nav-item">
+            <a href="daily-closing.php" class="nav-item">
                 🧾
                 <span>Daily Closing</span>
             </a>
