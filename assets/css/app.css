@@ -540,11 +540,6 @@ a {
     max-width: 95px;
 }
 
-#deliveryRows th:nth-child(10),
-#deliveryRows td:nth-child(10) {
-    display: none;
-}
-
 #deliveryRows .delivery-customer {
     font-size: 16px;
     font-weight: 600;
@@ -565,6 +560,37 @@ a {
 
 #deliveryRows .calculated-amount {
     font-size: 14px;
+}
+
+/* Delivery payment calculation feedback */
+#deliveryRows .delivery-payment-status {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+#deliveryRows .delivery-payment-status.is-valid {
+    color: var(--success);
+}
+
+#deliveryRows .delivery-payment-status.is-warning {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+#deliveryRows .delivery-payment-status.is-balance {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+#deliveryRows .delivery-payment-status.is-overpayment {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+#deliveryRows .payment-over {
+    border-color: var(--warning);
 }
 
 @media (max-width: 900px) {
