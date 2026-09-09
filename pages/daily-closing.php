@@ -1740,810 +1740,1092 @@ if (
         </main>
     </div>
     <script>
-        (function () {
-            const form =
-                document.getElementById('shopWalkInForm');
+(function () {
+    const form =
+        document.getElementById('shopWalkInForm');
 
-            if (!form) {
+    if (!form) {
+        return;
+    }
+
+    const customersInput =
+        document.getElementById('walk_in_customers');
+
+    const moneyInput =
+        document.getElementById('walk_in_money');
+
+    const computedSales =
+        document.getElementById('shopComputedSales');
+
+    const dashboardSales =
+        document.getElementById('dashboardShopSales');
+
+    const dashboardCustomers =
+        document.getElementById('dashboardShopCustomers');
+
+    const computeMessage =
+        document.getElementById('shopComputeMessage');
+
+    const expenseRows =
+        document.getElementById('expenseRows');
+
+    const addExpenseButton =
+        document.getElementById('addExpenseButton');
+
+    const deliveryPaymentRows =
+        document.getElementById('deliveryPaymentRows');
+
+    const addDeliveryPaymentButton =
+        document.getElementById('addDeliveryPaymentButton');
+
+    const computeButton =
+        document.getElementById('shopComputeButton');
+
+    const pricePerCustomer =
+        <?= json_encode($walkInPrice) ?>;
+
+    const customerAccounts =
+        <?= json_encode(
+            $customerBalances,
+            JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+        ) ?>;
+
+
+    /* =========================================================
+       HELPERS
+       ========================================================= */
+
+    function formatCurrency(value) {
+        return '₱'
+            + Number(value || 0).toLocaleString(
+                'en-PH',
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                }
+            );
+    }
+
+
+    /* =========================================================
+       EXPENSE
+       ========================================================= */
+
+    function updateExpenseRow(row) {
+        if (!row) {
+            return;
+        }
+
+        const category =
+            row.querySelector('.expense-category');
+
+        const name =
+            row.querySelector('.expense-name');
+
+        const label =
+            row.querySelector('.expense-name-label');
+
+        if (!category || !name || !label) {
+            return;
+        }
+
+        const needsName =
+            category.value === 'Cash Advance'
+            || category.value === 'Others';
+
+        name.disabled = !needsName;
+        name.required = needsName;
+
+        label.textContent = needsName
+            ? 'Name / Description *'
+            : 'Name / Description';
+
+        if (needsName) {
+            if (category.value === 'Cash Advance') {
+                name.placeholder =
+                    'Enter recipient name';
+            } else {
+                name.placeholder =
+                    'Enter expense description';
+            }
+        } else {
+            name.value = '';
+            name.placeholder =
+                'Not required for Food / Gas';
+        }
+    }
+
+
+    function createExpenseRow() {
+        const row =
+            document.createElement('div');
+
+        row.className =
+            'expense-row';
+
+        row.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">
+                    Expense
+                </label>
+
+                <select
+                    name="expense_category[]"
+                    class="form-input expense-category"
+                >
+                    <option value="">
+                        No Expense
+                    </option>
+
+                    <option value="Food">
+                        Food
+                    </option>
+
+                    <option value="Gas">
+                        Gas
+                    </option>
+
+                    <option value="Cash Advance">
+                        Cash Advance
+                    </option>
+
+                    <option value="Others">
+                        Others
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    Amount
+                </label>
+
+                <input
+                    type="number"
+                    name="expense_amount[]"
+                    class="form-input expense-amount"
+                    min="0"
+                    step="0.01"
+                    placeholder="Example: 500"
+                >
+            </div>
+
+            <div class="form-group expense-name-group">
+                <label class="form-label expense-name-label">
+                    Name / Description
+                </label>
+
+                <input
+                    type="text"
+                    name="expense_name[]"
+                    class="form-input expense-name"
+                    maxlength="255"
+                    placeholder="Not required for Food / Gas"
+                    disabled
+                >
+            </div>
+
+            <button
+                type="button"
+                class="expense-remove"
+                title="Remove expense"
+                aria-label="Remove expense"
+            >
+                ×
+            </button>
+        `;
+
+        expenseRows.appendChild(row);
+
+        updateExpenseRow(row);
+
+        const category =
+            row.querySelector('.expense-category');
+
+        if (category) {
+            category.focus();
+        }
+    }
+
+
+    /* =========================================================
+       CUSTOMER PRICE
+       ========================================================= */
+
+    function setPriceFromCustomer(row) {
+        if (!row) {
+            return;
+        }
+
+        const customerInput =
+            row.querySelector('.delivery-customer');
+
+        const priceInput =
+            row.querySelector('.delivery-price-input');
+
+        const priceNote =
+            row.querySelector('.delivery-price-note');
+
+        if (!customerInput || !priceInput) {
+            return;
+        }
+
+        const name =
+            customerInput.value
+                .trim()
+                .toLowerCase();
+
+        const account =
+            customerAccounts[name];
+
+        if (
+            account
+            && Number(account.gallon_price) > 0
+        ) {
+            priceInput.value =
+                Number(account.gallon_price)
+                    .toFixed(2)
+                    .replace(/\.00$/, '');
+
+            priceInput.readOnly = true;
+            priceInput.dataset.saved = '1';
+
+            if (priceNote) {
+                priceNote.textContent =
+                    'Saved customer price';
+            }
+
+            return;
+        }
+
+        /*
+         * New customer.
+         * Allow the user to enter the price manually.
+         */
+        if (priceInput.dataset.saved === '1') {
+            priceInput.value = '';
+        }
+
+        priceInput.readOnly = false;
+        priceInput.dataset.saved = '0';
+
+        if (priceNote) {
+            priceNote.textContent =
+                'Enter price for new customer';
+        }
+    }
+
+
+    /* =========================================================
+       DELIVERY STATUS
+       ========================================================= */
+
+    function updateDeliveryStatus(row) {
+        if (!row) {
+            return;
+        }
+
+        const customerInput =
+            row.querySelector('.delivery-customer');
+
+        const slimInput =
+            row.querySelector('.delivery-slim');
+
+        const roundInput =
+            row.querySelector('.delivery-round');
+
+        const paymentInput =
+            row.querySelector('.delivery-payment');
+
+        const priceInput =
+            row.querySelector('.delivery-price-input');
+
+        const balanceElement =
+            row.querySelector('.delivery-balance');
+
+        if (
+            !customerInput
+            || !balanceElement
+        ) {
+            return;
+        }
+
+        /*
+         * Set saved customer price first.
+         */
+        setPriceFromCustomer(row);
+
+        const slim =
+            parseInt(
+                slimInput?.value || '0',
+                10
+            ) || 0;
+
+        const round =
+            parseInt(
+                roundInput?.value || '0',
+                10
+            ) || 0;
+
+        const payment =
+            parseFloat(
+                paymentInput?.value || '0'
+            ) || 0;
+
+        const price =
+            parseFloat(
+                priceInput?.value || '0'
+            ) || 0;
+
+        const gallons =
+            slim + round;
+
+        const amountDue =
+            gallons * price;
+
+        const epsilon = 0.005;
+
+        balanceElement.className =
+            'delivery-balance '
+            + 'delivery-balance-neutral';
+
+        if (
+            gallons <= 0
+            || price <= 0
+        ) {
+            balanceElement.textContent = '—';
+            return;
+        }
+
+        const difference =
+            amountDue - payment;
+
+
+        /*
+         * No payment
+         */
+        if (payment <= epsilon) {
+            balanceElement.className =
+                'delivery-balance '
+                + 'delivery-balance-unpaid';
+
+            balanceElement.textContent =
+                formatCurrency(amountDue)
+                + ' Unpaid';
+
+            return;
+        }
+
+
+        /*
+         * Exact payment
+         */
+        if (
+            Math.abs(difference)
+            <= epsilon
+        ) {
+            balanceElement.className =
+                'delivery-balance '
+                + 'delivery-balance-paid';
+
+            balanceElement.textContent =
+                '✓ Paid';
+
+            return;
+        }
+
+
+        /*
+         * Payment is less than amount due
+         */
+        if (difference > epsilon) {
+            balanceElement.className =
+                'delivery-balance '
+                + 'delivery-balance-due';
+
+            balanceElement.textContent =
+                formatCurrency(difference)
+                + ' Due';
+
+            return;
+        }
+
+
+        /*
+         * Payment is greater than amount due
+         */
+        balanceElement.className =
+            'delivery-balance '
+            + 'delivery-balance-overpaid';
+
+        balanceElement.textContent =
+            formatCurrency(
+                Math.abs(difference)
+            )
+            + ' Overpaid';
+    }
+
+
+    /* =========================================================
+       DELIVERY ROW
+       ========================================================= */
+
+    function createDeliveryPaymentRow() {
+        const row =
+            document.createElement('div');
+
+        row.className =
+            'delivery-payment-row';
+
+        row.innerHTML = `
+            <div class="form-group delivery-customer-group">
+                <label class="form-label">
+                    Customer
+                </label>
+
+                <input
+                    type="text"
+                    name="delivery_customer[]"
+                    class="form-input delivery-customer"
+                    list="shopDeliveryCustomerList"
+                    maxlength="100"
+                    placeholder="Select or enter customer"
+                    autocomplete="off"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    Slim
+                </label>
+
+                <input
+                    type="number"
+                    name="delivery_slim[]"
+                    class="form-input delivery-slim"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    Round
+                </label>
+
+                <input
+                    type="number"
+                    name="delivery_round[]"
+                    class="form-input delivery-round"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                >
+            </div>
+
+            <div class="form-group delivery-payment-group">
+                <label class="form-label">
+                    Payment
+                </label>
+
+                <input
+                    type="number"
+                    name="delivery_payment[]"
+                    class="form-input delivery-payment"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                >
+            </div>
+
+            <div class="form-group delivery-price-group">
+                <label class="form-label">
+                    Price/Gal
+                </label>
+
+                <input
+                    type="number"
+                    name="delivery_price_per_gallon[]"
+                    class="form-input delivery-price-input"
+                    min="0"
+                    step="0.01"
+                    placeholder="Required for new customer"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    Method
+                </label>
+
+                <select
+                    name="delivery_method[]"
+                    class="form-input delivery-method"
+                >
+                    <option
+                        value="Cash"
+                        selected
+                    >
+                        Cash
+                    </option>
+
+                    <option value="GCash">
+                        GCash
+                    </option>
+
+                    <option value="Bank Transfer">
+                        Bank Transfer
+                    </option>
+
+                    <option value="Other">
+                        Other
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-group delivery-balance-group">
+                <label class="form-label">
+                    Balance
+                </label>
+
+                <div
+                    class="delivery-balance delivery-balance-neutral"
+                    aria-live="polite"
+                >
+                    —
+                </div>
+            </div>
+
+            <button
+                type="button"
+                class="delivery-payment-remove"
+                title="Remove payment"
+                aria-label="Remove payment"
+            >
+                ×
+            </button>
+        `;
+
+        deliveryPaymentRows.appendChild(row);
+
+        updateDeliveryStatus(row);
+
+        const customerInput =
+            row.querySelector('.delivery-customer');
+
+        if (customerInput) {
+            customerInput.focus();
+        }
+    }
+
+
+    /* =========================================================
+       SHOP / WALK-IN COMPUTATION
+       ========================================================= */
+
+    function calculateShop() {
+        const customerValue =
+            customersInput.value.trim();
+
+        const moneyValue =
+            moneyInput.value.trim();
+
+        let customers = 0;
+        let sales = 0;
+
+
+        /*
+         * Customer count entered
+         */
+        if (customerValue !== '') {
+
+            if (!/^\d+$/.test(customerValue)) {
+                computeMessage.textContent =
+                    'Customers must be a whole number.';
+
                 return;
             }
 
-            const customersInput =
-                document.getElementById('walk_in_customers');
+            customers =
+                parseInt(
+                    customerValue,
+                    10
+                );
 
-            const moneyInput =
-                document.getElementById('walk_in_money');
+            sales =
+                customers * pricePerCustomer;
 
-            const computedSales =
-                document.getElementById('shopComputedSales');
+            moneyInput.value =
+                sales > 0
+                    ? sales.toFixed(2)
+                    : '';
 
-            const dashboardSales =
-                document.getElementById('dashboardShopSales');
+            computeMessage.textContent =
+                customers
+                + ' customers × '
+                + formatCurrency(pricePerCustomer)
+                + ' = '
+                + formatCurrency(sales);
+        }
 
-            const dashboardCustomers =
-                document.getElementById('dashboardShopCustomers');
 
-            const computeMessage =
-                document.getElementById('shopComputeMessage');
+        /*
+         * Money entered
+         */
+        else if (moneyValue !== '') {
 
-            const expenseRows =
-                document.getElementById('expenseRows');
+            if (
+                !/^\d+(\.\d{1,2})?$/.test(
+                    moneyValue
+                )
+            ) {
+                computeMessage.textContent =
+                    'Money received must be a valid amount.';
 
-            const addExpenseButton =
-                document.getElementById('addExpenseButton');
-
-            const deliveryPaymentRows =
-                document.getElementById('deliveryPaymentRows');
-
-            const addDeliveryPaymentButton =
-                document.getElementById('addDeliveryPaymentButton');
-
-            const pricePerCustomer =
-                <?= json_encode($walkInPrice) ?>;
-
-            const customerAccounts =
-                <?= json_encode(
-                    $customerBalances,
-                    JSON_UNESCAPED_UNICODE
-                    | JSON_UNESCAPED_SLASHES
-                ) ?>;
-
-            function formatCurrency(value) {
-                return '₱'
-                    + Number(value || 0).toLocaleString(
-                        'en-PH',
-                        {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                        }
-                    );
+                return;
             }
 
-            function updateExpenseRow(row) {
-                const category =
-                    row.querySelector('.expense-category');
+            sales =
+                Math.max(
+                    0,
+                    parseFloat(moneyValue)
+                    || 0
+                );
 
-                const name =
-                    row.querySelector('.expense-name');
-
-                const label =
-                    row.querySelector('.expense-name-label');
-
-                if (!category || !name || !label) {
-                    return;
-                }
-
-                const needsName =
-                    category.value === 'Cash Advance'
-                    || category.value === 'Others';
-
-                name.disabled = !needsName;
-                name.required = needsName;
-
-                label.textContent = needsName
-                    ? 'Name / Description *'
-                    : 'Name / Description';
-
-                if (needsName) {
-                    if (category.value === 'Cash Advance') {
-                        name.placeholder =
-                            'Enter recipient name';
-                    } else {
-                        name.placeholder =
-                            'Enter expense description';
-                    }
-                } else {
-                    name.value = '';
-                    name.placeholder =
-                        'Not required for Food / Gas';
-                }
-            }
-
-            function setPriceFromCustomer(row) {
-                const customerInput =
-                    row.querySelector('.delivery-customer');
-
-                const priceInput =
-                    row.querySelector('.delivery-price-input');
-
-                const priceNote =
-                    row.querySelector('.delivery-price-note');
-
-                if (!customerInput || !priceInput) {
-                    return;
-                }
-
-                const name =
-                    customerInput.value
-                        .trim()
-                        .toLowerCase();
-
-                const account =
-                    customerAccounts[name];
-
-                if (
-                    account
-                    && Number(account.gallon_price) > 0
-                ) {
-                    priceInput.value =
-                        Number(account.gallon_price)
-                            .toFixed(2)
-                            .replace(/\.00$/, '');
-
-                    priceInput.readOnly = true;
-                    priceInput.dataset.saved = '1';
-
-                    if (priceNote) {
-                        priceNote.textContent =
-                            'Saved customer price';
-                    }
-                } else {
-                    if (
-                        priceInput.dataset.saved === '1'
-                    ) {
-                        priceInput.value = '';
-                    }
-
-                    priceInput.readOnly = false;
-                    priceInput.dataset.saved = '0';
+            const calculatedCustomers =
+                sales / pricePerCustomer;
 
 
-            function updateDeliveryStatus(row) {
-                const customerInput =
-                    row.querySelector('.delivery-customer');
-
-                const slimInput =
-                    row.querySelector('.delivery-slim');
-
-                const roundInput =
-                    row.querySelector('.delivery-round');
-
-                const paymentInput =
-                    row.querySelector('.delivery-payment');
-
-                const priceInput =
-                    row.querySelector('.delivery-price-input');
-
-                const balanceElement =
-                    row.querySelector('.delivery-balance');
-
-                if (
-                    !customerInput
-                    || !balanceElement
-                ) {
-                    return;
-                }
-
-                setPriceFromCustomer(row);
-
-                const slim =
-                    parseInt(
-                        slimInput?.value || '0',
-                        10
-                    ) || 0;
-
-                const round =
-                    parseInt(
-                        roundInput?.value || '0',
-                        10
-                    ) || 0;
-
-                const payment =
-                    parseFloat(
-                        paymentInput?.value || '0'
-                    ) || 0;
-
-                const price =
-                    parseFloat(
-                        priceInput?.value || '0'
-                    ) || 0;
-
-                const gallons =
-                    slim + round;
-
-                const amountDue =
-                    gallons * price;
-
-                const epsilon = 0.005;
-
-                balanceElement.className =
-                    'delivery-balance '
-                    + 'delivery-balance-neutral';
-
-                if (
-                    gallons <= 0
-                    || price <= 0
-                ) {
-                    balanceElement.textContent = '—';
-                    return;
-                }
-
-                const difference =
-                    amountDue - payment;
-
-                if (payment <= epsilon) {
-                    balanceElement.className =
-                        'delivery-balance '
-                        + 'delivery-balance-unpaid';
-
-                    balanceElement.textContent =
-                        formatCurrency(amountDue)
-                        + ' Unpaid';
-
-                    return;
-                }
-
-                if (
-                    Math.abs(difference)
-                    <= epsilon
-                ) {
-                    balanceElement.className =
-                        'delivery-balance '
-                        + 'delivery-balance-paid';
-
-                    balanceElement.textContent =
-                        '✓ Paid';
-
-                    return;
-                }
-
-                if (difference > epsilon) {
-                    balanceElement.className =
-                        'delivery-balance '
-                        + 'delivery-balance-due';
-
-                    balanceElement.textContent =
-                        formatCurrency(difference)
-                        + ' Due';
-
-                    return;
-                }
-
-                balanceElement.className =
-                    'delivery-balance '
-                    + 'delivery-balance-overpaid';
-
-                balanceElement.textContent =
-                    formatCurrency(
-                        Math.abs(difference)
+            /*
+             * Money must divide evenly.
+             */
+            if (
+                Math.abs(
+                    calculatedCustomers
+                    - Math.round(
+                        calculatedCustomers
                     )
-                    + ' Overpaid';
-            }
-
-            function calculateShop() {
-                const customerValue =
-                    customersInput.value.trim();
-
-                const moneyValue =
-                    moneyInput.value.trim();
-
-                let customers = 0;
-                let sales = 0;
-
-                if (customerValue !== '') {
-                    customers =
-                        Math.max(
-                            0,
-                            parseInt(
-                                customerValue,
-                                10
-                            ) || 0
-                        );
-
-                    sales =
-                        customers * pricePerCustomer;
-
-                    moneyInput.value =
-                        sales > 0
-                            ? sales.toFixed(2)
-                            : '';
-
-                    computeMessage.textContent =
-                        customers
-                        + ' customers × '
-                        + formatCurrency(pricePerCustomer)
-                        + ' = '
-                        + formatCurrency(sales);
-                } else if (moneyValue !== '') {
-                    sales =
-                        Math.max(
-                            0,
-                            parseFloat(moneyValue)
-                            || 0
-                        );
-
-                    const calculatedCustomers =
-                        sales / pricePerCustomer;
-
-                    if (
-                        Math.abs(
-                            calculatedCustomers
-                            - Math.round(
-                                calculatedCustomers
-                            )
-                        ) > 0.000001
-                    ) {
-                        computedSales.textContent =
-                            formatCurrency(sales);
-
-                        computeMessage.textContent =
-                            'Money received does not divide evenly by '
-                            + formatCurrency(
-                                pricePerCustomer
-                            )
-                            + ' per customer.';
-
-                        return;
-                    }
-
-                    customers =
-                        Math.round(
-                            calculatedCustomers
-                        );
-
-                    customersInput.value =
-                        customers > 0
-                            ? customers
-                            : '';
-
-                    computeMessage.textContent =
-                        formatCurrency(sales)
-                        + ' = '
-                        + customers
-                        + ' customers × '
-                        + formatCurrency(pricePerCustomer);
-                } else {
-                    computeMessage.textContent =
-                        'Enter customers or money, then press Compute.';
-                }
-
+                ) > 0.000001
+            ) {
                 computedSales.textContent =
                     formatCurrency(sales);
 
-                dashboardSales.textContent =
-                    formatCurrency(sales);
+                computeMessage.textContent =
+                    'Money received does not divide evenly by '
+                    + formatCurrency(
+                        pricePerCustomer
+                    )
+                    + ' per customer.';
 
-                dashboardCustomers.textContent =
-                    customers.toLocaleString('en-PH');
+                return;
             }
 
-            function createExpenseRow() {
-                const row =
-                    document.createElement('div');
+            customers =
+                Math.round(
+                    calculatedCustomers
+                );
 
-                row.className =
-                    'expense-row';
+            customersInput.value =
+                customers > 0
+                    ? customers
+                    : '';
 
-                row.innerHTML = `
-                    <div class="form-group">
-                        <label class="form-label">
-                            Expense
-                        </label>
-                        <select
-                            name="expense_category[]"
-                            class="form-input expense-category"
-                        >
-                            <option value="">
-                                No Expense
-                            </option>
-                            <option value="Food">
-                                Food
-                            </option>
-                            <option value="Gas">
-                                Gas
-                            </option>
-                            <option value="Cash Advance">
-                                Cash Advance
-                            </option>
-                            <option value="Others">
-                                Others
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            Amount
-                        </label>
-                        <input
-                            type="number"
-                            name="expense_amount[]"
-                            class="form-input expense-amount"
-                            min="0"
-                            step="0.01"
-                            placeholder="Example: 500"
-                        >
-                    </div>
-                    <div class="form-group expense-name-group">
-                        <label class="form-label expense-name-label">
-                            Name / Description
-                        </label>
-                        <input
-                            type="text"
-                            name="expense_name[]"
-                            class="form-input expense-name"
-                            maxlength="255"
-                            placeholder="Not required for Food / Gas"
-                            disabled
-                        >
-                    </div>
-                    <button
-                        type="button"
-                        class="expense-remove"
-                        title="Remove expense"
-                        aria-label="Remove expense"
-                    >
-                        ×
-                    </button>
-                `;
+            computeMessage.textContent =
+                formatCurrency(sales)
+                + ' = '
+                + customers
+                + ' customers × '
+                + formatCurrency(pricePerCustomer);
+        }
 
-                expenseRows.appendChild(row);
+
+        /*
+         * Nothing entered
+         */
+        else {
+            computedSales.textContent =
+                formatCurrency(0);
+
+            dashboardSales.textContent =
+                formatCurrency(0);
+
+            dashboardCustomers.textContent =
+                '0';
+
+            computeMessage.textContent =
+                'Enter customers or money, then press Compute.';
+
+            return;
+        }
+
+
+        computedSales.textContent =
+            formatCurrency(sales);
+
+        dashboardSales.textContent =
+            formatCurrency(sales);
+
+        dashboardCustomers.textContent =
+            customers.toLocaleString('en-PH');
+    }
+
+
+    /* =========================================================
+       COMPUTE BUTTON
+       ========================================================= */
+
+    if (computeButton) {
+        computeButton.addEventListener(
+            'click',
+            calculateShop
+        );
+    }
+
+
+    /* =========================================================
+       WALK-IN INPUTS
+       ========================================================= */
+
+    customersInput.addEventListener(
+        'input',
+        function () {
+            if (
+                customersInput.value.trim()
+                !== ''
+            ) {
+                moneyInput.value = '';
+            }
+        }
+    );
+
+
+    moneyInput.addEventListener(
+        'input',
+        function () {
+            if (
+                moneyInput.value.trim()
+                !== ''
+            ) {
+                customersInput.value = '';
+            }
+        }
+    );
+
+
+    /* =========================================================
+       ADD EXPENSE
+       ========================================================= */
+
+    if (addExpenseButton) {
+        addExpenseButton.addEventListener(
+            'click',
+            createExpenseRow
+        );
+    }
+
+
+    /* =========================================================
+       EXPENSE EVENTS
+       ========================================================= */
+
+    expenseRows.addEventListener(
+        'change',
+        function (event) {
+            if (
+                event.target.classList.contains(
+                    'expense-category'
+                )
+            ) {
+                updateExpenseRow(
+                    event.target.closest(
+                        '.expense-row'
+                    )
+                );
+            }
+        }
+    );
+
+
+    expenseRows.addEventListener(
+        'click',
+        function (event) {
+            const button =
+                event.target.closest(
+                    '.expense-remove'
+                );
+
+            if (!button) {
+                return;
+            }
+
+            const rows =
+                expenseRows.querySelectorAll(
+                    '.expense-row'
+                );
+
+            const row =
+                button.closest(
+                    '.expense-row'
+                );
+
+            if (!row) {
+                return;
+            }
+
+
+            /*
+             * Keep one empty row.
+             */
+            if (rows.length === 1) {
+
+                const category =
+                    row.querySelector(
+                        '.expense-category'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.expense-amount'
+                    );
+
+                const name =
+                    row.querySelector(
+                        '.expense-name'
+                    );
+
+                if (category) {
+                    category.value = '';
+                }
+
+                if (amount) {
+                    amount.value = '';
+                }
+
+                if (name) {
+                    name.value = '';
+                }
+
                 updateExpenseRow(row);
 
-                row.querySelector(
-                    '.expense-category'
-                ).focus();
+            } else {
+                row.remove();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       ADD DELIVERY PAYMENT
+       ========================================================= */
+
+    if (addDeliveryPaymentButton) {
+        addDeliveryPaymentButton.addEventListener(
+            'click',
+            createDeliveryPaymentRow
+        );
+    }
+
+
+    /* =========================================================
+       DELIVERY INPUT EVENTS
+       ========================================================= */
+
+    deliveryPaymentRows.addEventListener(
+        'input',
+        function (event) {
+
+            const row =
+                event.target.closest(
+                    '.delivery-payment-row'
+                );
+
+            if (!row) {
+                return;
             }
 
-            function createDeliveryPaymentRow() {
-                const row =
-                    document.createElement('div');
 
-                row.className =
-                    'delivery-payment-row';
+            /*
+             * Customer changed.
+             */
+            if (
+                event.target.matches(
+                    '.delivery-customer'
+                )
+            ) {
+                setPriceFromCustomer(row);
+            }
 
-                row.innerHTML = `
-                    <div class="form-group delivery-customer-group">
-                        <label class="form-label">
-                            Customer
-                        </label>
-                        <input
-                            type="text"
-                            name="delivery_customer[]"
-                            class="form-input delivery-customer"
-                            list="shopDeliveryCustomerList"
-                            maxlength="100"
-                            placeholder="Select or enter customer"
-                            autocomplete="off"
-                        >
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            Slim
-                        </label>
-                        <input
-                            type="number"
-                            name="delivery_slim[]"
-                            class="form-input delivery-slim"
-                            min="0"
-                            step="1"
-                            placeholder="0"
-                        >
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            Round
-                        </label>
-                        <input
-                            type="number"
-                            name="delivery_round[]"
-                            class="form-input delivery-round"
-                            min="0"
-                            step="1"
-                            placeholder="0"
-                        >
-                    </div>
-                    <div class="form-group delivery-payment-group">
-                        <label class="form-label">
-                            Payment
-                        </label>
-                        <input
-                            type="number"
-                            name="delivery_payment[]"
-                            class="form-input delivery-payment"
-                            min="0"
-                            step="0.01"
-                            placeholder="0"
-                        >
-                    </div>
-                    <div class="form-group delivery-price-group">
-                        <label class="form-label">
-                            Price/Gal
-                        </label>
-                        <input
-                            type="number"
-                            name="delivery_price_per_gallon[]"
-                            class="form-input delivery-price-input"
-                            min="0"
-                            step="0.01"
-                            placeholder="Required for new customer"
-                        >
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            Method
-                        </label>
-                        <select
-                            name="delivery_method[]"
-                            class="form-input delivery-method"
-                        >
-                            <option
-                                value="Cash"
-                                selected
-                            >
-                                Cash
-                            </option>
-                            <option value="GCash">
-                                GCash
-                            </option>
-                            <option value="Bank Transfer">
-                                Bank Transfer
-                            </option>
-                            <option value="Other">
-                                Other
-                            </option>
-                        </select>
-                    </div>
-                    <div class="form-group delivery-balance-group">
-                        <label class="form-label">
-                            Balance
-                        </label>
-                        <div
-                            class="delivery-balance delivery-balance-neutral"
-                            aria-live="polite"
-                        >
-                            —
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        class="delivery-payment-remove"
-                        title="Remove payment"
-                        aria-label="Remove payment"
-                    >
-                        ×
-                    </button>
-                `;
 
-                deliveryPaymentRows.appendChild(row);
+            /*
+             * Recalculate balance.
+             */
+            if (
+                event.target.matches(
+                    '.delivery-customer,'
+                    + '.delivery-slim,'
+                    + '.delivery-round,'
+                    + '.delivery-payment,'
+                    + '.delivery-price-input'
+                )
+            ) {
+                updateDeliveryStatus(row);
+            }
+        }
+    );
+
+
+    deliveryPaymentRows.addEventListener(
+        'change',
+        function (event) {
+
+            const row =
+                event.target.closest(
+                    '.delivery-payment-row'
+                );
+
+            if (!row) {
+                return;
+            }
+
+            if (
+                event.target.classList.contains(
+                    'delivery-customer'
+                )
+            ) {
+                updateDeliveryStatus(row);
+            }
+        }
+    );
+
+
+    /* =========================================================
+       DELIVERY REMOVE BUTTON
+       ========================================================= */
+
+    deliveryPaymentRows.addEventListener(
+        'click',
+        function (event) {
+
+            const button =
+                event.target.closest(
+                    '.delivery-payment-remove'
+                );
+
+            if (!button) {
+                return;
+            }
+
+            const rows =
+                deliveryPaymentRows.querySelectorAll(
+                    '.delivery-payment-row'
+                );
+
+            const row =
+                button.closest(
+                    '.delivery-payment-row'
+                );
+
+            if (!row) {
+                return;
+            }
+
+
+            /*
+             * Keep one empty row.
+             */
+            if (rows.length === 1) {
+
+                const customer =
+                    row.querySelector(
+                        '.delivery-customer'
+                    );
+
+                const slim =
+                    row.querySelector(
+                        '.delivery-slim'
+                    );
+
+                const round =
+                    row.querySelector(
+                        '.delivery-round'
+                    );
+
+                const payment =
+                    row.querySelector(
+                        '.delivery-payment'
+                    );
+
+                const price =
+                    row.querySelector(
+                        '.delivery-price-input'
+                    );
+
+                const method =
+                    row.querySelector(
+                        '.delivery-method'
+                    );
+
+                if (customer) {
+                    customer.value = '';
+                }
+
+                if (slim) {
+                    slim.value = '';
+                }
+
+                if (round) {
+                    round.value = '';
+                }
+
+                if (payment) {
+                    payment.value = '';
+                }
+
+                if (price) {
+                    price.value = '';
+                    price.readOnly = false;
+                    price.dataset.saved = '0';
+                }
+
+                if (method) {
+                    method.value = 'Cash';
+                }
+
                 updateDeliveryStatus(row);
 
-                row.querySelector(
-                    '.delivery-customer'
-                ).focus();
+            } else {
+                row.remove();
             }
+        }
+    );
 
-            document
-                .getElementById('shopComputeButton')
-                .addEventListener(
-                    'click',
-                    calculateShop
-                );
 
-            customersInput.addEventListener(
-                'input',
-                function () {
-                    if (
-                        customersInput.value.trim()
-                        !== ''
-                    ) {
-                        moneyInput.value = '';
-                    }
-                }
-            );
+    /* =========================================================
+       INITIALIZE EXISTING EXPENSE ROWS
+       ========================================================= */
 
-            moneyInput.addEventListener(
-                'input',
-                function () {
-                    if (
-                        moneyInput.value.trim()
-                        !== ''
-                    ) {
-                        customersInput.value = '';
-                    }
-                }
-            );
+    expenseRows
+        .querySelectorAll('.expense-row')
+        .forEach(function (row) {
+            updateExpenseRow(row);
+        });
 
-            addExpenseButton.addEventListener(
-                'click',
-                createExpenseRow
-            );
 
-            addDeliveryPaymentButton.addEventListener(
-                'click',
-                createDeliveryPaymentRow
-            );
+    /* =========================================================
+       INITIALIZE EXISTING DELIVERY ROWS
+       ========================================================= */
 
-            expenseRows.addEventListener(
-                'change',
-                function (event) {
-                    if (
-                        event.target.classList.contains(
-                            'expense-category'
-                        )
-                    ) {
-                        updateExpenseRow(
-                            event.target.closest(
-                                '.expense-row'
-                            )
-                        );
-                    }
-                }
-            );
+    deliveryPaymentRows
+        .querySelectorAll(
+            '.delivery-payment-row'
+        )
+        .forEach(function (row) {
+            updateDeliveryStatus(row);
+        });
 
-            expenseRows.addEventListener(
-                'click',
-                function (event) {
-                    const button =
-                        event.target.closest(
-                            '.expense-remove'
-                        );
-
-                    if (!button) {
-                        return;
-                    }
-
-                    const rows =
-                        expenseRows.querySelectorAll(
-                            '.expense-row'
-                        );
-
-                    const row =
-                        button.closest(
-                            '.expense-row'
-                        );
-
-                    if (rows.length === 1) {
-                        row.querySelector(
-                            '.expense-category'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.expense-amount'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.expense-name'
-                        ).value = '';
-
-                        updateExpenseRow(row);
-                    } else {
-                        row.remove();
-                    }
-                }
-            );
-
-            deliveryPaymentRows.addEventListener(
-                'input',
-                function (event) {
-                    const row =
-                        event.target.closest(
-                            '.delivery-payment-row'
-                        );
-
-                    if (!row) {
-                        return;
-                    }
-
-                    if (
-                        event.target.matches(
-                            '.delivery-customer'
-                        )
-                    ) {
-                        setPriceFromCustomer(row);
-                    }
-
-                    if (
-                        event.target.matches(
-                            '.delivery-customer,'
-                            + '.delivery-slim,'
-                            + '.delivery-round,'
-                            + '.delivery-payment,'
-                            + '.delivery-price-input'
-                        )
-                    ) {
-                        updateDeliveryStatus(row);
-                    }
-                }
-            );
-
-            deliveryPaymentRows.addEventListener(
-                'change',
-                function (event) {
-                    const row =
-                        event.target.closest(
-                            '.delivery-payment-row'
-                        );
-
-                    if (!row) {
-                        return;
-                    }
-
-                    if (
-                        event.target.classList.contains(
-                            'delivery-customer'
-                        )
-                    ) {
-                        updateDeliveryStatus(row);
-                    }
-                }
-            );
-
-            deliveryPaymentRows.addEventListener(
-                'click',
-                function (event) {
-                    const button =
-                        event.target.closest(
-                            '.delivery-payment-remove'
-                        );
-
-                    if (!button) {
-                        return;
-                    }
-
-                    const rows =
-                        deliveryPaymentRows.querySelectorAll(
-                            '.delivery-payment-row'
-                        );
-
-                    const row =
-                        button.closest(
-                            '.delivery-payment-row'
-                        );
-
-                    if (rows.length === 1) {
-                        row.querySelector(
-                            '.delivery-customer'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.delivery-slim'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.delivery-round'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.delivery-payment'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.delivery-price-input'
-                        ).value = '';
-
-                        row.querySelector(
-                            '.delivery-price-input'
-                        ).readOnly = false;
-
-                        row.querySelector(
-                            '.delivery-price-input'
-                        ).dataset.saved = '0';
-
-                        row.querySelector(
-                            '.delivery-method'
-                        ).value = 'Cash';
-
-                        updateDeliveryStatus(row);
-                    } else {
-                        row.remove();
-                    }
-                }
-            );
-
-            expenseRows
-                .querySelectorAll('.expense-row')
-                .forEach(
-                    updateExpenseRow
-                );
-
-            deliveryPaymentRows
-                .querySelectorAll(
-                    '.delivery-payment-row'
-                )
-                .forEach(
-                    updateDeliveryStatus
-                );
-        })();
-    </script>
+})();
+</script>
 </body>
 </html>
