@@ -33,15 +33,48 @@ $message = '';
 $messageType = '';
 
 // ==================================================
-// LOAD CUSTOMERS FOR SHOP DELIVERY PAYMENTS
+// LOAD CUSTOMERS + ACCOUNT BALANCES
 // ==================================================
 $customers = [];
+$customerAccounts = [];
+$customerBalances = [];
+
 $stmt = $pdo->query("
-    SELECT customer_id, customer_name
-    FROM customers
-    ORDER BY customer_name ASC
+    SELECT
+        c.customer_id,
+        c.customer_name,
+        COALESCE((
+            SELECT SUM(d.amount_due)
+            FROM deliveries d
+            WHERE d.customer_id = c.customer_id
+        ), 0) AS total_due,
+        COALESCE((
+            SELECT SUM(p.amount)
+            FROM payments p
+            WHERE p.customer_id = c.customer_id
+        ), 0) AS total_paid
+    FROM customers c
+    ORDER BY c.customer_name ASC
 ");
-$customers = $stmt->fetchAll();
+$customerAccounts = $stmt->fetchAll();
+
+foreach ($customerAccounts as $account) {
+    $nameKey = strtolower(trim((string)$account['customer_name']));
+    $totalDue = (float)$account['total_due'];
+    $totalPaid = (float)$account['total_paid'];
+
+    $customerBalances[$nameKey] = [
+        'customer_id' => (int)$account['customer_id'],
+        'total_due' => $totalDue,
+        'total_paid' => $totalPaid,
+        'balance' => $totalDue - $totalPaid
+    ];
+
+    $customers[] = [
+        'customer_id' => (int)$account['customer_id'],
+        'customer_name' => $account['customer_name']
+    ];
+}
 
 // ==================================================
 // LOAD EXISTING SHOP / WALK-IN SALES
@@ -146,7 +179,6 @@ if (
             $name = trim((string)($expenseNames[$i] ?? ''));
             $amount = trim((string)($expenseAmounts[$i] ?? ''));
 
-            // Completely empty expense rows are ignored.
             if ($category === '' && $name === '' && $amount === '') {
                 continue;
             }
@@ -197,7 +229,6 @@ if (
             $paymentRaw = trim((string)($deliveryPayments[$i] ?? ''));
             $method = trim((string)($deliveryMethods[$i] ?? 'Cash'));
 
-            // Completely empty delivery payment rows are ignored.
             if ($customerName === '' && $slimRaw === '' && $roundRaw === '' && $paymentRaw === '') {
                 continue;
             }
@@ -248,7 +279,6 @@ if (
                 'customer_name' => $customerName,
                 'slim_quantity' => $slimQuantity,
                 'round_quantity' => $roundQuantity,
-                'gallons' => $gallons,
                 'price_per_gallon' => (float)round($impliedPrice),
                 'payment' => $paymentAmount,
                 'method' => $method
@@ -325,9 +355,8 @@ if (
         // Save each Shop delivery payment as a delivery + Station payment.
         if (!empty($deliveryPaymentsToSave)) {
             foreach ($deliveryPaymentsToSave as $deliveryPayment) {
-                // Find existing customer by name, otherwise create a new customer.
                 $stmt = $pdo->prepare("
-                    SELECT id
+                    SELECT customer_id
                     FROM customers
                     WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
                     LIMIT 1
@@ -336,7 +365,7 @@ if (
                 $customer = $stmt->fetch();
 
                 if ($customer) {
-                    $customerId = (int)$customer['id'];
+                    $customerId = (int)$customer['customer_id'];
                 } else {
                     $stmt = $pdo->prepare("
                         INSERT INTO customers (customer_name, gallon_price)
@@ -349,7 +378,10 @@ if (
                     $customerId = (int)$pdo->lastInsertId();
                 }
 
-                // Record the delivery so the payment is linked to a real delivery.
+                // Record the delivery using the transaction's calculated historical price.
+                $amountDue = ($deliveryPayment['slim_quantity'] + $deliveryPayment['round_quantity'])
+                    * $deliveryPayment['price_per_gallon'];
+
                 $stmt = $pdo->prepare("
                     INSERT INTO deliveries (
                         customer_id,
@@ -368,7 +400,7 @@ if (
                     $deliveryPayment['slim_quantity'],
                     $deliveryPayment['round_quantity'],
                     $deliveryPayment['price_per_gallon'],
-                    $deliveryPayment['payment'],
+                    $amountDue,
                     $dailyId
                 ]);
 
@@ -417,13 +449,52 @@ if (
         $message = implode(' and ', $savedParts) . ' saved successfully.';
         $messageType = 'success';
 
-        // Refresh customer list so newly created customers are available immediately.
+        // Refresh customer list and account balances after saving.
+        $customers = [];
+        $customerBalances = [];
+
         $stmt = $pdo->query("
+<<<<<<< HEAD
             SELECT customer_id, customer_name
             FROM customers
             ORDER BY customer_name ASC
+=======
+            SELECT
+                c.customer_id,
+                c.customer_name,
+                COALESCE((
+                    SELECT SUM(d.amount_due)
+                    FROM deliveries d
+                    WHERE d.customer_id = c.customer_id
+                ), 0) AS total_due,
+                COALESCE((
+                    SELECT SUM(p.amount)
+                    FROM payments p
+                    WHERE p.customer_id = c.customer_id
+                ), 0) AS total_paid
+            FROM customers c
+            ORDER BY c.customer_name ASC
+>>>>>>> 72f43fefadf0ef511954f01d4baddf4a952b8648
         ");
-        $customers = $stmt->fetchAll();
+        $customerAccounts = $stmt->fetchAll();
+
+        foreach ($customerAccounts as $account) {
+            $nameKey = strtolower(trim((string)$account['customer_name']));
+            $totalDue = (float)$account['total_due'];
+            $totalPaid = (float)$account['total_paid'];
+
+            $customerBalances[$nameKey] = [
+                'customer_id' => (int)$account['customer_id'],
+                'total_due' => $totalDue,
+                'total_paid' => $totalPaid,
+                'balance' => $totalDue - $totalPaid
+            ];
+
+            $customers[] = [
+                'customer_id' => (int)$account['customer_id'],
+                'customer_name' => $account['customer_name']
+            ];
+        }
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -512,7 +583,7 @@ if (
 
         .delivery-payment-row {
             display: grid;
-            grid-template-columns: minmax(210px, 1.5fr) minmax(75px, 0.55fr) minmax(75px, 0.55fr) minmax(90px, 0.7fr) minmax(145px, 1fr) minmax(125px, 0.8fr) 38px;
+            grid-template-columns: minmax(210px, 1.5fr) minmax(75px, 0.55fr) minmax(75px, 0.55fr) minmax(145px, 1fr) minmax(125px, 0.8fr) minmax(125px, 0.85fr) 38px;
             gap: 10px;
             align-items: end;
             padding: 14px;
@@ -531,13 +602,6 @@ if (
             color: var(--text-muted);
             opacity: 0.72;
             cursor: not-allowed;
-        }
-
-        .delivery-gallons-input {
-            background: var(--surface) !important;
-            color: var(--text) !important;
-            font-weight: 600;
-            cursor: default;
         }
 
         .expense-remove,
@@ -575,9 +639,91 @@ if (
             margin-top: 20px;
         }
 
-        @media (max-width: 1100px) {
+        .delivery-status-legend {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 4px;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .delivery-status-legend .legend-label {
+            font-weight: 600;
+            margin-right: 2px;
+        }
+
+        .delivery-status-item {
+            white-space: nowrap;
+        }
+
+        .delivery-status-item::first-letter {
+            font-size: 10px;
+        }
+
+        .delivery-status-paid { color: var(--success); }
+        .delivery-status-due { color: var(--warning); }
+        .delivery-status-unpaid { color: var(--danger); }
+        .delivery-status-overpaid { color: var(--primary); }
+
+        .delivery-price-preview {
+            margin-top: 5px;
+            color: var(--text-muted);
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        .delivery-balance-group {
+            min-width: 0;
+        }
+
+        .delivery-balance {
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .delivery-balance-neutral {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .delivery-balance-paid {
+            color: var(--success);
+            background: var(--success-light);
+            border-color: rgba(46, 155, 91, 0.18);
+        }
+
+        .delivery-balance-due {
+            color: var(--warning);
+            background: var(--warning-light);
+            border-color: rgba(229, 154, 36, 0.18);
+        }
+
+        .delivery-balance-unpaid {
+            color: var(--danger);
+            background: var(--danger-light);
+            border-color: rgba(217, 83, 79, 0.18);
+        }
+
+        .delivery-balance-overpaid {
+            color: var(--primary-dark);
+            background: var(--primary-light);
+            border-color: rgba(22, 135, 201, 0.18);
+        }
+
+        @media (max-width: 1200px) {
             .delivery-payment-row {
-                grid-template-columns: 1.5fr 0.7fr 0.7fr 0.8fr 1fr 0.8fr 38px;
+                grid-template-columns: 1.5fr 0.65fr 0.65fr 1fr 0.8fr 0.85fr 38px;
             }
         }
 
@@ -615,8 +761,16 @@ if (
                 grid-column: span 2;
             }
 
+            .delivery-payment-row .delivery-balance-group {
+                grid-column: span 2;
+            }
+
             .delivery-payment-remove {
                 justify-self: end;
+            }
+
+            .delivery-status-legend {
+                justify-content: flex-start;
             }
         }
 
@@ -637,7 +791,8 @@ if (
 
             .expense-row .expense-name-group,
             .delivery-payment-row .delivery-customer-group,
-            .delivery-payment-row .delivery-payment-group {
+            .delivery-payment-row .delivery-payment-group,
+            .delivery-payment-row .delivery-balance-group {
                 grid-column: auto;
             }
 
@@ -911,7 +1066,14 @@ if (
                                     <div>
                                         <div class="delivery-payments-title">Shop Delivery Payments</div>
                                         <div class="delivery-payments-subtitle">
-                                            Record delivery customers who paid at the shop. Gallons and price per gallon are calculated automatically.
+                                            Record delivery customers who paid at the shop. Price per gallon is calculated from the transaction.
+                                        </div>
+                                        <div class="delivery-status-legend" aria-label="Delivery payment status legend">
+                                            <span class="legend-label">Status:</span>
+                                            <span class="delivery-status-item delivery-status-paid">● Paid</span>
+                                            <span class="delivery-status-item delivery-status-due">● Due</span>
+                                            <span class="delivery-status-item delivery-status-unpaid">● Unpaid</span>
+                                            <span class="delivery-status-item delivery-status-overpaid">● Overpaid</span>
                                         </div>
                                     </div>
 
@@ -963,16 +1125,6 @@ if (
                                             >
                                         </div>
 
-                                        <div class="form-group">
-                                            <label class="form-label">Gallons</label>
-                                            <input
-                                                type="number"
-                                                class="form-input delivery-gallons delivery-gallons-input"
-                                                value="0"
-                                                readonly
-                                            >
-                                        </div>
-
                                         <div class="form-group delivery-payment-group">
                                             <label class="form-label">Payment Made</label>
                                             <input
@@ -983,6 +1135,7 @@ if (
                                                 step="0.01"
                                                 placeholder="Example: 770"
                                             >
+                                            <div class="delivery-price-preview">Price/Gal —</div>
                                         </div>
 
                                         <div class="form-group">
@@ -993,6 +1146,11 @@ if (
                                                 <option value="Bank Transfer">Bank Transfer</option>
                                                 <option value="Other">Other</option>
                                             </select>
+                                        </div>
+
+                                        <div class="form-group delivery-balance-group">
+                                            <label class="form-label">Balance</label>
+                                            <div class="delivery-balance delivery-balance-neutral" aria-live="polite">—</div>
                                         </div>
 
                                         <button
@@ -1062,6 +1220,7 @@ if (
     const deliveryPaymentRows = document.getElementById('deliveryPaymentRows');
     const addDeliveryPaymentButton = document.getElementById('addDeliveryPaymentButton');
     const pricePerCustomer = <?= json_encode($walkInPrice) ?>;
+    const customerAccounts = <?= json_encode($customerBalances, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     function formatCurrency(value) {
         return '₱' + Number(value || 0).toLocaleString('en-PH', {
@@ -1092,14 +1251,76 @@ if (
         }
     }
 
-    function updateDeliveryGallons(row) {
-        const slim = parseInt(row.querySelector('.delivery-slim')?.value || '0', 10) || 0;
-        const round = parseInt(row.querySelector('.delivery-round')?.value || '0', 10) || 0;
-        const gallons = slim + round;
-        const gallonsInput = row.querySelector('.delivery-gallons');
+    function updateDeliveryStatus(row) {
+        const customerInput = row.querySelector('.delivery-customer');
+        const slimInput = row.querySelector('.delivery-slim');
+        const roundInput = row.querySelector('.delivery-round');
+        const paymentInput = row.querySelector('.delivery-payment');
+        const balanceElement = row.querySelector('.delivery-balance');
+        const pricePreview = row.querySelector('.delivery-price-preview');
 
-        if (gallonsInput) {
-            gallonsInput.value = gallons;
+        if (!customerInput || !balanceElement) return;
+
+        const customerName = customerInput.value.trim().toLowerCase();
+        const slim = parseInt(slimInput?.value || '0', 10) || 0;
+        const round = parseInt(roundInput?.value || '0', 10) || 0;
+        const payment = parseFloat(paymentInput?.value || '0') || 0;
+        const gallons = slim + round;
+
+        if (pricePreview) {
+            if (gallons > 0 && payment > 0) {
+                const price = payment / gallons;
+                if (Math.abs(price - Math.round(price)) < 0.000001) {
+                    pricePreview.textContent = 'Price/Gal ' + formatCurrency(price);
+                } else {
+                    pricePreview.textContent = 'Price/Gal ' + formatCurrency(price) + ' · check amount';
+                }
+            } else {
+                pricePreview.textContent = 'Price/Gal —';
+            }
+        }
+
+        balanceElement.className = 'delivery-balance delivery-balance-neutral';
+
+        if (!customerName) {
+            balanceElement.textContent = '—';
+            return;
+        }
+
+        const account = customerAccounts[customerName];
+
+        if (!account) {
+            balanceElement.textContent = '—';
+            return;
+        }
+
+        const balance = Number(account.balance || 0);
+        const epsilon = 0.005;
+
+        if (balance > epsilon) {
+            if (Number(account.total_paid || 0) <= epsilon) {
+                balanceElement.className = 'delivery-balance delivery-balance-unpaid';
+                balanceElement.textContent = '₱' + balance.toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + ' Unpaid';
+            } else {
+                balanceElement.className = 'delivery-balance delivery-balance-due';
+                balanceElement.textContent = '₱' + balance.toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + ' Due';
+            }
+        } else if (balance < -epsilon) {
+            const overpaid = Math.abs(balance);
+            balanceElement.className = 'delivery-balance delivery-balance-overpaid';
+            balanceElement.textContent = '₱' + overpaid.toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' Overpaid';
+        } else {
+            balanceElement.className = 'delivery-balance delivery-balance-paid';
+            balanceElement.textContent = '✓ Paid';
         }
     }
 
@@ -1231,16 +1452,6 @@ if (
                 >
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Gallons</label>
-                <input
-                    type="number"
-                    class="form-input delivery-gallons delivery-gallons-input"
-                    value="0"
-                    readonly
-                >
-            </div>
-
             <div class="form-group delivery-payment-group">
                 <label class="form-label">Payment Made</label>
                 <input
@@ -1251,6 +1462,7 @@ if (
                     step="0.01"
                     placeholder="Example: 770"
                 >
+                <div class="delivery-price-preview">Price/Gal —</div>
             </div>
 
             <div class="form-group">
@@ -1263,6 +1475,11 @@ if (
                 </select>
             </div>
 
+            <div class="form-group delivery-balance-group">
+                <label class="form-label">Balance</label>
+                <div class="delivery-balance delivery-balance-neutral" aria-live="polite">—</div>
+            </div>
+
             <button
                 type="button"
                 class="delivery-payment-remove"
@@ -1272,6 +1489,7 @@ if (
         `;
 
         deliveryPaymentRows.appendChild(row);
+        updateDeliveryStatus(row);
         row.querySelector('.delivery-customer').focus();
     }
 
@@ -1318,10 +1536,18 @@ if (
 
     deliveryPaymentRows.addEventListener('input', function (event) {
         if (
-            event.target.classList.contains('delivery-slim')
+            event.target.classList.contains('delivery-customer')
+            || event.target.classList.contains('delivery-slim')
             || event.target.classList.contains('delivery-round')
+            || event.target.classList.contains('delivery-payment')
         ) {
-            updateDeliveryGallons(event.target.closest('.delivery-payment-row'));
+            updateDeliveryStatus(event.target.closest('.delivery-payment-row'));
+        }
+    });
+
+    deliveryPaymentRows.addEventListener('change', function (event) {
+        if (event.target.classList.contains('delivery-customer')) {
+            updateDeliveryStatus(event.target.closest('.delivery-payment-row'));
         }
     });
 
@@ -1336,9 +1562,9 @@ if (
             row.querySelector('.delivery-customer').value = '';
             row.querySelector('.delivery-slim').value = '';
             row.querySelector('.delivery-round').value = '';
-            row.querySelector('.delivery-gallons').value = '0';
             row.querySelector('.delivery-payment').value = '';
             row.querySelector('.delivery-method').value = 'Cash';
+            updateDeliveryStatus(row);
             return;
         }
 
@@ -1346,7 +1572,7 @@ if (
     });
 
     expenseRows.querySelectorAll('.expense-row').forEach(updateExpenseRow);
-    deliveryPaymentRows.querySelectorAll('.delivery-payment-row').forEach(updateDeliveryGallons);
+    deliveryPaymentRows.querySelectorAll('.delivery-payment-row').forEach(updateDeliveryStatus);
 })();
 </script>
 
