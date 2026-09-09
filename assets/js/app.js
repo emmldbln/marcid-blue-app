@@ -78,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const paymentInput = row.querySelector('input[name="delivery_payment[]"]');
         const status = ensureDeliveryStatus(row);
 
-        // Amount due from agreed price.
         const amountDue = values.quantity > 0 && values.price !== null
             ? values.quantity * values.price
             : 0;
@@ -92,8 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
             status.className = 'delivery-payment-status';
         }
 
-        // If the user enters a payment while price is blank,
-        // try to infer the price from payment / total gallons.
         if (
             values.quantity > 0
             && values.payment !== null
@@ -126,7 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Compare payment against amount due whenever a valid price exists.
         const currentPrice = priceInput && priceInput.value !== ''
             ? parseFloat(priceInput.value)
             : null;
@@ -154,8 +150,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Payment cannot be greater than amount due when price is known
-        // unless the user intentionally records an overpayment.
         if (paymentInput && currentPrice !== null && values.quantity > 0) {
             const currentAmountDue = values.quantity * currentPrice;
             const payment = values.payment || 0;
@@ -172,7 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
         deliveryRows.querySelectorAll('tr').forEach(calculateDeliveryRow);
     }
 
-    // Remove the Driver Deliveries Notes column completely from the UI.
     function removeDeliveryNotesColumn() {
         const table = deliveryRows.closest('table');
 
@@ -222,11 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --------------------------------------------------
-    // Intercept dynamically-added delivery rows so their
-    // Notes cell is removed immediately.
-    // --------------------------------------------------
-
     const observer = new MutationObserver(mutations => {
         let added = false;
 
@@ -251,5 +239,162 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     observer.observe(deliveryRows, { childList: true });
+
+});
+
+
+// ==================================================
+// DAILY CLOSING - WALK-IN SALES
+// ==================================================
+// This section intentionally handles ONLY the regular
+// Station / Walk-in sales area. Driver deliveries,
+// expenses, gallon sales and reconciliation are left
+// untouched for now.
+// ==================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    const customersInput = document.getElementById('walk_in_customers');
+    const moneyInput = document.getElementById('walk_in_money');
+
+    if (!customersInput || !moneyInput) {
+        return;
+    }
+
+    const walkInCard = customersInput.closest('.card');
+
+    if (!walkInCard) {
+        return;
+    }
+
+    const walkInPrice = 30;
+
+    let computedBox = walkInCard.querySelector('.walk-in-computed');
+
+    if (!computedBox) {
+        computedBox = document.createElement('div');
+        computedBox.className = 'walk-in-computed';
+        computedBox.style.marginTop = '16px';
+        computedBox.style.padding = '14px 16px';
+        computedBox.style.border = '1px solid var(--border)';
+        computedBox.style.borderRadius = 'var(--radius-md)';
+        computedBox.style.background = 'var(--primary-light)';
+        computedBox.innerHTML = `
+            <div class="summary-label">Computed Walk-in Sales</div>
+            <div class="summary-value" data-walk-in-computed>₱0.00</div>
+            <div class="summary-description" data-walk-in-computed-note>
+                Enter customers or walk-in money, then press Compute.
+            </div>
+        `;
+
+        walkInCard.querySelector('.card-body')?.appendChild(computedBox);
+    }
+
+    const computedValue = computedBox.querySelector('[data-walk-in-computed]');
+    const computedNote = computedBox.querySelector('[data-walk-in-computed-note]');
+
+    function formatMoney(value) {
+        return '₱' + Number(value || 0).toLocaleString('en-PH', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function computeWalkIn() {
+        const customers = customersInput.value.trim();
+        const money = moneyInput.value.trim();
+
+        let customerCount = 0;
+        let sales = 0;
+
+        if (customers !== '') {
+            customerCount = parseInt(customers, 10);
+
+            if (!Number.isInteger(customerCount) || customerCount < 0) {
+                computedValue.textContent = '—';
+                computedNote.textContent = 'Customers must be a whole number.';
+                return false;
+            }
+
+            sales = customerCount * walkInPrice;
+            moneyInput.value = sales.toFixed(2);
+        } else if (money !== '') {
+            const moneyValue = parseFloat(money);
+
+            if (!Number.isFinite(moneyValue) || moneyValue < 0) {
+                computedValue.textContent = '—';
+                computedNote.textContent = 'Walk-in money must be a valid amount.';
+                return false;
+            }
+
+            const calculatedCustomers = moneyValue / walkInPrice;
+
+            if (!Number.isInteger(calculatedCustomers)) {
+                computedValue.textContent = '—';
+                computedNote.textContent =
+                    'Money must divide evenly by ' + formatMoney(walkInPrice) + ' per customer.';
+                return false;
+            }
+
+            customerCount = calculatedCustomers;
+            sales = moneyValue;
+            customersInput.value = customerCount;
+        }
+
+        computedValue.textContent = formatMoney(sales);
+        computedNote.textContent =
+            customerCount.toLocaleString('en-PH')
+            + ' customers × '
+            + formatMoney(walkInPrice)
+            + ' = '
+            + formatMoney(sales);
+
+        return true;
+    }
+
+    let actionBar = walkInCard.querySelector('.walk-in-actions');
+
+    if (!actionBar) {
+        actionBar = document.createElement('div');
+        actionBar.className = 'walk-in-actions section-actions';
+        actionBar.style.marginTop = '16px';
+        actionBar.style.justifyContent = 'flex-end';
+
+        const computeButton = document.createElement('button');
+        computeButton.type = 'button';
+        computeButton.className = 'btn btn-secondary';
+        computeButton.textContent = 'Compute';
+        computeButton.addEventListener('click', computeWalkIn);
+
+        const saveButton = document.createElement('button');
+        saveButton.type = 'submit';
+        saveButton.className = 'btn btn-primary';
+        saveButton.textContent = 'Save';
+        saveButton.setAttribute('formaction', 'save-walkin.php');
+        saveButton.setAttribute('formmethod', 'post');
+        saveButton.setAttribute('formnovalidate', '');
+        saveButton.title = 'Save only Station / Walk-in sales';
+
+        actionBar.appendChild(computeButton);
+        actionBar.appendChild(saveButton);
+
+        walkInCard.querySelector('.card-body')?.appendChild(actionBar);
+    }
+
+    customersInput.addEventListener('input', () => {
+        if (customersInput.value.trim() !== '') {
+            moneyInput.value = '';
+        }
+        computeWalkIn();
+    });
+
+    moneyInput.addEventListener('input', () => {
+        if (moneyInput.value.trim() !== '') {
+            customersInput.value = '';
+        }
+        computeWalkIn();
+    });
+
+    computeWalkIn();
 
 });
