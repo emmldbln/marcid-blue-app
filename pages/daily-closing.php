@@ -90,11 +90,15 @@ if ($dailyId !== null) {
     $stmt->execute([$dailyId]);
     $dailySales = $stmt->fetch();
 
-    if ($dailySales) {
-        $walkInCustomers = (int) ($dailySales['walk_in_customers'] ?? 0);
-        $walkInPrice = (float) ($dailySales['walk_in_price'] ?? 30.00);
-        $walkInSales = $walkInCustomers * $walkInPrice;
-    }
+    /*
+     * Shop rate is always fixed at ₱30.
+     *
+     * Do not use old walk-in quantity/sales values
+     * as the initial balance input.
+     */
+    $walkInPrice = 30.00;
+    $walkInCustomers = 0;
+    $walkInSales = 0.00;
 }
 
 if (
@@ -137,46 +141,7 @@ if (
 
         unset($array);
 
-        if ($inputCustomers !== '') {
-            if (!ctype_digit($inputCustomers)) {
-                throw new Exception(
-                    'Shop customers must be a whole number.'
-                );
-            }
-
-            $customersValue = (int) $inputCustomers;
-            $moneyValue = $customersValue * $walkInPrice;
-        } elseif ($inputMoney !== '') {
-            if (
-                !is_numeric($inputMoney)
-                || (float) $inputMoney < 0
-            ) {
-                throw new Exception(
-                    'Shop money must be a valid amount.'
-                );
-            }
-
-            $moneyValue = (float) $inputMoney;
-            $calculatedCustomers = $moneyValue / $walkInPrice;
-
-            if (
-                abs(
-                    $calculatedCustomers
-                    - round($calculatedCustomers)
-                ) > 0.000001
-            ) {
-                throw new Exception(
-                    'Shop money must divide evenly by ₱'
-                    . number_format($walkInPrice, 2)
-                    . ' per customer.'
-                );
-            }
-
-            $customersValue = (int) round($calculatedCustomers);
-        } else {
-            $customersValue = 0;
-            $moneyValue = 0;
-        }
+        
 
         $allowedCategories = [
             'Food' => 'Food',
@@ -194,64 +159,81 @@ if (
         );
 
         for ($i = 0; $i < $expenseRowCount; $i++) {
-            $category = trim(
-                (string) ($expenseCategories[$i] ?? '')
-            );
+    $category = trim(
+        (string) ($expenseCategories[$i] ?? '')
+    );
 
-            $name = trim(
-                (string) ($expenseNames[$i] ?? '')
-            );
+    $name = trim(
+        (string) ($expenseNames[$i] ?? '')
+    );
 
-            $amount = trim(
-                (string) ($expenseAmounts[$i] ?? '')
-            );
+    $amount = trim(
+        (string) ($expenseAmounts[$i] ?? '')
+    );
 
-            if (
-                $category === ''
-                && $name === ''
-                && $amount === ''
-            ) {
-                continue;
-            }
+    /*
+     * Completely empty row.
+     * Ignore it.
+     */
+    if (
+        $category === ''
+        && $name === ''
+        && $amount === ''
+    ) {
+        continue;
+    }
 
-            if (
-                $amount === ''
-                || !is_numeric($amount)
-                || (float) $amount < 0
-            ) {
-                throw new Exception(
-                    'Every expense amount must be a valid amount.'
-                );
-            }
+    /*
+     * If the user started an expense row,
+     * an expense category is required.
+     */
+    if (!isset($allowedCategories[$category])) {
+        throw new Exception(
+            'Please select an expense type for the expense row you started.'
+        );
+    }
 
-            if (!isset($allowedCategories[$category])) {
-                throw new Exception(
-                    'Please select an expense type for every expense row.'
-                );
-            }
+    /*
+     * Amount is required for every actual expense.
+     */
+    if (
+        $amount === ''
+        || !is_numeric($amount)
+        || (float) $amount < 0
+    ) {
+        throw new Exception(
+            'Please enter an amount for the expense you started.'
+        );
+    }
 
-            if (
-                ($category === 'Cash Advance'
-                || $category === 'Others')
-                && $name === ''
-            ) {
-                throw new Exception(
-                    'Please enter a name or description for Cash Advance or Others.'
-                );
-            }
+    /*
+     * Cash Advance and Others require
+     * a name/description.
+     */
+    if (
+        (
+            $category === 'Cash Advance'
+            || $category === 'Others'
+        )
+        && $name === ''
+    ) {
+        throw new Exception(
+            'Please enter a name or description for Cash Advance or Others.'
+        );
+    }
 
-            $expensesToSave[] = [
-                'category' => $allowedCategories[$category],
-                'description' => in_array(
-                    $category,
-                    ['Cash Advance', 'Others'],
-                    true
-                )
-                    ? $name
-                    : $category,
-                'amount' => (float) $amount,
-            ];
-        }
+    $expensesToSave[] = [
+        'category' => $allowedCategories[$category],
+        'description' => in_array(
+            $category,
+            ['Cash Advance', 'Others'],
+            true
+        )
+            ? $name
+            : $category,
+        'amount' => (float) $amount,
+    ];
+}
 
         $deliveryPaymentsToSave = [];
 
@@ -450,6 +432,101 @@ if (
                 'method' => $method,
             ];
         }
+                /*
+         * =====================================================
+         * SHOP-ONLY BALANCE
+         *
+         * Total Money Received
+         * + Station Expenses
+         * - Shop Delivery Payments
+         * = Total Sales for Walk-in
+         *
+         * Total Sales for Walk-in
+         * / ₱30
+         * = Total Quantity of Walk-in
+         * =====================================================
+         */
+
+        if (
+            $inputMoney === ''
+            || !is_numeric($inputMoney)
+            || (float) $inputMoney < 0
+        ) {
+            throw new Exception(
+                'Total Money Received must be a valid amount.'
+            );
+        }
+
+        $moneyValue = (float) $inputMoney;
+
+        $totalExpenses = 0.00;
+
+        foreach ($expensesToSave as $expense) {
+            $totalExpenses += $expense['amount'];
+        }
+
+        $totalDeliveryPayments = 0.00;
+
+        foreach ($deliveryPaymentsToSave as $deliveryPayment) {
+            $totalDeliveryPayments += $deliveryPayment['payment'];
+        }
+
+        $walkInSalesValue =
+            $moneyValue
+            + $totalExpenses
+            - $totalDeliveryPayments;
+
+        /*
+         * The shop balance cannot be negative.
+         */
+        if ($walkInSalesValue < -0.005) {
+            throw new Exception(
+                'Shop-only balance cannot be negative.'
+            );
+        }
+
+        /*
+         * Avoid floating-point residue.
+         */
+        if (abs($walkInSalesValue) < 0.005) {
+            $walkInSalesValue = 0.00;
+        }
+
+        /*
+         * Calculate walk-in quantity using the fixed
+         * ₱30 per gallon rate.
+         */
+        $calculatedCustomers =
+            $walkInSalesValue / $walkInPrice;
+
+        /*
+         * Quantity must always be a whole number.
+         */
+        if (
+            abs(
+                $calculatedCustomers
+                - round($calculatedCustomers)
+            ) > 0.000001
+        ) {
+            throw new Exception(
+                'Shop-only balance is not divisible evenly by ₱'
+                . number_format($walkInPrice, 2)
+                . '. Please check the money received, expenses, and delivery payments.'
+            );
+        }
+
+        $customersValue =
+            (int) round($calculatedCustomers);
+
+        $moneyValue =
+            $customersValue * $walkInPrice;
+
+        /*
+         * The balanced sales value is the actual amount
+         * used to determine the walk-in quantity.
+         */
+        $walkInSalesValue =
+            $customersValue * $walkInPrice;
 
         $pdo->beginTransaction();
 
@@ -657,8 +734,16 @@ if (
         align-items: end;
     }
 
+    .section-description {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 400;
+    }
+
     .shop-customers-field {
-        max-width: 150px;
+        max-width: 180px;
     }
 
     .shop-money-field {
@@ -884,10 +969,6 @@ if (
     .add-expense-button,
     .add-delivery-payment-button {
         margin-top: 0;
-    }
-
-    .shop-compute-message {
-        margin-top: 16px;
     }
 
     .shop-actions {
@@ -1192,6 +1273,13 @@ if (
             font-size: 13px;
         }
     }
+
+    .shop-draft-status {
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: right;
+}
 </style>
 </head>
 <body>
@@ -1363,7 +1451,7 @@ if (
                                 <div class="card-title">
                                     Shop / Walk-in
                                 </div>
-                                <div class="section-description">
+                                <div class="section-description">  
                                     Record regular customers, money received,
                                     station expenses, and delivery payments
                                     received at the shop.
@@ -1390,73 +1478,65 @@ if (
                                     value="save_shop_walkin"
                                 >
                                 <div class="shop-walkin-layout">
-                                    <div class="shop-customers-field">
-                                        <label
-                                            for="walk_in_customers"
-                                            class="form-label"
-                                        >
-                                            Customers
-                                            <span class="summary-description">
-                                                (× ₱30)
-                                            </span>
-                                        </label>
-                                        <input
-                                            type="number"
-                                            id="walk_in_customers"
-                                            name="walk_in_customers"
-                                            class="form-input"
-                                            min="0"
-                                            step="1"
-                                            value="<?= $walkInCustomers > 0
-                                                ? htmlspecialchars(
-                                                    $walkInCustomers
-                                                )
-                                                : '' ?>"
-                                            placeholder="Example: 150"
-                                        >
-                                    </div>
-                                    <div class="shop-money-field">
-                                        <label
-                                            for="walk_in_money"
-                                            class="form-label"
-                                        >
-                                            Total Money Received (Shop only)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            id="walk_in_money"
-                                            name="walk_in_money"
-                                            class="form-input"
-                                            min="0"
-                                            step="0.01"
-                                            value="<?= $walkInSales > 0
-                                                ? htmlspecialchars(
-                                                    number_format(
-                                                        $walkInSales,
-                                                        2,
-                                                        '.',
-                                                        ''
-                                                    )
-                                                )
-                                                : '' ?>"
-                                            placeholder="Example: 4500"
-                                        >
-                                    </div>
-                                    <div class="shop-computed-sales">
-                                        <div class="summary-label">
-                                            Computed Sales
-                                        </div>
-                                        <div
-                                            class="summary-value"
-                                            id="shopComputedSales"
-                                        >
-                                            ₱<?= number_format(
-                                                $walkInSales,
-                                                2
-                                            ) ?>
-                                        </div>
-                                    </div>
-                                </div>
+
+    <div class="shop-money-field">
+        <label
+            for="walk_in_money"
+            class="form-label"
+        >
+            Total Money Received (Shop only)
+        </label>
+
+        <input
+            type="number"
+            id="walk_in_money"
+            name="walk_in_money"
+            class="form-input"
+            min="0"
+            step="0.01"
+            value=""
+            placeholder="Enter amount"
+        >
+    </div>
+
+    <div class="shop-customers-field">
+        <label
+            for="walk_in_customers"
+            class="form-label"
+        >
+            Total Quantity of Walk-in
+        </label>
+
+        <input
+            type="number"
+            id="walk_in_customers"
+            name="walk_in_customers"
+            class="form-input"
+            min="0"
+            step="1"
+            value="0"
+            placeholder="Calculated"
+            readonly
+        >
+    </div>
+
+    <div class="shop-computed-sales">
+        <div class="summary-label">
+            Total Sales for Walk-in
+        </div>
+
+        <div
+            class="summary-value"
+            id="shopComputedSales"
+        >
+            ₱<?= number_format(
+                $walkInSales,
+                2
+            ) ?>
+        </div>
+    </div>
+
+</div>
                                 <div class="expenses-panel">
                                     <div class="expenses-panel-header">
                                         <div>
@@ -1516,7 +1596,7 @@ if (
                                                     class="form-input expense-amount"
                                                     min="0"
                                                     step="0.01"
-                                                    placeholder="Example: 500"
+                                                    placeholder="Enter amount"
                                                 >
                                             </div>
                                             <div class="form-group expense-name-group">
@@ -1638,7 +1718,7 @@ if (
                                                     class="form-input delivery-payment"
                                                     min="0"
                                                     step="0.01"
-                                                    placeholder="0"
+                                                    placeholder="Optional"
                                                 >
                                             </div>
                                             <div class="form-group delivery-price-group">
@@ -1710,12 +1790,6 @@ if (
                                         ></option>
                                     <?php endforeach; ?>
                                 </datalist>
-                                <div
-                                    id="shopComputeMessage"
-                                    class="summary-description shop-compute-message"
-                                >
-                                    Enter customers or money, then press Compute.
-                                </div>
                                 <div class="shop-actions">
                                     <button
                                         type="button"
@@ -1763,9 +1837,6 @@ if (
     const dashboardCustomers =
         document.getElementById('dashboardShopCustomers');
 
-    const computeMessage =
-        document.getElementById('shopComputeMessage');
-
     const expenseRows =
         document.getElementById('expenseRows');
 
@@ -1781,8 +1852,7 @@ if (
     const computeButton =
         document.getElementById('shopComputeButton');
 
-    const pricePerCustomer =
-        <?= json_encode($walkInPrice) ?>;
+    const pricePerCustomer = 30;
 
     const customerAccounts =
         <?= json_encode(
@@ -1907,7 +1977,7 @@ if (
                     class="form-input expense-amount"
                     min="0"
                     step="0.01"
-                    placeholder="Example: 500"
+                    placeholder="Enter amount"
                 >
             </div>
 
@@ -1940,11 +2010,13 @@ if (
 
         updateExpenseRow(row);
 
+        if (!restoringDraft) {
         const category =
-            row.querySelector('.expense-category');
+        row.querySelector('.expense-category');
 
         if (category) {
-            category.focus();
+        category.focus();
+            }
         }
     }
 
@@ -2206,7 +2278,7 @@ if (
                     class="form-input delivery-slim"
                     min="0"
                     step="1"
-                    placeholder="0"
+                    placeholder="optional"
                 >
             </div>
 
@@ -2221,7 +2293,7 @@ if (
                     class="form-input delivery-round"
                     min="0"
                     step="1"
-                    placeholder="0"
+                    placeholder="optional"
                 >
             </div>
 
@@ -2236,7 +2308,7 @@ if (
                     class="form-input delivery-payment"
                     min="0"
                     step="0.01"
-                    placeholder="0"
+                    placeholder="Optional"
                 >
             </div>
 
@@ -2312,11 +2384,13 @@ if (
 
         updateDeliveryStatus(row);
 
+        if (!restoringDraft) {
         const customerInput =
-            row.querySelector('.delivery-customer');
+        row.querySelector('.delivery-customer');
 
         if (customerInput) {
-            customerInput.focus();
+        customerInput.focus();
+            }
         }
     }
 
@@ -2326,150 +2400,185 @@ if (
        ========================================================= */
 
     function calculateShop() {
-        const customerValue =
-            customersInput.value.trim();
+    const moneyValue =
+        moneyInput.value.trim();
 
-        const moneyValue =
-            moneyInput.value.trim();
-
-        let customers = 0;
-        let sales = 0;
-
-
-        /*
-         * Customer count entered
-         */
-        if (customerValue !== '') {
-
-            if (!/^\d+$/.test(customerValue)) {
-                computeMessage.textContent =
-                    'Customers must be a whole number.';
-
-                return;
-            }
-
-            customers =
-                parseInt(
-                    customerValue,
-                    10
-                );
-
-            sales =
-                customers * pricePerCustomer;
-
-            moneyInput.value =
-                sales > 0
-                    ? sales.toFixed(2)
-                    : '';
-
-            computeMessage.textContent =
-                customers
-                + ' customers × '
-                + formatCurrency(pricePerCustomer)
-                + ' = '
-                + formatCurrency(sales);
-        }
-
-
-        /*
-         * Money entered
-         */
-        else if (moneyValue !== '') {
-
-            if (
-                !/^\d+(\.\d{1,2})?$/.test(
-                    moneyValue
-                )
-            ) {
-                computeMessage.textContent =
-                    'Money received must be a valid amount.';
-
-                return;
-            }
-
-            sales =
-                Math.max(
-                    0,
-                    parseFloat(moneyValue)
-                    || 0
-                );
-
-            const calculatedCustomers =
-                sales / pricePerCustomer;
-
-
-            /*
-             * Money must divide evenly.
-             */
-            if (
-                Math.abs(
-                    calculatedCustomers
-                    - Math.round(
-                        calculatedCustomers
-                    )
-                ) > 0.000001
-            ) {
-                computedSales.textContent =
-                    formatCurrency(sales);
-
-                computeMessage.textContent =
-                    'Money received does not divide evenly by '
-                    + formatCurrency(
-                        pricePerCustomer
-                    )
-                    + ' per customer.';
-
-                return;
-            }
-
-            customers =
-                Math.round(
-                    calculatedCustomers
-                );
-
-            customersInput.value =
-                customers > 0
-                    ? customers
-                    : '';
-
-            computeMessage.textContent =
-                formatCurrency(sales)
-                + ' = '
-                + customers
-                + ' customers × '
-                + formatCurrency(pricePerCustomer);
-        }
-
-
-        /*
-         * Nothing entered
-         */
-        else {
-            computedSales.textContent =
-                formatCurrency(0);
-
-            dashboardSales.textContent =
-                formatCurrency(0);
-
-            dashboardCustomers.textContent =
-                '0';
-
-            computeMessage.textContent =
-                'Enter customers or money, then press Compute.';
-
-            return;
-        }
-
-
+    /*
+     * Total Money Received is the starting point.
+     */
+    if (moneyValue === '') {
         computedSales.textContent =
-            formatCurrency(sales);
+            formatCurrency(0);
 
         dashboardSales.textContent =
-            formatCurrency(sales);
+            formatCurrency(0);
 
         dashboardCustomers.textContent =
-            customers.toLocaleString('en-PH');
+            '0';
+
+        customersInput.value = '0';
+
+        return;
     }
+
+    /*
+     * Validate money.
+     */
+    if (
+        !/^\d+(\.\d{1,2})?$/.test(
+            moneyValue
+        )
+    ) {
+        computedSales.textContent =
+            'Invalid';
+
+        return;
+    }
+
+    const totalMoneyReceived =
+        Math.max(
+            0,
+            parseFloat(moneyValue) || 0
+        );
+
+
+    /*
+     * =====================================================
+     * TOTAL EXPENSES
+     * =====================================================
+     */
+
+    let totalExpenses = 0;
+
+    expenseRows
+        .querySelectorAll('.expense-amount')
+        .forEach(function (input) {
+            const amount =
+                parseFloat(input.value) || 0;
+
+            totalExpenses += amount;
+        });
+
+
+    /*
+     * =====================================================
+     * TOTAL SHOP DELIVERY PAYMENTS
+     * =====================================================
+     */
+
+    let totalDeliveryPayments = 0;
+
+    deliveryPaymentRows
+        .querySelectorAll('.delivery-payment')
+        .forEach(function (input) {
+            const payment =
+                parseFloat(input.value) || 0;
+
+            totalDeliveryPayments += payment;
+        });
+
+
+    /*
+     * =====================================================
+     * BALANCE
+     *
+     * Money Received
+     * + Expenses
+     * - Delivery Payments
+     * = Walk-in Sales
+     * =====================================================
+     */
+
+    const totalSales =
+        totalMoneyReceived
+        + totalExpenses
+        - totalDeliveryPayments;
+
+
+    /*
+     * Negative balance is invalid.
+     */
+    if (totalSales < -0.005) {
+        computedSales.textContent =
+            'Invalid';
+
+        customersInput.value = '0';
+
+        return;
+    }
+
+
+    /*
+     * Remove tiny floating-point residue.
+     */
+    const balancedSales =
+        Math.abs(totalSales) < 0.005
+            ? 0
+            : totalSales;
+
+
+    /*
+     * =====================================================
+     * CALCULATE WALK-IN QUANTITY
+     *
+     * Fixed price = ₱30 per gallon
+     * =====================================================
+     */
+
+    const calculatedCustomers =
+        balancedSales / pricePerCustomer;
+
+
+    /*
+     * Quantity must be a whole number.
+     */
+    if (
+        Math.abs(
+            calculatedCustomers
+            - Math.round(calculatedCustomers)
+        ) > 0.000001
+    ) {
+        computedSales.textContent =
+            formatCurrency(balancedSales);
+
+        customersInput.value = '0';
+
+        dashboardSales.textContent =
+            formatCurrency(balancedSales);
+
+        dashboardCustomers.textContent =
+            '—';
+
+        return;
+    }
+
+
+    /*
+     * Valid whole-number quantity.
+     */
+    const customers =
+        Math.round(calculatedCustomers);
+
+    customersInput.value =
+        customers;
+
+
+    /*
+     * Total Sales for Walk-in
+     * is based on quantity × ₱30.
+     */
+    const finalSales =
+        customers * pricePerCustomer;
+
+    computedSales.textContent =
+        formatCurrency(finalSales);
+
+    dashboardSales.textContent =
+        formatCurrency(finalSales);
+
+    dashboardCustomers.textContent =
+        customers.toLocaleString('en-PH');
+}
 
 
     /* =========================================================
@@ -2488,29 +2597,17 @@ if (
        WALK-IN INPUTS
        ========================================================= */
 
-    customersInput.addEventListener(
-        'input',
-        function () {
-            if (
-                customersInput.value.trim()
-                !== ''
-            ) {
-                moneyInput.value = '';
-            }
-        }
-    );
-
 
     moneyInput.addEventListener(
-        'input',
-        function () {
-            if (
-                moneyInput.value.trim()
-                !== ''
-            ) {
-                customersInput.value = '';
-            }
+    'input',
+    function () {
+        if (
+            moneyInput.value.trim()
+            !== ''
+        ) {
+            customersInput.value = '0';
         }
+      }
     );
 
 
@@ -2824,6 +2921,412 @@ if (
         .forEach(function (row) {
             updateDeliveryStatus(row);
         });
+
+            /* =========================================================
+       FORM DRAFT STORAGE
+       ========================================================= */
+
+    const draftStorageKey =
+        'marcidBlueDailyClosingDraft_<?= htmlspecialchars($businessDate ?? 'none') ?>';
+
+    let restoringDraft = false;
+
+
+    function saveFormDraft() {
+        if (restoringDraft) {
+            return;
+        }
+
+        const formData =
+            new FormData(form);
+
+        const draft = {
+            walk_in_money:
+                moneyInput.value,
+
+            expenses: [],
+
+            deliveries: []
+        };
+
+
+        /*
+         * Save expense rows.
+         */
+        expenseRows
+            .querySelectorAll('.expense-row')
+            .forEach(function (row) {
+
+                const category =
+                    row.querySelector(
+                        '.expense-category'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.expense-amount'
+                    );
+
+                const name =
+                    row.querySelector(
+                        '.expense-name'
+                    );
+
+                draft.expenses.push({
+                    category:
+                        category
+                            ? category.value
+                            : '',
+
+                    amount:
+                        amount
+                            ? amount.value
+                            : '',
+
+                    name:
+                        name
+                            ? name.value
+                            : ''
+                });
+            });
+
+
+        /*
+         * Save delivery rows.
+         */
+        deliveryPaymentRows
+            .querySelectorAll(
+                '.delivery-payment-row'
+            )
+            .forEach(function (row) {
+
+                const customer =
+                    row.querySelector(
+                        '.delivery-customer'
+                    );
+
+                const slim =
+                    row.querySelector(
+                        '.delivery-slim'
+                    );
+
+                const round =
+                    row.querySelector(
+                        '.delivery-round'
+                    );
+
+                const payment =
+                    row.querySelector(
+                        '.delivery-payment'
+                    );
+
+                const price =
+                    row.querySelector(
+                        '.delivery-price-input'
+                    );
+
+                const method =
+                    row.querySelector(
+                        '.delivery-method'
+                    );
+
+                draft.deliveries.push({
+                    customer:
+                        customer
+                            ? customer.value
+                            : '',
+
+                    slim:
+                        slim
+                            ? slim.value
+                            : '',
+
+                    round:
+                        round
+                            ? round.value
+                            : '',
+
+                    payment:
+                        payment
+                            ? payment.value
+                            : '',
+
+                    price:
+                        price
+                            ? price.value
+                            : '',
+
+                    method:
+                        method
+                            ? method.value
+                            : 'Cash'
+                });
+            });
+
+
+        localStorage.setItem(
+            draftStorageKey,
+            JSON.stringify(draft)
+        );
+    }
+
+
+    function clearFormDraft() {
+        localStorage.removeItem(
+            draftStorageKey
+        );
+    }
+
+
+    function restoreFormDraft() {
+        const saved =
+            localStorage.getItem(
+                draftStorageKey
+            );
+
+        if (!saved) {
+            return;
+        }
+
+        try {
+            const draft =
+                JSON.parse(saved);
+
+            restoringDraft = true;
+
+
+            /*
+             * Restore money.
+             */
+            if (
+                typeof draft.walk_in_money
+                === 'string'
+            ) {
+                moneyInput.value =
+                    draft.walk_in_money;
+            }
+
+
+            /*
+             * Restore expenses.
+             */
+            if (
+                Array.isArray(
+                    draft.expenses
+                )
+            ) {
+                expenseRows.innerHTML = '';
+
+                draft.expenses.forEach(
+                    function (expense) {
+
+                        createExpenseRow();
+
+                        const rows =
+                            expenseRows.querySelectorAll(
+                                '.expense-row'
+                            );
+
+                        const row =
+                            rows[rows.length - 1];
+
+                        const category =
+                            row.querySelector(
+                                '.expense-category'
+                            );
+
+                        const amount =
+                            row.querySelector(
+                                '.expense-amount'
+                            );
+
+                        const name =
+                            row.querySelector(
+                                '.expense-name'
+                            );
+
+                        if (category) {
+                            category.value =
+                                expense.category || '';
+                        }
+
+                        if (amount) {
+                            amount.value =
+                                expense.amount || '';
+                        }
+
+                        if (name) {
+                            name.value =
+                                expense.name || '';
+                        }
+
+                        updateExpenseRow(row);
+                    }
+                );
+
+                /*
+                 * Always keep one row available.
+                 */
+                if (
+                    draft.expenses.length === 0
+                ) {
+                    createExpenseRow();
+                }
+            }
+
+
+            /*
+             * Restore deliveries.
+             */
+            if (
+                Array.isArray(
+                    draft.deliveries
+                )
+            ) {
+                deliveryPaymentRows.innerHTML = '';
+
+                draft.deliveries.forEach(
+                    function (delivery) {
+
+                        createDeliveryPaymentRow();
+
+                        const rows =
+                            deliveryPaymentRows.querySelectorAll(
+                                '.delivery-payment-row'
+                            );
+
+                        const row =
+                            rows[rows.length - 1];
+
+                        const customer =
+                            row.querySelector(
+                                '.delivery-customer'
+                            );
+
+                        const slim =
+                            row.querySelector(
+                                '.delivery-slim'
+                            );
+
+                        const round =
+                            row.querySelector(
+                                '.delivery-round'
+                            );
+
+                        const payment =
+                            row.querySelector(
+                                '.delivery-payment'
+                            );
+
+                        const price =
+                            row.querySelector(
+                                '.delivery-price-input'
+                            );
+
+                        const method =
+                            row.querySelector(
+                                '.delivery-method'
+                            );
+
+                        if (customer) {
+                            customer.value =
+                                delivery.customer || '';
+                        }
+
+                        if (slim) {
+                            slim.value =
+                                delivery.slim || '';
+                        }
+
+                        if (round) {
+                            round.value =
+                                delivery.round || '';
+                        }
+
+                        if (payment) {
+                            payment.value =
+                                delivery.payment || '';
+                        }
+
+                        if (price) {
+                            price.value =
+                                delivery.price || '';
+                        }
+
+                        if (method) {
+                            method.value =
+                                delivery.method || 'Cash';
+                        }
+
+                        updateDeliveryStatus(row);
+                    }
+                );
+
+                /*
+                 * Always keep one row available.
+                 */
+                if (
+                    draft.deliveries.length === 0
+                ) {
+                    createDeliveryPaymentRow();
+                }
+            }
+
+            restoringDraft = false;
+
+
+            /*
+             * Recalculate the shop balance
+             * after restoring everything.
+             */
+            calculateShop();
+
+        } catch (error) {
+            console.error(
+                'Unable to restore Daily Closing draft:',
+                error
+            );
+
+            localStorage.removeItem(
+                draftStorageKey
+            );
+
+            restoringDraft = false;
+        }
+    }
+
+
+    /*
+     * Save whenever the user changes
+     * anything in the form.
+     */
+    form.addEventListener(
+        'input',
+        saveFormDraft
+    );
+
+    form.addEventListener(
+        'change',
+        saveFormDraft
+    );
+
+
+    /*
+     * If the PHP save was successful,
+     * the database now contains the data.
+     *
+     * Clear the temporary browser draft.
+     */
+    const saveWasSuccessful =
+        <?= $messageType === 'success'
+            ? 'true'
+            : 'false' ?>;
+
+    if (saveWasSuccessful) {
+        clearFormDraft();
+    } else {
+        restoreFormDraft();
+    }
 
 })();
 </script>
