@@ -37,7 +37,7 @@ $messageType = '';
 // ==================================================
 $customers = [];
 $stmt = $pdo->query("
-    SELECT id, customer_name
+    SELECT customer_id, customer_name
     FROM customers
     ORDER BY customer_name ASC
 ");
@@ -419,7 +419,7 @@ if (
 
         // Refresh customer list so newly created customers are available immediately.
         $stmt = $pdo->query("
-            SELECT id, customer_name
+            SELECT customer_id, customer_name
             FROM customers
             ORDER BY customer_name ASC
         ");
