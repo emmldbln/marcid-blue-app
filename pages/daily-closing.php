@@ -143,8 +143,6 @@ if (
 
         unset($array);
 
-        
-
         $allowedCategories = [
             'Food' => 'Food',
             'Gas' => 'Gas',
@@ -161,81 +159,66 @@ if (
         );
 
         for ($i = 0; $i < $expenseRowCount; $i++) {
-    $category = trim(
-        (string) ($expenseCategories[$i] ?? '')
-    );
+            $category = trim(
+                (string) ($expenseCategories[$i] ?? '')
+            );
 
-    $name = trim(
-        (string) ($expenseNames[$i] ?? '')
-    );
+            $name = trim(
+                (string) ($expenseNames[$i] ?? '')
+            );
 
-    $amount = trim(
-        (string) ($expenseAmounts[$i] ?? '')
-    );
+            $amount = trim(
+                (string) ($expenseAmounts[$i] ?? '')
+            );
 
-    /*
-     * Completely empty row.
-     * Ignore it.
-     */
-    if (
-        $category === ''
-        && $name === ''
-        && $amount === ''
-    ) {
-        continue;
-    }
+            if (
+                $category === ''
+                && $name === ''
+                && $amount === ''
+            ) {
+                continue;
+            }
 
-    /*
-     * If the user started an expense row,
-     * an expense category is required.
-     */
-    if (!isset($allowedCategories[$category])) {
-        throw new Exception(
-            'Please select an expense type for the expense row you started.'
-        );
-    }
+            if (!isset($allowedCategories[$category])) {
+                throw new Exception(
+                    'Please select an expense type for the expense row you started.'
+                );
+            }
 
-    /*
-     * Amount is required for every actual expense.
-     */
-    if (
-        $amount === ''
-        || !is_numeric($amount)
-        || (float) $amount < 0
-    ) {
-        throw new Exception(
-            'Please enter an amount for the expense you started.'
-        );
-    }
+            if (
+                $amount === ''
+                || !is_numeric($amount)
+                || (float) $amount < 0
+            ) {
+                throw new Exception(
+                    'Please enter an amount for the expense you started.'
+                );
+            }
 
-    /*
-     * Cash Advance and Others require
-     * a name/description.
-     */
-    if (
-        (
-            $category === 'Cash Advance'
-            || $category === 'Others'
-        )
-        && $name === ''
-    ) {
-        throw new Exception(
-            'Please enter a name or description for Cash Advance or Others.'
-        );
-    }
+            if (
+                (
+                    $category === 'Cash Advance'
+                    || $category === 'Others'
+                )
+                && $name === ''
+            ) {
+                throw new Exception(
+                    'Please enter a name or description for Cash Advance or Others.'
+                );
+            }
 
-    $expensesToSave[] = [
-        'category' => $allowedCategories[$category],
-        'description' => in_array(
-            $category,
-            ['Cash Advance', 'Others'],
-            true
-        )
-            ? $name
-            : $category,
-        'amount' => (float) $amount,
-    ];
-}
+            $expensesToSave[] = [
+                'category' => $allowedCategories[$category],
+                'description' => in_array(
+                    $category,
+                    ['Cash Advance', 'Others'],
+                    true
+                )
+                    ? $name
+                    : $category,
+                'amount' => (float) $amount,
+            ];
+        }
 
         $deliveryPaymentsToSave = [];
 
@@ -434,7 +417,8 @@ if (
                 'method' => $method,
             ];
         }
-                /*
+
+        /*
          * =====================================================
          * SHOP-ONLY BALANCE
          *
@@ -478,86 +462,64 @@ if (
             + $totalExpenses
             - $totalDeliveryPayments;
 
-        /*
-         * The shop balance cannot be negative.
-         */
         if ($walkInSalesValue < -0.005) {
             throw new Exception(
                 'Shop-only balance cannot be negative.'
             );
         }
 
-        /*
-         * Avoid floating-point residue.
-         */
         if (abs($walkInSalesValue) < 0.005) {
             $walkInSalesValue = 0.00;
         }
 
         /*
- * =====================================================
- * WALK-IN QUANTITY + OTHER SALES
- *
- * The shop rate is ₱30 per gallon.
- *
- * The quantity must always be a whole number.
- * Any remaining amount below ₱30 is treated as
- * Other / Additional Sales.
- *
- * Example:
- *
- * ₱5,510 balance
- * ÷ ₱30
- * = 183.666...
- *
- * Walk-in Quantity = 183
- * Walk-in Sales = ₱5,490
- * Other Sales = ₱20
- * =====================================================
- */
+         * =====================================================
+         * WALK-IN QUANTITY + OTHER SALES
+         *
+         * The shop rate is ₱30 per gallon.
+         *
+         * The quantity must always be a whole number.
+         * Any remaining amount below ₱30 is treated as
+         * Other / Additional Sales.
+         *
+         * Example:
+         *
+         * ₱5,510 balance
+         * ÷ ₱30
+         * = 183.666...
+         *
+         * Walk-in Quantity = 183
+         * Walk-in Sales = ₱5,490
+         * Other Sales = ₱20
+         * =====================================================
+         */
 
-/*
- * Get the whole-number walk-in quantity.
- */
-$customersValue =
-    (int) floor(
-        $walkInSalesValue / $walkInPrice
-    );
+        $customersValue =
+            (int) floor(
+                $walkInSalesValue / $walkInPrice
+            );
 
-/*
- * Calculate the actual walk-in sales.
- */
-$walkInSalesValue =
-    $customersValue * $walkInPrice;
+        $walkInSalesValue =
+            $customersValue * $walkInPrice;
 
-/*
- * Everything remaining below ₱30 is
- * Other / Additional Sales.
- */
-$otherSalesValue =
-    $walkInSalesValue >= 0
-        ? (
-            (
-                $moneyValue
-                + $totalExpenses
-                - $totalDeliveryPayments
-            )
-            - $walkInSalesValue
-        )
-        : 0.00;
+        $otherSalesValue =
+            $walkInSalesValue >= 0
+                ? (
+                    (
+                        $moneyValue
+                        + $totalExpenses
+                        - $totalDeliveryPayments
+                    )
+                    - $walkInSalesValue
+                )
+                : 0.00;
 
-/*
- * Avoid floating-point residue.
- */
-if (abs($otherSalesValue) < 0.005) {
-    $otherSalesValue = 0.00;
-}
+        if (abs($otherSalesValue) < 0.005) {
+            $otherSalesValue = 0.00;
+        }
 
-/*
- * Round currency values to two decimals.
- */
-$otherSalesValue =
-    round($otherSalesValue, 2);
+        $otherSalesValue =
+            round($otherSalesValue, 2);
 
         $pdo->beginTransaction();
 
@@ -572,24 +534,22 @@ $otherSalesValue =
         $existing = $stmt->fetch();
 
         if ($existing) {
-    $stmt = $pdo->prepare(
-        "UPDATE daily_sales
-         SET
-            walk_in_customers = ?,
-            walk_in_price = ?,
-            other_sales = ?
-         WHERE daily_sales_id = ?"
-    );
+            $stmt = $pdo->prepare(
+                "UPDATE daily_sales
+                 SET
+                    walk_in_customers = ?,
+                    walk_in_price = ?,
+                    other_sales = ?
+                 WHERE daily_sales_id = ?"
+            );
 
-    $stmt->execute([
-        $customersValue,
-        $walkInPrice,
-        $otherSalesValue,
-        $existing['daily_sales_id'],
-    ]);
-}
-
-         else {
+            $stmt->execute([
+                $customersValue,
+                $walkInPrice,
+                $otherSalesValue,
+                $existing['daily_sales_id'],
+            ]);
+        } else {
             $stmt = $pdo->prepare(
                 "INSERT INTO daily_sales
                     (
@@ -610,7 +570,6 @@ $otherSalesValue =
                 $otherSalesValue,
                 $dailyId,
             ]);
-        
         }
 
         if (!empty($expensesToSave)) {
@@ -697,10 +656,8 @@ $otherSalesValue =
         $pdo->commit();
 
         $walkInCustomers = $customersValue;
-
         $walkInSales =
             $customersValue * $walkInPrice;
-
         $walkInOtherSales =
             $otherSalesValue;
 
@@ -767,53 +724,41 @@ $otherSalesValue =
        ========================================================= */
 
     .shop-walkin-layout {
-    display: grid;
-    grid-template-columns:
-        minmax(110px, 0.65fr)
-        minmax(190px, 1fr)
-        minmax(180px, 1fr);
-    gap: 18px;
-    align-items: end;
-}
+        display: grid;
+        grid-template-columns:
+            minmax(110px, 0.65fr)
+            minmax(190px, 1fr)
+            minmax(180px, 1fr);
+        gap: 18px;
+        align-items: end;
+    }
 
-.shop-sales-summary-group {
-    display: grid;
-    grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    align-items: end;
-}
+    .shop-sales-summary-group {
+        display: grid;
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        align-items: end;
+    }
 
-.shop-computed-sales,
-.shop-other-sales {
-    padding: 8px 0 4px 8px;
-}
+    .shop-computed-sales,
+    .shop-other-sales {
+        padding: 8px 0 4px 8px;
+    }
 
-.shop-computed-sales .summary-value,
-.shop-other-sales .summary-value {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.4;
-}
-
-.shop-computed-sales,
-.shop-other-sales {
-    padding: 8px 0 4px 8px;
-}
-
-.shop-computed-sales .summary-value,
-.shop-other-sales .summary-value {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.4;
-}
+    .shop-computed-sales .summary-value,
+    .shop-other-sales .summary-value {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
 
     .section-description {
-    margin-top: 4px;
-    color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.5;
-    font-weight: 400;
+        margin-top: 4px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.5;
+        font-weight: 400;
     }
 
     .shop-customers-field {
@@ -867,7 +812,6 @@ $otherSalesValue =
         gap: 12px;
     }
 
-
     /* =========================================================
        EXPENSE ROW
        ========================================================= */
@@ -881,14 +825,11 @@ $otherSalesValue =
             38px;
         gap: 14px;
         align-items: end;
-
         padding: 16px;
-
         background: var(--background);
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
     }
-
 
     /* =========================================================
        DELIVERY PAYMENT ROW
@@ -907,14 +848,11 @@ $otherSalesValue =
             38px;
         gap: 12px;
         align-items: end;
-
         padding: 16px;
-
         background: var(--background);
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
     }
-
 
     /* =========================================================
        FORM GROUPS
@@ -925,7 +863,6 @@ $otherSalesValue =
         min-width: 0;
         margin: 0;
     }
-
 
     /* =========================================================
        UNIFIED FORM CONTROL HEIGHT
@@ -940,12 +877,8 @@ $otherSalesValue =
         box-sizing: border-box;
     }
 
-
     /* =========================================================
        DROPDOWNS
-       
-       Explicitly reset vertical padding so the native select
-       text is not pushed below the visible area.
        ========================================================= */
 
     .expense-row select.form-input,
@@ -953,26 +886,12 @@ $otherSalesValue =
         width: 100%;
         height: 38px;
         min-height: 38px;
-
-        /*
-         * Important:
-         * Remove vertical padding from the global .form-input
-         * so the option text stays completely visible.
-         */
         padding-top: 0;
         padding-bottom: 0;
-
-        /*
-         * Keep horizontal spacing.
-         * Extra right padding gives the native dropdown arrow
-         * enough room.
-         */
         padding-left: 12px;
         padding-right: 32px;
-
         line-height: normal;
         box-sizing: border-box;
-
         vertical-align: middle;
     }
 
@@ -982,7 +901,6 @@ $otherSalesValue =
         min-height: 38px;
         line-height: normal;
     }
-
 
     /* =========================================================
        REMOVE BUTTONS
@@ -994,31 +912,22 @@ $otherSalesValue =
         height: 38px;
         min-width: 38px;
         min-height: 38px;
-
         margin: 0;
         padding: 0;
-
         display: flex;
         align-items: center;
         justify-content: center;
-
         align-self: end;
         justify-self: center;
-
         box-sizing: border-box;
-
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-
         background: var(--surface);
         color: var(--danger);
-
         font-size: 19px;
         font-weight: 600;
         line-height: 1;
-
         cursor: pointer;
-
         transition:
             background 0.15s ease,
             border-color 0.15s ease;
@@ -1029,7 +938,6 @@ $otherSalesValue =
         background: var(--danger-light);
         border-color: var(--danger);
     }
-
 
     /* =========================================================
        BUTTONS
@@ -1047,7 +955,6 @@ $otherSalesValue =
         margin-top: 22px;
     }
 
-
     /* =========================================================
        DELIVERY STATUS LEGEND
        ========================================================= */
@@ -1058,9 +965,7 @@ $otherSalesValue =
         justify-content: flex-start;
         flex-wrap: wrap;
         gap: 12px;
-
         margin-top: 12px;
-
         color: var(--text-muted);
         font-size: 14px;
         line-height: 1.5;
@@ -1094,7 +999,6 @@ $otherSalesValue =
         color: var(--primary);
     }
 
-
     /* =========================================================
        DELIVERY BALANCE
        ========================================================= */
@@ -1107,23 +1011,16 @@ $otherSalesValue =
         width: 100%;
         height: 38px;
         min-height: 38px;
-
         padding: 0 10px;
-
         display: flex;
         align-items: center;
-
         box-sizing: border-box;
-
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-
         background: var(--surface);
-
         font-size: 13px;
         font-weight: 700;
         line-height: 1.2;
-
         white-space: nowrap;
     }
 
@@ -1156,7 +1053,6 @@ $otherSalesValue =
         border-color: rgba(22, 135, 201, 0.18);
     }
 
-
     /* =========================================================
        PRICE NOTE
        ========================================================= */
@@ -1164,12 +1060,10 @@ $otherSalesValue =
     .delivery-price-note {
         display: block;
         margin-top: 4px;
-
         color: var(--text-muted);
         font-size: 11px;
         line-height: 1.3;
     }
-
 
     /* =========================================================
        MEDIUM SCREENS
@@ -1186,12 +1080,10 @@ $otherSalesValue =
                 minmax(115px, 0.9fr)
                 minmax(135px, 1fr)
                 38px;
-
             gap: 10px;
             align-items: end;
         }
     }
-
 
     /* =========================================================
        TABLET
@@ -1208,16 +1100,14 @@ $otherSalesValue =
             max-width: none;
         }
 
-        .shop-computed-sales {
+        .shop-sales-summary-group {
+            grid-column: 1 / -1;
+        }
+
+        .shop-computed-sales,
+        .shop-other-sales {
             padding-left: 0;
         }
-
-        .shop-other-sales {
-        padding-left: 0;
-        }
-
-
-        /* Expense rows */
 
         .expense-row {
             grid-template-columns:
@@ -1235,15 +1125,11 @@ $otherSalesValue =
             align-self: end;
         }
 
-
-        /* Delivery rows */
-
         .delivery-payment-row {
             grid-template-columns:
                 1fr
                 1fr
                 1fr;
-
             gap: 12px;
         }
 
@@ -1271,7 +1157,6 @@ $otherSalesValue =
         }
     }
 
-
     /* =========================================================
        MOBILE
        ========================================================= */
@@ -1281,20 +1166,18 @@ $otherSalesValue =
             grid-template-columns: 1fr;
         }
 
+        .shop-sales-summary-group {
+            grid-template-columns: 1fr;
+        }
+
         .expense-row,
         .delivery-payment-row {
             grid-template-columns: 1fr;
         }
 
-
-        /* Expense */
-
         .expense-row .expense-name-group {
             grid-column: auto;
         }
-
-
-        /* Delivery */
 
         .delivery-payment-row .delivery-customer-group,
         .delivery-payment-row .delivery-payment-group,
@@ -1302,9 +1185,6 @@ $otherSalesValue =
         .delivery-payment-row .delivery-balance-group {
             grid-column: auto;
         }
-
-
-        /* Remove buttons */
 
         .expense-remove,
         .delivery-payment-remove {
@@ -1314,17 +1194,11 @@ $otherSalesValue =
             margin: 0;
         }
 
-
-        /* Headers */
-
         .expenses-panel-header,
         .delivery-payments-panel-header {
             flex-direction: column;
             align-items: stretch;
         }
-
-
-        /* Actions */
 
         .shop-actions {
             justify-content: stretch;
@@ -1333,9 +1207,6 @@ $otherSalesValue =
         .shop-actions .btn {
             flex: 1;
         }
-
-
-        /* Status legend */
 
         .delivery-status-legend {
             gap: 8px 12px;
@@ -1348,11 +1219,11 @@ $otherSalesValue =
     }
 
     .shop-draft-status {
-    margin-top: 10px;
-    color: var(--text-muted);
-    font-size: 12px;
-    text-align: right;
-}
+        margin-top: 10px;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-align: right;
+    }
 </style>
 </head>
 <body>
@@ -1368,51 +1239,30 @@ $otherSalesValue =
                 <div class="nav-section-title">
                     Main
                 </div>
-                <a
-                    href="home.php"
-                    class="nav-item"
-                >
+                <a href="home.php" class="nav-item">
                     🏠
                     <span>Home</span>
                 </a>
-                <a
-                    href="#"
-                    class="nav-item"
-                >
+                <a href="#" class="nav-item">
                     👥
                     <span>Customers</span>
                 </a>
-                <a
-                    href="#"
-                    class="nav-item"
-                >
+                <a href="#" class="nav-item">
                     📅
                     <span>Daily Records</span>
                 </a>
-                <a
-                    href="daily-closing.php"
-                    class="nav-item active"
-                >
+                <a href="daily-closing.php" class="nav-item active">
                     🧾
                     <span>Daily Closing</span>
                 </a>
-                <div
-                    class="nav-section-title"
-                    style="margin-top: 25px;"
-                >
+                <div class="nav-section-title" style="margin-top: 25px;">
                     System
                 </div>
-                <a
-                    href="#"
-                    class="nav-item"
-                >
+                <a href="#" class="nav-item">
                     ⚙️
                     <span>Settings</span>
                 </a>
-                <a
-                    href="#"
-                    class="nav-item"
-                >
+                <a href="#" class="nav-item">
                     🚪
                     <span>Logout</span>
                 </a>
@@ -1458,14 +1308,8 @@ $otherSalesValue =
                             <div class="summary-label">
                                 Shop Sales
                             </div>
-                            <div
-                                class="summary-value"
-                                id="dashboardShopSales"
-                            >
-                                ₱<?= number_format(
-                                    $walkInSales,
-                                    2
-                                ) ?>
+                            <div class="summary-value" id="dashboardShopSales">
+                                ₱<?= number_format($walkInSales, 2) ?>
                             </div>
                             <div class="summary-description">
                                 Current shop / walk-in sales
@@ -1475,13 +1319,8 @@ $otherSalesValue =
                             <div class="summary-label">
                                 Shop Customers
                             </div>
-                            <div
-                                class="summary-value"
-                                id="dashboardShopCustomers"
-                            >
-                                <?= number_format(
-                                    $walkInCustomers
-                                ) ?>
+                            <div class="summary-value" id="dashboardShopCustomers">
+                                <?= number_format($walkInCustomers) ?>
                             </div>
                             <div class="summary-description">
                                 Walk-in customers served
@@ -1492,10 +1331,7 @@ $otherSalesValue =
                                 Price per Customer
                             </div>
                             <div class="summary-value">
-                                ₱<?= number_format(
-                                    $walkInPrice,
-                                    2
-                                ) ?>
+                                ₱<?= number_format($walkInPrice, 2) ?>
                             </div>
                             <div class="summary-description">
                                 Current shop rate
@@ -1511,9 +1347,7 @@ $otherSalesValue =
                                 </span>
                             </div>
                             <div class="summary-description">
-                                <?= htmlspecialchars(
-                                    $businessDate
-                                ) ?>
+                                <?= htmlspecialchars($businessDate) ?>
                             </div>
                         </div>
                     </div>
@@ -1524,7 +1358,7 @@ $otherSalesValue =
                                 <div class="card-title">
                                     Shop / Walk-in
                                 </div>
-                                <div class="section-description">  
+                                <div class="section-description">
                                     Record regular customers, money received,
                                     station expenses, and delivery payments
                                     received at the shop.
@@ -1533,103 +1367,71 @@ $otherSalesValue =
                         </div>
                         <div class="card-body">
                             <?php if ($message !== ''): ?>
-                                <div
-                                    class="alert alert-<?= htmlspecialchars(
-                                        $messageType
-                                    ) ?>"
-                                >
+                                <div class="alert alert-<?= htmlspecialchars($messageType) ?>">
                                     <?= htmlspecialchars($message) ?>
                                 </div>
                             <?php endif; ?>
-                            <form
-                                method="POST"
-                                id="shopWalkInForm"
-                            >
+                            <form method="POST" id="shopWalkInForm">
                                 <input
                                     type="hidden"
                                     name="action"
                                     value="save_shop_walkin"
                                 >
                                 <div class="shop-walkin-layout">
+                                    <div class="shop-money-field">
+                                        <label for="walk_in_money" class="form-label">
+                                            Total Money Received (Shop only)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="walk_in_money"
+                                            name="walk_in_money"
+                                            class="form-input"
+                                            min="0"
+                                            step="0.01"
+                                            value=""
+                                            placeholder="Enter amount"
+                                        >
+                                    </div>
 
-    <div class="shop-money-field">
-        <label
-            for="walk_in_money"
-            class="form-label"
-        >
-            Total Money Received (Shop only)
-        </label>
+                                    <div class="shop-customers-field">
+                                        <label for="walk_in_customers" class="form-label">
+                                            Total Quantity of Walk-in
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="walk_in_customers"
+                                            name="walk_in_customers"
+                                            class="form-input"
+                                            min="0"
+                                            step="1"
+                                            value="0"
+                                            placeholder="Calculated"
+                                            readonly
+                                        >
+                                    </div>
 
-        <input
-            type="number"
-            id="walk_in_money"
-            name="walk_in_money"
-            class="form-input"
-            min="0"
-            step="0.01"
-            value=""
-            placeholder="Enter amount"
-        >
-    </div>
+                                    <div class="shop-sales-summary-group">
+                                        <div class="shop-computed-sales">
+                                            <div class="summary-label">
+                                                Total Sales for Walk-in
+                                            </div>
+                                            <div class="summary-value" id="shopComputedSales">
+                                                ₱<?= number_format($walkInSales, 2) ?>
+                                            </div>
+                                        </div>
 
-    <div class="shop-customers-field">
-        <label
-            for="walk_in_customers"
-            class="form-label"
-        >
-            Total Quantity of Walk-in
-        </label>
+                                        <div class="shop-other-sales">
+                                            <div class="summary-label">
+                                                Other / Additional Sales
+                                            </div>
+                                            <div class="summary-value" id="shopOtherSales">
+                                                ₱<?= number_format($walkInOtherSales, 2) ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
-        <input
-            type="number"
-            id="walk_in_customers"
-            name="walk_in_customers"
-            class="form-input"
-            min="0"
-            step="1"
-            value="0"
-            placeholder="Calculated"
-            readonly
-        >
-    </div>
-
-    <div class="shop-sales-summary-group">
-
-    <div class="shop-computed-sales">
-        <div class="summary-label">
-            Total Sales for Walk-in
-        </div>
-
-        <div
-            class="summary-value"
-            id="shopComputedSales"
-        >
-            ₱<?= number_format(
-                $walkInSales,
-                2
-            ) ?>
-        </div>
-    </div>
-
-    <div class="shop-other-sales">
-        <div class="summary-label">
-            Other / Additional Sales
-        </div>
-
-        <div
-            class="summary-value"
-            id="shopOtherSales"
-        >
-            ₱<?= number_format(
-                $walkInOtherSales,
-                2
-            ) ?>
-        </div>
-    </div>
-
-</div>
-
-</div>
                                 <div class="expenses-panel">
                                     <div class="expenses-panel-header">
                                         <div>
@@ -1649,40 +1451,20 @@ $otherSalesValue =
                                             + Expenses
                                         </button>
                                     </div>
-                                    <div
-                                        id="expenseRows"
-                                        class="expense-rows"
-                                    >
+                                    <div id="expenseRows" class="expense-rows">
                                         <div class="expense-row">
                                             <div class="form-group">
-                                                <label class="form-label">
-                                                    Expense
-                                                </label>
-                                                <select
-                                                    name="expense_category[]"
-                                                    class="form-input expense-category"
-                                                >
-                                                    <option value="">
-                                                        No Expense
-                                                    </option>
-                                                    <option value="Food">
-                                                        Food
-                                                    </option>
-                                                    <option value="Gas">
-                                                        Gas
-                                                    </option>
-                                                    <option value="Cash Advance">
-                                                        Cash Advance
-                                                    </option>
-                                                    <option value="Others">
-                                                        Others
-                                                    </option>
+                                                <label class="form-label">Expense</label>
+                                                <select name="expense_category[]" class="form-input expense-category">
+                                                    <option value="">No Expense</option>
+                                                    <option value="Food">Food</option>
+                                                    <option value="Gas">Gas</option>
+                                                    <option value="Cash Advance">Cash Advance</option>
+                                                    <option value="Others">Others</option>
                                                 </select>
                                             </div>
                                             <div class="form-group">
-                                                <label class="form-label">
-                                                    Amount
-                                                </label>
+                                                <label class="form-label">Amount</label>
                                                 <input
                                                     type="number"
                                                     name="expense_amount[]"
@@ -1716,6 +1498,7 @@ $otherSalesValue =
                                         </div>
                                     </div>
                                 </div>
+
                                 <div class="delivery-payments-panel">
                                     <div class="delivery-payments-panel-header">
                                         <div>
@@ -1731,21 +1514,11 @@ $otherSalesValue =
                                                 class="delivery-status-legend"
                                                 aria-label="Delivery payment status legend"
                                             >
-                                                <span class="legend-label">
-                                                    Status:
-                                                </span>
-                                                <span class="delivery-status-item delivery-status-paid">
-                                                    ● Paid
-                                                </span>
-                                                <span class="delivery-status-item delivery-status-due">
-                                                    ● Due
-                                                </span>
-                                                <span class="delivery-status-item delivery-status-unpaid">
-                                                    ● Unpaid
-                                                </span>
-                                                <span class="delivery-status-item delivery-status-overpaid">
-                                                    ● Overpaid
-                                                </span>
+                                                <span class="legend-label">Status:</span>
+                                                <span class="delivery-status-item delivery-status-paid">● Paid</span>
+                                                <span class="delivery-status-item delivery-status-due">● Due</span>
+                                                <span class="delivery-status-item delivery-status-unpaid">● Unpaid</span>
+                                                <span class="delivery-status-item delivery-status-overpaid">● Overpaid</span>
                                             </div>
                                         </div>
                                         <button
@@ -1756,15 +1529,10 @@ $otherSalesValue =
                                             + Payment
                                         </button>
                                     </div>
-                                    <div
-                                        id="deliveryPaymentRows"
-                                        class="delivery-payment-rows"
-                                    >
+                                    <div id="deliveryPaymentRows" class="delivery-payment-rows">
                                         <div class="delivery-payment-row">
                                             <div class="form-group delivery-customer-group">
-                                                <label class="form-label">
-                                                    Customer
-                                                </label>
+                                                <label class="form-label">Customer</label>
                                                 <input
                                                     type="text"
                                                     name="delivery_customer[]"
@@ -1776,9 +1544,7 @@ $otherSalesValue =
                                                 >
                                             </div>
                                             <div class="form-group">
-                                                <label class="form-label">
-                                                    Slim
-                                                </label>
+                                                <label class="form-label">Slim</label>
                                                 <input
                                                     type="number"
                                                     name="delivery_slim[]"
@@ -1789,9 +1555,7 @@ $otherSalesValue =
                                                 >
                                             </div>
                                             <div class="form-group">
-                                                <label class="form-label">
-                                                    Round
-                                                </label>
+                                                <label class="form-label">Round</label>
                                                 <input
                                                     type="number"
                                                     name="delivery_round[]"
@@ -1802,9 +1566,7 @@ $otherSalesValue =
                                                 >
                                             </div>
                                             <div class="form-group delivery-payment-group">
-                                                <label class="form-label">
-                                                    Payment
-                                                </label>
+                                                <label class="form-label">Payment</label>
                                                 <input
                                                     type="number"
                                                     name="delivery_payment[]"
@@ -1815,9 +1577,7 @@ $otherSalesValue =
                                                 >
                                             </div>
                                             <div class="form-group delivery-price-group">
-                                                <label class="form-label">
-                                                    Price/Gal
-                                                </label>
+                                                <label class="form-label">Price/Gal</label>
                                                 <input
                                                     type="number"
                                                     name="delivery_price_per_gallon[]"
@@ -1828,40 +1588,17 @@ $otherSalesValue =
                                                 >
                                             </div>
                                             <div class="form-group">
-                                                <label class="form-label">
-                                                    Method
-                                                </label>
-                                                <select
-                                                    name="delivery_method[]"
-                                                    class="form-input delivery-method"
-                                                >
-                                                    <option
-                                                        value="Cash"
-                                                        selected
-                                                    >
-                                                        Cash
-                                                    </option>
-                                                    <option value="GCash">
-                                                        GCash
-                                                    </option>
-                                                    <option value="Bank Transfer">
-                                                        Bank Transfer
-                                                    </option>
-                                                    <option value="Other">
-                                                        Other
-                                                    </option>
+                                                <label class="form-label">Method</label>
+                                                <select name="delivery_method[]" class="form-input delivery-method">
+                                                    <option value="Cash" selected>Cash</option>
+                                                    <option value="GCash">GCash</option>
+                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                    <option value="Other">Other</option>
                                                 </select>
                                             </div>
                                             <div class="form-group delivery-balance-group">
-                                                <label class="form-label">
-                                                    Balance
-                                                </label>
-                                                <div
-                                                    class="delivery-balance delivery-balance-neutral"
-                                                    aria-live="polite"
-                                                >
-                                                    —
-                                                </div>
+                                                <label class="form-label">Balance</label>
+                                                <div class="delivery-balance delivery-balance-neutral" aria-live="polite">—</div>
                                             </div>
                                             <button
                                                 type="button"
@@ -1874,15 +1611,13 @@ $otherSalesValue =
                                         </div>
                                     </div>
                                 </div>
+
                                 <datalist id="shopDeliveryCustomerList">
                                     <?php foreach ($customers as $customer): ?>
-                                        <option
-                                            value="<?= htmlspecialchars(
-                                                $customer['customer_name']
-                                            ) ?>"
-                                        ></option>
+                                        <option value="<?= htmlspecialchars($customer['customer_name']) ?>"></option>
                                     <?php endforeach; ?>
                                 </datalist>
+
                                 <div class="shop-actions">
                                     <button
                                         type="button"
@@ -1923,9 +1658,9 @@ $otherSalesValue =
 
     const computedSales =
         document.getElementById('shopComputedSales');
-    
+
     const otherSales =
-    document.getElementById('shopOtherSales');
+        document.getElementById('shopOtherSales');
 
     const dashboardSales =
         document.getElementById('dashboardShopSales');
@@ -1957,11 +1692,6 @@ $otherSalesValue =
             | JSON_UNESCAPED_SLASHES
         ) ?>;
 
-
-    /* =========================================================
-       HELPERS
-       ========================================================= */
-
     function formatCurrency(value) {
         return '₱'
             + Number(value || 0).toLocaleString(
@@ -1972,11 +1702,6 @@ $otherSalesValue =
                 }
             );
     }
-
-
-    /* =========================================================
-       EXPENSE
-       ========================================================= */
 
     function updateExpenseRow(row) {
         if (!row) {
@@ -2009,117 +1734,52 @@ $otherSalesValue =
 
         if (needsName) {
             if (category.value === 'Cash Advance') {
-                name.placeholder =
-                    'Enter recipient name';
+                name.placeholder = 'Enter recipient name';
             } else {
-                name.placeholder =
-                    'Enter expense description';
+                name.placeholder = 'Enter expense description';
             }
         } else {
             name.value = '';
-            name.placeholder =
-                'Not required for Food / Gas';
+            name.placeholder = 'Not required for Food / Gas';
         }
     }
 
-
     function createExpenseRow() {
-        const row =
-            document.createElement('div');
-
-        row.className =
-            'expense-row';
+        const row = document.createElement('div');
+        row.className = 'expense-row';
 
         row.innerHTML = `
             <div class="form-group">
-                <label class="form-label">
-                    Expense
-                </label>
-
-                <select
-                    name="expense_category[]"
-                    class="form-input expense-category"
-                >
-                    <option value="">
-                        No Expense
-                    </option>
-
-                    <option value="Food">
-                        Food
-                    </option>
-
-                    <option value="Gas">
-                        Gas
-                    </option>
-
-                    <option value="Cash Advance">
-                        Cash Advance
-                    </option>
-
-                    <option value="Others">
-                        Others
-                    </option>
+                <label class="form-label">Expense</label>
+                <select name="expense_category[]" class="form-input expense-category">
+                    <option value="">No Expense</option>
+                    <option value="Food">Food</option>
+                    <option value="Gas">Gas</option>
+                    <option value="Cash Advance">Cash Advance</option>
+                    <option value="Others">Others</option>
                 </select>
             </div>
-
             <div class="form-group">
-                <label class="form-label">
-                    Amount
-                </label>
-
-                <input
-                    type="number"
-                    name="expense_amount[]"
-                    class="form-input expense-amount"
-                    min="0"
-                    step="0.01"
-                    placeholder="Enter amount"
-                >
+                <label class="form-label">Amount</label>
+                <input type="number" name="expense_amount[]" class="form-input expense-amount" min="0" step="0.01" placeholder="Enter amount">
             </div>
-
             <div class="form-group expense-name-group">
-                <label class="form-label expense-name-label">
-                    Name / Description
-                </label>
-
-                <input
-                    type="text"
-                    name="expense_name[]"
-                    class="form-input expense-name"
-                    maxlength="255"
-                    placeholder="Not required for Food / Gas"
-                    disabled
-                >
+                <label class="form-label expense-name-label">Name / Description</label>
+                <input type="text" name="expense_name[]" class="form-input expense-name" maxlength="255" placeholder="Not required for Food / Gas" disabled>
             </div>
-
-            <button
-                type="button"
-                class="expense-remove"
-                title="Remove expense"
-                aria-label="Remove expense"
-            >
-                ×
-            </button>
+            <button type="button" class="expense-remove" title="Remove expense" aria-label="Remove expense">×</button>
         `;
 
         expenseRows.appendChild(row);
-
         updateExpenseRow(row);
 
         if (!restoringDraft) {
-        const category =
-        row.querySelector('.expense-category');
-
-        if (category) {
-        category.focus();
+            const category = row.querySelector('.expense-category');
+            if (category) {
+                category.focus();
             }
         }
     }
-
-
-    /* =========================================================
-       CUSTOMER PRICE
-       ========================================================= */
 
     function setPriceFromCustomer(row) {
         if (!row) {
@@ -2140,17 +1800,11 @@ $otherSalesValue =
         }
 
         const name =
-            customerInput.value
-                .trim()
-                .toLowerCase();
+            customerInput.value.trim().toLowerCase();
 
-        const account =
-            customerAccounts[name];
+        const account = customerAccounts[name];
 
-        if (
-            account
-            && Number(account.gallon_price) > 0
-        ) {
+        if (account && Number(account.gallon_price) > 0) {
             priceInput.value =
                 Number(account.gallon_price)
                     .toFixed(2)
@@ -2160,17 +1814,12 @@ $otherSalesValue =
             priceInput.dataset.saved = '1';
 
             if (priceNote) {
-                priceNote.textContent =
-                    'Saved customer price';
+                priceNote.textContent = 'Saved customer price';
             }
 
             return;
         }
 
-        /*
-         * New customer.
-         * Allow the user to enter the price manually.
-         */
         if (priceInput.dataset.saved === '1') {
             priceInput.value = '';
         }
@@ -2179,15 +1828,9 @@ $otherSalesValue =
         priceInput.dataset.saved = '0';
 
         if (priceNote) {
-            priceNote.textContent =
-                'Enter price for new customer';
+            priceNote.textContent = 'Enter price for new customer';
         }
     }
-
-
-    /* =========================================================
-       DELIVERY STATUS
-       ========================================================= */
 
     function updateDeliveryStatus(row) {
         if (!row) {
@@ -2196,566 +1839,209 @@ $otherSalesValue =
 
         const customerInput =
             row.querySelector('.delivery-customer');
-
         const slimInput =
             row.querySelector('.delivery-slim');
-
         const roundInput =
             row.querySelector('.delivery-round');
-
         const paymentInput =
             row.querySelector('.delivery-payment');
-
         const priceInput =
             row.querySelector('.delivery-price-input');
-
         const balanceElement =
             row.querySelector('.delivery-balance');
 
-        if (
-            !customerInput
-            || !balanceElement
-        ) {
+        if (!customerInput || !balanceElement) {
             return;
         }
 
-        /*
-         * Set saved customer price first.
-         */
         setPriceFromCustomer(row);
 
         const slim =
-            parseInt(
-                slimInput?.value || '0',
-                10
-            ) || 0;
-
+            parseInt(slimInput?.value || '0', 10) || 0;
         const round =
-            parseInt(
-                roundInput?.value || '0',
-                10
-            ) || 0;
-
+            parseInt(roundInput?.value || '0', 10) || 0;
         const payment =
-            parseFloat(
-                paymentInput?.value || '0'
-            ) || 0;
-
+            parseFloat(paymentInput?.value || '0') || 0;
         const price =
-            parseFloat(
-                priceInput?.value || '0'
-            ) || 0;
-
-        const gallons =
-            slim + round;
-
-        const amountDue =
-            gallons * price;
-
+            parseFloat(priceInput?.value || '0') || 0;
+        const gallons = slim + round;
+        const amountDue = gallons * price;
         const epsilon = 0.005;
 
         balanceElement.className =
-            'delivery-balance '
-            + 'delivery-balance-neutral';
+            'delivery-balance delivery-balance-neutral';
 
-        if (
-            gallons <= 0
-            || price <= 0
-        ) {
+        if (gallons <= 0 || price <= 0) {
             balanceElement.textContent = '—';
             return;
         }
 
-        const difference =
-            amountDue - payment;
+        const difference = amountDue - payment;
 
-
-        /*
-         * No payment
-         */
         if (payment <= epsilon) {
             balanceElement.className =
-                'delivery-balance '
-                + 'delivery-balance-unpaid';
-
+                'delivery-balance delivery-balance-unpaid';
             balanceElement.textContent =
-                formatCurrency(amountDue)
-                + ' Unpaid';
-
+                formatCurrency(amountDue) + ' Unpaid';
             return;
         }
 
-
-        /*
-         * Exact payment
-         */
-        if (
-            Math.abs(difference)
-            <= epsilon
-        ) {
+        if (Math.abs(difference) <= epsilon) {
             balanceElement.className =
-                'delivery-balance '
-                + 'delivery-balance-paid';
-
-            balanceElement.textContent =
-                '✓ Paid';
-
+                'delivery-balance delivery-balance-paid';
+            balanceElement.textContent = '✓ Paid';
             return;
         }
 
-
-        /*
-         * Payment is less than amount due
-         */
         if (difference > epsilon) {
             balanceElement.className =
-                'delivery-balance '
-                + 'delivery-balance-due';
-
+                'delivery-balance delivery-balance-due';
             balanceElement.textContent =
-                formatCurrency(difference)
-                + ' Due';
-
+                formatCurrency(difference) + ' Due';
             return;
         }
 
-
-        /*
-         * Payment is greater than amount due
-         */
         balanceElement.className =
-            'delivery-balance '
-            + 'delivery-balance-overpaid';
-
+            'delivery-balance delivery-balance-overpaid';
         balanceElement.textContent =
-            formatCurrency(
-                Math.abs(difference)
-            )
-            + ' Overpaid';
+            formatCurrency(Math.abs(difference)) + ' Overpaid';
     }
 
-
-    /* =========================================================
-       DELIVERY ROW
-       ========================================================= */
-
     function createDeliveryPaymentRow() {
-        const row =
-            document.createElement('div');
-
-        row.className =
-            'delivery-payment-row';
+        const row = document.createElement('div');
+        row.className = 'delivery-payment-row';
 
         row.innerHTML = `
             <div class="form-group delivery-customer-group">
-                <label class="form-label">
-                    Customer
-                </label>
-
-                <input
-                    type="text"
-                    name="delivery_customer[]"
-                    class="form-input delivery-customer"
-                    list="shopDeliveryCustomerList"
-                    maxlength="100"
-                    placeholder="Select or enter customer"
-                    autocomplete="off"
-                >
+                <label class="form-label">Customer</label>
+                <input type="text" name="delivery_customer[]" class="form-input delivery-customer" list="shopDeliveryCustomerList" maxlength="100" placeholder="Select or enter customer" autocomplete="off">
             </div>
-
             <div class="form-group">
-                <label class="form-label">
-                    Slim
-                </label>
-
-                <input
-                    type="number"
-                    name="delivery_slim[]"
-                    class="form-input delivery-slim"
-                    min="0"
-                    step="1"
-                    placeholder="optional"
-                >
+                <label class="form-label">Slim</label>
+                <input type="number" name="delivery_slim[]" class="form-input delivery-slim" min="0" step="1" placeholder="optional">
             </div>
-
             <div class="form-group">
-                <label class="form-label">
-                    Round
-                </label>
-
-                <input
-                    type="number"
-                    name="delivery_round[]"
-                    class="form-input delivery-round"
-                    min="0"
-                    step="1"
-                    placeholder="optional"
-                >
+                <label class="form-label">Round</label>
+                <input type="number" name="delivery_round[]" class="form-input delivery-round" min="0" step="1" placeholder="optional">
             </div>
-
             <div class="form-group delivery-payment-group">
-                <label class="form-label">
-                    Payment
-                </label>
-
-                <input
-                    type="number"
-                    name="delivery_payment[]"
-                    class="form-input delivery-payment"
-                    min="0"
-                    step="0.01"
-                    placeholder="Optional"
-                >
+                <label class="form-label">Payment</label>
+                <input type="number" name="delivery_payment[]" class="form-input delivery-payment" min="0" step="0.01" placeholder="Optional">
             </div>
-
             <div class="form-group delivery-price-group">
-                <label class="form-label">
-                    Price/Gal
-                </label>
-
-                <input
-                    type="number"
-                    name="delivery_price_per_gallon[]"
-                    class="form-input delivery-price-input"
-                    min="0"
-                    step="0.01"
-                    placeholder="Required for new customer"
-                >
+                <label class="form-label">Price/Gal</label>
+                <input type="number" name="delivery_price_per_gallon[]" class="form-input delivery-price-input" min="0" step="0.01" placeholder="Required for new customer">
             </div>
-
             <div class="form-group">
-                <label class="form-label">
-                    Method
-                </label>
-
-                <select
-                    name="delivery_method[]"
-                    class="form-input delivery-method"
-                >
-                    <option
-                        value="Cash"
-                        selected
-                    >
-                        Cash
-                    </option>
-
-                    <option value="GCash">
-                        GCash
-                    </option>
-
-                    <option value="Bank Transfer">
-                        Bank Transfer
-                    </option>
-
-                    <option value="Other">
-                        Other
-                    </option>
+                <label class="form-label">Method</label>
+                <select name="delivery_method[]" class="form-input delivery-method">
+                    <option value="Cash" selected>Cash</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Other">Other</option>
                 </select>
             </div>
-
             <div class="form-group delivery-balance-group">
-                <label class="form-label">
-                    Balance
-                </label>
-
-                <div
-                    class="delivery-balance delivery-balance-neutral"
-                    aria-live="polite"
-                >
-                    —
-                </div>
+                <label class="form-label">Balance</label>
+                <div class="delivery-balance delivery-balance-neutral" aria-live="polite">—</div>
             </div>
-
-            <button
-                type="button"
-                class="delivery-payment-remove"
-                title="Remove payment"
-                aria-label="Remove payment"
-            >
-                ×
-            </button>
+            <button type="button" class="delivery-payment-remove" title="Remove payment" aria-label="Remove payment">×</button>
         `;
 
         deliveryPaymentRows.appendChild(row);
-
         updateDeliveryStatus(row);
 
         if (!restoringDraft) {
-        const customerInput =
-        row.querySelector('.delivery-customer');
-
-        if (customerInput) {
-        customerInput.focus();
+            const customerInput = row.querySelector('.delivery-customer');
+            if (customerInput) {
+                customerInput.focus();
             }
         }
     }
 
-
-    /* =========================================================
-       SHOP / WALK-IN COMPUTATION
-       ========================================================= */
-
     function calculateShop() {
-    const moneyValue =
-        moneyInput.value.trim();
+        const moneyValue = moneyInput.value.trim();
 
-    /*
-     * Total Money Received is required.
-     */
-    if (moneyValue === '') {
-        computedSales.textContent =
-            formatCurrency(0);
+        if (moneyValue === '') {
+            computedSales.textContent = formatCurrency(0);
+            otherSales.textContent = formatCurrency(0);
+            dashboardSales.textContent = formatCurrency(0);
+            dashboardCustomers.textContent = '0';
+            customersInput.value = '0';
+            return;
+        }
 
-        otherSales.textContent =
-            formatCurrency(0);
+        if (!/^\d+(\.\d{1,2})?$/.test(moneyValue)) {
+            computedSales.textContent = 'Invalid';
+            otherSales.textContent = 'Invalid';
+            return;
+        }
 
-        dashboardSales.textContent =
-            formatCurrency(0);
+        const totalMoneyReceived =
+            Math.max(0, parseFloat(moneyValue) || 0);
 
+        let totalExpenses = 0;
+        expenseRows
+            .querySelectorAll('.expense-amount')
+            .forEach(function (input) {
+                totalExpenses += parseFloat(input.value) || 0;
+            });
+
+        let totalDeliveryPayments = 0;
+        deliveryPaymentRows
+            .querySelectorAll('.delivery-payment')
+            .forEach(function (input) {
+                totalDeliveryPayments += parseFloat(input.value) || 0;
+            });
+
+        const totalBalance =
+            totalMoneyReceived
+            + totalExpenses
+            - totalDeliveryPayments;
+
+        if (totalBalance < -0.005) {
+            computedSales.textContent = 'Invalid';
+            otherSales.textContent = 'Invalid';
+            customersInput.value = '0';
+            dashboardSales.textContent = 'Invalid';
+            dashboardCustomers.textContent = '—';
+            return;
+        }
+
+        const balancedSales =
+            Math.abs(totalBalance) < 0.005
+                ? 0
+                : totalBalance;
+
+        const customers =
+            Math.floor(balancedSales / pricePerCustomer);
+
+        const finalSales =
+            customers * pricePerCustomer;
+
+        const additionalSales =
+            Math.max(0, balancedSales - finalSales);
+
+        customersInput.value = customers;
+        computedSales.textContent = formatCurrency(finalSales);
+        otherSales.textContent = formatCurrency(additionalSales);
+        dashboardSales.textContent = formatCurrency(balancedSales);
         dashboardCustomers.textContent =
-            '0';
-
-        customersInput.value =
-            '0';
-
-        return;
+            customers.toLocaleString('en-PH');
     }
-
-
-    /*
-     * Validate money.
-     */
-    if (
-        !/^\d+(\.\d{1,2})?$/.test(
-            moneyValue
-        )
-    ) {
-        computedSales.textContent =
-            'Invalid';
-
-        otherSales.textContent =
-            'Invalid';
-
-        return;
-    }
-
-
-    const totalMoneyReceived =
-        Math.max(
-            0,
-            parseFloat(moneyValue) || 0
-        );
-
-
-    /*
-     * =====================================================
-     * TOTAL EXPENSES
-     * =====================================================
-     */
-
-    let totalExpenses = 0;
-
-    expenseRows
-        .querySelectorAll('.expense-amount')
-        .forEach(function (input) {
-            const amount =
-                parseFloat(input.value) || 0;
-
-            totalExpenses += amount;
-        });
-
-
-    /*
-     * =====================================================
-     * TOTAL SHOP DELIVERY PAYMENTS
-     * =====================================================
-     */
-
-    let totalDeliveryPayments = 0;
-
-    deliveryPaymentRows
-        .querySelectorAll('.delivery-payment')
-        .forEach(function (input) {
-            const payment =
-                parseFloat(input.value) || 0;
-
-            totalDeliveryPayments += payment;
-        });
-
-
-    /*
-     * =====================================================
-     * TOTAL SHOP BALANCE
-     *
-     * Money Received
-     * + Expenses
-     * - Delivery Payments
-     *
-     * = Total Amount Accounted For
-     * =====================================================
-     */
-
-    const totalBalance =
-        totalMoneyReceived
-        + totalExpenses
-        - totalDeliveryPayments;
-
-
-    /*
-     * Negative balance is invalid.
-     */
-    if (totalBalance < -0.005) {
-        computedSales.textContent =
-            'Invalid';
-
-        otherSales.textContent =
-            'Invalid';
-
-        customersInput.value =
-            '0';
-
-        dashboardSales.textContent =
-            'Invalid';
-
-        dashboardCustomers.textContent =
-            '—';
-
-        return;
-    }
-
-
-    /*
-     * Remove tiny floating-point residue.
-     */
-    const balancedSales =
-        Math.abs(totalBalance) < 0.005
-            ? 0
-            : totalBalance;
-
-
-    /*
-     * =====================================================
-     * WALK-IN QUANTITY
-     *
-     * Always use the whole-number portion.
-     *
-     * Example:
-     *
-     * ₱5,510 / ₱30
-     * = 183.666...
-     *
-     * Quantity = 183
-     * =====================================================
-     */
-
-    const customers =
-        Math.floor(
-            balancedSales / pricePerCustomer
-        );
-
-
-    /*
-     * =====================================================
-     * WALK-IN SALES
-     * =====================================================
-     */
-
-    const finalSales =
-        customers * pricePerCustomer;
-
-
-    /*
-     * =====================================================
-     * OTHER / ADDITIONAL SALES
-     *
-     * Whatever remains below ₱30.
-     *
-     * Example:
-     *
-     * ₱5,510 - ₱5,490
-     * = ₱20
-     * =====================================================
-     */
-
-    const additionalSales =
-        Math.max(
-            0,
-            balancedSales - finalSales
-        );
-
-
-    /*
-     * Update quantity.
-     */
-    customersInput.value =
-        customers;
-
-
-    /*
-     * Update Walk-in Sales.
-     */
-    computedSales.textContent =
-        formatCurrency(finalSales);
-
-
-    /*
-     * Update Other / Additional Sales.
-     */
-    otherSales.textContent =
-        formatCurrency(additionalSales);
-
-
-    /*
-     * Dashboard Shop Sales should represent
-     * the complete accounted shop balance,
-     * including Other / Additional Sales.
-     */
-    dashboardSales.textContent =
-        formatCurrency(balancedSales);
-
-
-    /*
-     * Dashboard customer count remains
-     * the actual whole-number gallon quantity.
-     */
-    dashboardCustomers.textContent =
-        customers.toLocaleString('en-PH');
-}
-
-
-    /* =========================================================
-       COMPUTE BUTTON
-       ========================================================= */
 
     if (computeButton) {
-        computeButton.addEventListener(
-            'click',
-            calculateShop
-        );
+        computeButton.addEventListener('click', calculateShop);
     }
 
-
-    /* =========================================================
-       WALK-IN INPUTS
-       ========================================================= */
-
-
     moneyInput.addEventListener(
-    'input',
-    function () {
-        if (
-            moneyInput.value.trim()
-            !== ''
-        ) {
-            customersInput.value = '0';
+        'input',
+        function () {
+            if (moneyInput.value.trim() !== '') {
+                customersInput.value = '0';
+            }
         }
-      }
     );
-
-
-    /* =========================================================
-       ADD EXPENSE
-       ========================================================= */
 
     if (addExpenseButton) {
         addExpenseButton.addEventListener(
@@ -2764,100 +2050,61 @@ $otherSalesValue =
         );
     }
 
-
-    /* =========================================================
-       EXPENSE EVENTS
-       ========================================================= */
-
     expenseRows.addEventListener(
         'change',
         function (event) {
-            if (
-                event.target.classList.contains(
-                    'expense-category'
-                )
-            ) {
+            if (event.target.classList.contains('expense-category')) {
                 updateExpenseRow(
-                    event.target.closest(
-                        '.expense-row'
-                    )
+                    event.target.closest('.expense-row')
                 );
             }
         }
     );
 
-
     expenseRows.addEventListener(
         'click',
         function (event) {
             const button =
-                event.target.closest(
-                    '.expense-remove'
-                );
+                event.target.closest('.expense-remove');
 
             if (!button) {
                 return;
             }
 
             const rows =
-                expenseRows.querySelectorAll(
-                    '.expense-row'
-                );
+                expenseRows.querySelectorAll('.expense-row');
 
             const row =
-                button.closest(
-                    '.expense-row'
-                );
+                button.closest('.expense-row');
 
             if (!row) {
                 return;
             }
 
-
-            /*
-             * Keep one empty row.
-             */
             if (rows.length === 1) {
-
                 const category =
-                    row.querySelector(
-                        '.expense-category'
-                    );
-
+                    row.querySelector('.expense-category');
                 const amount =
-                    row.querySelector(
-                        '.expense-amount'
-                    );
-
+                    row.querySelector('.expense-amount');
                 const name =
-                    row.querySelector(
-                        '.expense-name'
-                    );
+                    row.querySelector('.expense-name');
 
                 if (category) {
                     category.value = '';
                 }
-
                 if (amount) {
                     amount.value = '';
                 }
-
                 if (name) {
                     name.value = '';
                 }
 
                 updateExpenseRow(row);
-
             } else {
                 row.remove();
             }
         }
     );
-
-
-    /* =========================================================
-       ADD DELIVERY PAYMENT
-       ========================================================= */
 
     if (addDeliveryPaymentButton) {
         addDeliveryPaymentButton.addEventListener(
@@ -2866,40 +2113,20 @@ $otherSalesValue =
         );
     }
 
-
-    /* =========================================================
-       DELIVERY INPUT EVENTS
-       ========================================================= */
-
     deliveryPaymentRows.addEventListener(
         'input',
         function (event) {
-
             const row =
-                event.target.closest(
-                    '.delivery-payment-row'
-                );
+                event.target.closest('.delivery-payment-row');
 
             if (!row) {
                 return;
             }
 
-
-            /*
-             * Customer changed.
-             */
-            if (
-                event.target.matches(
-                    '.delivery-customer'
-                )
-            ) {
+            if (event.target.matches('.delivery-customer')) {
                 setPriceFromCustomer(row);
             }
 
-
-            /*
-             * Recalculate balance.
-             */
             if (
                 event.target.matches(
                     '.delivery-customer,'
@@ -2914,43 +2141,27 @@ $otherSalesValue =
         }
     );
 
-
     deliveryPaymentRows.addEventListener(
         'change',
         function (event) {
-
             const row =
-                event.target.closest(
-                    '.delivery-payment-row'
-                );
+                event.target.closest('.delivery-payment-row');
 
             if (!row) {
                 return;
             }
 
-            if (
-                event.target.classList.contains(
-                    'delivery-customer'
-                )
-            ) {
+            if (event.target.classList.contains('delivery-customer')) {
                 updateDeliveryStatus(row);
             }
         }
     );
 
-
-    /* =========================================================
-       DELIVERY REMOVE BUTTON
-       ========================================================= */
-
     deliveryPaymentRows.addEventListener(
         'click',
         function (event) {
-
             const button =
-                event.target.closest(
-                    '.delivery-payment-remove'
-                );
+                event.target.closest('.delivery-payment-remove');
 
             if (!button) {
                 return;
@@ -2962,88 +2173,53 @@ $otherSalesValue =
                 );
 
             const row =
-                button.closest(
-                    '.delivery-payment-row'
-                );
+                button.closest('.delivery-payment-row');
 
             if (!row) {
                 return;
             }
 
-
-            /*
-             * Keep one empty row.
-             */
             if (rows.length === 1) {
-
                 const customer =
-                    row.querySelector(
-                        '.delivery-customer'
-                    );
-
+                    row.querySelector('.delivery-customer');
                 const slim =
-                    row.querySelector(
-                        '.delivery-slim'
-                    );
-
+                    row.querySelector('.delivery-slim');
                 const round =
-                    row.querySelector(
-                        '.delivery-round'
-                    );
-
+                    row.querySelector('.delivery-round');
                 const payment =
-                    row.querySelector(
-                        '.delivery-payment'
-                    );
-
+                    row.querySelector('.delivery-payment');
                 const price =
-                    row.querySelector(
-                        '.delivery-price-input'
-                    );
-
+                    row.querySelector('.delivery-price-input');
                 const method =
-                    row.querySelector(
-                        '.delivery-method'
-                    );
+                    row.querySelector('.delivery-method');
 
                 if (customer) {
                     customer.value = '';
                 }
-
                 if (slim) {
                     slim.value = '';
                 }
-
                 if (round) {
                     round.value = '';
                 }
-
                 if (payment) {
                     payment.value = '';
                 }
-
                 if (price) {
                     price.value = '';
                     price.readOnly = false;
                     price.dataset.saved = '0';
                 }
-
                 if (method) {
                     method.value = 'Cash';
                 }
 
                 updateDeliveryStatus(row);
-
             } else {
                 row.remove();
             }
         }
     );
-
-
-    /* =========================================================
-       INITIALIZE EXISTING EXPENSE ROWS
-       ========================================================= */
 
     expenseRows
         .querySelectorAll('.expense-row')
@@ -3051,20 +2227,13 @@ $otherSalesValue =
             updateExpenseRow(row);
         });
 
-
-    /* =========================================================
-       INITIALIZE EXISTING DELIVERY ROWS
-       ========================================================= */
-
     deliveryPaymentRows
-        .querySelectorAll(
-            '.delivery-payment-row'
-        )
+        .querySelectorAll('.delivery-payment-row')
         .forEach(function (row) {
             updateDeliveryStatus(row);
         });
 
-            /* =========================================================
+    /* =========================================================
        FORM DRAFT STORAGE
        ========================================================= */
 
@@ -3073,138 +2242,59 @@ $otherSalesValue =
 
     let restoringDraft = false;
 
-
     function saveFormDraft() {
         if (restoringDraft) {
             return;
         }
 
-        const formData =
-            new FormData(form);
-
         const draft = {
-            walk_in_money:
-                moneyInput.value,
-
+            walk_in_money: moneyInput.value,
             expenses: [],
-
             deliveries: []
         };
 
-
-        /*
-         * Save expense rows.
-         */
         expenseRows
             .querySelectorAll('.expense-row')
             .forEach(function (row) {
-
                 const category =
-                    row.querySelector(
-                        '.expense-category'
-                    );
-
+                    row.querySelector('.expense-category');
                 const amount =
-                    row.querySelector(
-                        '.expense-amount'
-                    );
-
+                    row.querySelector('.expense-amount');
                 const name =
-                    row.querySelector(
-                        '.expense-name'
-                    );
+                    row.querySelector('.expense-name');
 
                 draft.expenses.push({
-                    category:
-                        category
-                            ? category.value
-                            : '',
-
-                    amount:
-                        amount
-                            ? amount.value
-                            : '',
-
-                    name:
-                        name
-                            ? name.value
-                            : ''
+                    category: category ? category.value : '',
+                    amount: amount ? amount.value : '',
+                    name: name ? name.value : ''
                 });
             });
 
-
-        /*
-         * Save delivery rows.
-         */
         deliveryPaymentRows
-            .querySelectorAll(
-                '.delivery-payment-row'
-            )
+            .querySelectorAll('.delivery-payment-row')
             .forEach(function (row) {
-
                 const customer =
-                    row.querySelector(
-                        '.delivery-customer'
-                    );
-
+                    row.querySelector('.delivery-customer');
                 const slim =
-                    row.querySelector(
-                        '.delivery-slim'
-                    );
-
+                    row.querySelector('.delivery-slim');
                 const round =
-                    row.querySelector(
-                        '.delivery-round'
-                    );
-
+                    row.querySelector('.delivery-round');
                 const payment =
-                    row.querySelector(
-                        '.delivery-payment'
-                    );
-
+                    row.querySelector('.delivery-payment');
                 const price =
-                    row.querySelector(
-                        '.delivery-price-input'
-                    );
-
+                    row.querySelector('.delivery-price-input');
                 const method =
-                    row.querySelector(
-                        '.delivery-method'
-                    );
+                    row.querySelector('.delivery-method');
 
                 draft.deliveries.push({
-                    customer:
-                        customer
-                            ? customer.value
-                            : '',
-
-                    slim:
-                        slim
-                            ? slim.value
-                            : '',
-
-                    round:
-                        round
-                            ? round.value
-                            : '',
-
-                    payment:
-                        payment
-                            ? payment.value
-                            : '',
-
-                    price:
-                        price
-                            ? price.value
-                            : '',
-
-                    method:
-                        method
-                            ? method.value
-                            : 'Cash'
+                    customer: customer ? customer.value : '',
+                    slim: slim ? slim.value : '',
+                    round: round ? round.value : '',
+                    payment: payment ? payment.value : '',
+                    price: price ? price.value : '',
+                    method: method ? method.value : 'Cash'
                 });
             });
-
 
         localStorage.setItem(
             draftStorageKey,
@@ -3212,264 +2302,137 @@ $otherSalesValue =
         );
     }
 
-
     function clearFormDraft() {
-        localStorage.removeItem(
-            draftStorageKey
-        );
+        localStorage.removeItem(draftStorageKey);
     }
-
 
     function restoreFormDraft() {
         const saved =
-            localStorage.getItem(
-                draftStorageKey
-            );
+            localStorage.getItem(draftStorageKey);
 
         if (!saved) {
             return;
         }
 
         try {
-            const draft =
-                JSON.parse(saved);
-
+            const draft = JSON.parse(saved);
             restoringDraft = true;
 
-
-            /*
-             * Restore money.
-             */
-            if (
-                typeof draft.walk_in_money
-                === 'string'
-            ) {
-                moneyInput.value =
-                    draft.walk_in_money;
+            if (typeof draft.walk_in_money === 'string') {
+                moneyInput.value = draft.walk_in_money;
             }
 
-
-            /*
-             * Restore expenses.
-             */
-            if (
-                Array.isArray(
-                    draft.expenses
-                )
-            ) {
+            if (Array.isArray(draft.expenses)) {
                 expenseRows.innerHTML = '';
 
-                draft.expenses.forEach(
-                    function (expense) {
+                draft.expenses.forEach(function (expense) {
+                    createExpenseRow();
 
-                        createExpenseRow();
+                    const rows =
+                        expenseRows.querySelectorAll('.expense-row');
+                    const row = rows[rows.length - 1];
 
-                        const rows =
-                            expenseRows.querySelectorAll(
-                                '.expense-row'
-                            );
+                    const category =
+                        row.querySelector('.expense-category');
+                    const amount =
+                        row.querySelector('.expense-amount');
+                    const name =
+                        row.querySelector('.expense-name');
 
-                        const row =
-                            rows[rows.length - 1];
-
-                        const category =
-                            row.querySelector(
-                                '.expense-category'
-                            );
-
-                        const amount =
-                            row.querySelector(
-                                '.expense-amount'
-                            );
-
-                        const name =
-                            row.querySelector(
-                                '.expense-name'
-                            );
-
-                        if (category) {
-                            category.value =
-                                expense.category || '';
-                        }
-
-                        if (amount) {
-                            amount.value =
-                                expense.amount || '';
-                        }
-
-                        if (name) {
-                            name.value =
-                                expense.name || '';
-                        }
-
-                        updateExpenseRow(row);
+                    if (category) {
+                        category.value = expense.category || '';
                     }
-                );
+                    if (amount) {
+                        amount.value = expense.amount || '';
+                    }
+                    if (name) {
+                        name.value = expense.name || '';
+                    }
 
-                /*
-                 * Always keep one row available.
-                 */
-                if (
-                    draft.expenses.length === 0
-                ) {
+                    updateExpenseRow(row);
+                });
+
+                if (draft.expenses.length === 0) {
                     createExpenseRow();
                 }
             }
 
-
-            /*
-             * Restore deliveries.
-             */
-            if (
-                Array.isArray(
-                    draft.deliveries
-                )
-            ) {
+            if (Array.isArray(draft.deliveries)) {
                 deliveryPaymentRows.innerHTML = '';
 
-                draft.deliveries.forEach(
-                    function (delivery) {
+                draft.deliveries.forEach(function (delivery) {
+                    createDeliveryPaymentRow();
 
-                        createDeliveryPaymentRow();
+                    const rows =
+                        deliveryPaymentRows.querySelectorAll(
+                            '.delivery-payment-row'
+                        );
+                    const row = rows[rows.length - 1];
 
-                        const rows =
-                            deliveryPaymentRows.querySelectorAll(
-                                '.delivery-payment-row'
-                            );
+                    const customer =
+                        row.querySelector('.delivery-customer');
+                    const slim =
+                        row.querySelector('.delivery-slim');
+                    const round =
+                        row.querySelector('.delivery-round');
+                    const payment =
+                        row.querySelector('.delivery-payment');
+                    const price =
+                        row.querySelector('.delivery-price-input');
+                    const method =
+                        row.querySelector('.delivery-method');
 
-                        const row =
-                            rows[rows.length - 1];
-
-                        const customer =
-                            row.querySelector(
-                                '.delivery-customer'
-                            );
-
-                        const slim =
-                            row.querySelector(
-                                '.delivery-slim'
-                            );
-
-                        const round =
-                            row.querySelector(
-                                '.delivery-round'
-                            );
-
-                        const payment =
-                            row.querySelector(
-                                '.delivery-payment'
-                            );
-
-                        const price =
-                            row.querySelector(
-                                '.delivery-price-input'
-                            );
-
-                        const method =
-                            row.querySelector(
-                                '.delivery-method'
-                            );
-
-                        if (customer) {
-                            customer.value =
-                                delivery.customer || '';
-                        }
-
-                        if (slim) {
-                            slim.value =
-                                delivery.slim || '';
-                        }
-
-                        if (round) {
-                            round.value =
-                                delivery.round || '';
-                        }
-
-                        if (payment) {
-                            payment.value =
-                                delivery.payment || '';
-                        }
-
-                        if (price) {
-                            price.value =
-                                delivery.price || '';
-                        }
-
-                        if (method) {
-                            method.value =
-                                delivery.method || 'Cash';
-                        }
-
-                        updateDeliveryStatus(row);
+                    if (customer) {
+                        customer.value = delivery.customer || '';
                     }
-                );
+                    if (slim) {
+                        slim.value = delivery.slim || '';
+                    }
+                    if (round) {
+                        round.value = delivery.round || '';
+                    }
+                    if (payment) {
+                        payment.value = delivery.payment || '';
+                    }
+                    if (price) {
+                        price.value = delivery.price || '';
+                    }
+                    if (method) {
+                        method.value = delivery.method || 'Cash';
+                    }
 
-                /*
-                 * Always keep one row available.
-                 */
-                if (
-                    draft.deliveries.length === 0
-                ) {
+                    updateDeliveryStatus(row);
+                });
+
+                if (draft.deliveries.length === 0) {
                     createDeliveryPaymentRow();
                 }
             }
 
             restoringDraft = false;
-
-
-            /*
-             * Recalculate the shop balance
-             * after restoring everything.
-             */
             calculateShop();
-
         } catch (error) {
             console.error(
                 'Unable to restore Daily Closing draft:',
                 error
             );
 
-            localStorage.removeItem(
-                draftStorageKey
-            );
-
+            localStorage.removeItem(draftStorageKey);
             restoringDraft = false;
         }
     }
 
+    form.addEventListener('input', saveFormDraft);
+    form.addEventListener('change', saveFormDraft);
 
-    /*
-     * Save whenever the user changes
-     * anything in the form.
-     */
-    form.addEventListener(
-        'input',
-        saveFormDraft
-    );
-
-    form.addEventListener(
-        'change',
-        saveFormDraft
-    );
-
-
-    /*
-     * If the PHP save was successful,
-     * the database now contains the data.
-     *
-     * Clear the temporary browser draft.
-     */
     const saveWasSuccessful =
-        <?= $messageType === 'success'
-            ? 'true'
-            : 'false' ?>;
+        <?= $messageType === 'success' ? 'true' : 'false' ?>;
 
     if (saveWasSuccessful) {
         clearFormDraft();
     } else {
         restoreFormDraft();
     }
-
 })();
 </script>
 </body>
