@@ -474,3 +474,102 @@ a {
     }
 
 }
+
+/* =========================================================
+   DAILY CLOSING - DELIVERY ROW COMPACT LAYOUT
+   ========================================================= */
+
+#deliveryRows .form-input {
+    padding: 8px 9px;
+    min-width: 0;
+}
+
+#deliveryRows td:nth-child(1) {
+    width: 38px;
+    padding-left: 8px;
+    padding-right: 4px;
+}
+
+#deliveryRows th:nth-child(2),
+#deliveryRows td:nth-child(2) {
+    width: 30%;
+    min-width: 280px;
+}
+
+#deliveryRows th:nth-child(3),
+#deliveryRows td:nth-child(3),
+#deliveryRows th:nth-child(4),
+#deliveryRows td:nth-child(4) {
+    width: 62px;
+    min-width: 62px;
+    max-width: 62px;
+}
+
+#deliveryRows th:nth-child(5),
+#deliveryRows td:nth-child(5) {
+    width: 95px;
+    min-width: 95px;
+    max-width: 95px;
+}
+
+#deliveryRows th:nth-child(6),
+#deliveryRows td:nth-child(6) {
+    width: 105px;
+    min-width: 105px;
+    max-width: 105px;
+}
+
+#deliveryRows th:nth-child(7),
+#deliveryRows td:nth-child(7) {
+    width: 105px;
+    min-width: 105px;
+    max-width: 105px;
+}
+
+#deliveryRows th:nth-child(8),
+#deliveryRows td:nth-child(8) {
+    width: 125px;
+    min-width: 125px;
+    max-width: 125px;
+}
+
+#deliveryRows th:nth-child(9),
+#deliveryRows td:nth-child(9) {
+    width: 95px;
+    min-width: 95px;
+    max-width: 95px;
+}
+
+#deliveryRows th:nth-child(10),
+#deliveryRows td:nth-child(10) {
+    display: none;
+}
+
+#deliveryRows .delivery-customer {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 12px;
+}
+
+#deliveryRows .delivery-qty {
+    text-align: center;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+#deliveryRows .delivery-price {
+    text-align: right;
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+#deliveryRows .calculated-amount {
+    font-size: 14px;
+}
+
+@media (max-width: 900px) {
+    #deliveryRows th:nth-child(2),
+    #deliveryRows td:nth-child(2) {
+        min-width: 240px;
+    }
+}
