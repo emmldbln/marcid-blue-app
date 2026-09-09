@@ -593,6 +593,12 @@ a {
     border-color: var(--warning);
 }
 
+/* Driver Deliveries: Notes are removed from the UI. */
+.data-table:has(#deliveryRows) thead th:last-child,
+.data-table:has(#deliveryRows) tbody td:last-child {
+    display: none;
+}
+
 @media (max-width: 900px) {
     #deliveryRows th:nth-child(2),
     #deliveryRows td:nth-child(2) {
