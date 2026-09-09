@@ -454,11 +454,6 @@ if (
         $customerBalances = [];
 
         $stmt = $pdo->query("
-<<<<<<< HEAD
-            SELECT customer_id, customer_name
-            FROM customers
-            ORDER BY customer_name ASC
-=======
             SELECT
                 c.customer_id,
                 c.customer_name,
@@ -474,7 +469,6 @@ if (
                 ), 0) AS total_paid
             FROM customers c
             ORDER BY c.customer_name ASC
->>>>>>> 72f43fefadf0ef511954f01d4baddf4a952b8648
         ");
         $customerAccounts = $stmt->fetchAll();
 
@@ -615,6 +609,12 @@ if (
             font-size: 18px;
             cursor: pointer;
             transition: 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            align-self: center;
+            justify-self: center;
+            padding: 0;
         }
 
         .expense-remove:hover,
@@ -767,6 +767,7 @@ if (
 
             .delivery-payment-remove {
                 justify-self: end;
+                align-self: center;
             }
 
             .delivery-status-legend {
@@ -800,6 +801,7 @@ if (
             .delivery-payment-remove {
                 grid-column: auto;
                 justify-self: start;
+                align-self: center;
             }
 
             .expenses-panel-header,
