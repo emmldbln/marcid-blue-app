@@ -643,394 +643,556 @@ if (
         href="../assets/css/app.css"
     >
     <style>
-        .shop-walkin-layout {
-            display: grid;
+    /* =========================================================
+       SHOP / WALK-IN
+       ========================================================= */
+
+    .shop-walkin-layout {
+        display: grid;
+        grid-template-columns:
+            minmax(110px, 0.65fr)
+            minmax(190px, 1fr)
+            minmax(180px, 1fr);
+        gap: 18px;
+        align-items: end;
+    }
+
+    .shop-customers-field {
+        max-width: 150px;
+    }
+
+    .shop-money-field {
+        max-width: 230px;
+    }
+
+    .shop-computed-sales {
+        padding: 8px 0 4px 8px;
+    }
+
+
+    /* =========================================================
+       EXPENSES / DELIVERY PANELS
+       ========================================================= */
+
+    .expenses-panel,
+    .delivery-payments-panel {
+        margin-top: 28px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+    }
+
+    .expenses-panel-header,
+    .delivery-payments-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 16px;
+    }
+
+    .expenses-title,
+    .delivery-payments-title {
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+
+    .expenses-subtitle,
+    .delivery-payments-subtitle {
+        margin-top: 4px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .expense-rows,
+    .delivery-payment-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+
+    /* =========================================================
+       EXPENSE ROW
+       ========================================================= */
+
+    .expense-row {
+        display: grid;
+        grid-template-columns:
+            minmax(180px, 1fr)
+            minmax(160px, 0.8fr)
+            minmax(220px, 1.2fr)
+            38px;
+        gap: 14px;
+        align-items: end;
+
+        padding: 16px;
+
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+    }
+
+
+    /* =========================================================
+       DELIVERY PAYMENT ROW
+       ========================================================= */
+
+    .delivery-payment-row {
+        display: grid;
+        grid-template-columns:
+            minmax(200px, 1.6fr)
+            minmax(70px, 0.55fr)
+            minmax(70px, 0.55fr)
+            minmax(120px, 1fr)
+            minmax(90px, 0.7fr)
+            minmax(120px, 0.9fr)
+            minmax(145px, 1fr)
+            38px;
+        gap: 12px;
+        align-items: end;
+
+        padding: 16px;
+
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+    }
+
+
+    /* =========================================================
+       FORM GROUPS
+       ========================================================= */
+
+    .expense-row .form-group,
+    .delivery-payment-row .form-group {
+        min-width: 0;
+        margin: 0;
+    }
+
+
+    /* =========================================================
+       UNIFIED FORM CONTROL HEIGHT
+       ========================================================= */
+
+    .expense-row .form-input,
+    .delivery-payment-row .form-input,
+    .delivery-balance {
+        width: 100%;
+        height: 38px;
+        min-height: 38px;
+        box-sizing: border-box;
+    }
+
+
+    /* =========================================================
+       DROPDOWNS
+       
+       Explicitly reset vertical padding so the native select
+       text is not pushed below the visible area.
+       ========================================================= */
+
+    .expense-row select.form-input,
+    .delivery-payment-row select.form-input {
+        width: 100%;
+        height: 38px;
+        min-height: 38px;
+
+        /*
+         * Important:
+         * Remove vertical padding from the global .form-input
+         * so the option text stays completely visible.
+         */
+        padding-top: 0;
+        padding-bottom: 0;
+
+        /*
+         * Keep horizontal spacing.
+         * Extra right padding gives the native dropdown arrow
+         * enough room.
+         */
+        padding-left: 12px;
+        padding-right: 32px;
+
+        line-height: normal;
+        box-sizing: border-box;
+
+        vertical-align: middle;
+    }
+
+    .expense-category,
+    .delivery-method {
+        height: 38px;
+        min-height: 38px;
+        line-height: normal;
+    }
+
+
+    /* =========================================================
+       REMOVE BUTTONS
+       ========================================================= */
+
+    .expense-remove,
+    .delivery-payment-remove {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+
+        margin: 0;
+        padding: 0;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        align-self: end;
+        justify-self: center;
+
+        box-sizing: border-box;
+
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+
+        background: var(--surface);
+        color: var(--danger);
+
+        font-size: 19px;
+        font-weight: 600;
+        line-height: 1;
+
+        cursor: pointer;
+
+        transition:
+            background 0.15s ease,
+            border-color 0.15s ease;
+    }
+
+    .expense-remove:hover,
+    .delivery-payment-remove:hover {
+        background: var(--danger-light);
+        border-color: var(--danger);
+    }
+
+
+    /* =========================================================
+       BUTTONS
+       ========================================================= */
+
+    .add-expense-button,
+    .add-delivery-payment-button {
+        margin-top: 0;
+    }
+
+    .shop-compute-message {
+        margin-top: 16px;
+    }
+
+    .shop-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 22px;
+    }
+
+
+    /* =========================================================
+       DELIVERY STATUS LEGEND
+       ========================================================= */
+
+    .delivery-status-legend {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+
+        margin-top: 12px;
+
+        color: var(--text-muted);
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .delivery-status-legend .legend-label {
+        margin-right: 2px;
+        color: var(--text);
+        font-weight: 700;
+    }
+
+    .delivery-status-item {
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .delivery-status-paid {
+        color: var(--success);
+    }
+
+    .delivery-status-due {
+        color: var(--warning);
+    }
+
+    .delivery-status-unpaid {
+        color: var(--danger);
+    }
+
+    .delivery-status-overpaid {
+        color: var(--primary);
+    }
+
+
+    /* =========================================================
+       DELIVERY BALANCE
+       ========================================================= */
+
+    .delivery-balance-group {
+        min-width: 0;
+    }
+
+    .delivery-balance {
+        width: 100%;
+        height: 38px;
+        min-height: 38px;
+
+        padding: 0 10px;
+
+        display: flex;
+        align-items: center;
+
+        box-sizing: border-box;
+
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+
+        background: var(--surface);
+
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+
+        white-space: nowrap;
+    }
+
+    .delivery-balance-neutral {
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    .delivery-balance-paid {
+        color: var(--success);
+        background: var(--success-light);
+        border-color: rgba(46, 155, 91, 0.18);
+    }
+
+    .delivery-balance-due {
+        color: var(--warning);
+        background: var(--warning-light);
+        border-color: rgba(229, 154, 36, 0.18);
+    }
+
+    .delivery-balance-unpaid {
+        color: var(--danger);
+        background: var(--danger-light);
+        border-color: rgba(217, 83, 79, 0.18);
+    }
+
+    .delivery-balance-overpaid {
+        color: var(--primary-dark);
+        background: var(--primary-light);
+        border-color: rgba(22, 135, 201, 0.18);
+    }
+
+
+    /* =========================================================
+       PRICE NOTE
+       ========================================================= */
+
+    .delivery-price-note {
+        display: block;
+        margin-top: 4px;
+
+        color: var(--text-muted);
+        font-size: 11px;
+        line-height: 1.3;
+    }
+
+
+    /* =========================================================
+       MEDIUM SCREENS
+       ========================================================= */
+
+    @media (max-width: 1200px) {
+        .delivery-payment-row {
             grid-template-columns:
-                minmax(110px, 0.65fr)
-                minmax(190px, 1fr)
-                minmax(180px, 1fr);
-            gap: 18px;
+                minmax(180px, 1.4fr)
+                minmax(65px, 0.55fr)
+                minmax(65px, 0.55fr)
+                minmax(115px, 1fr)
+                minmax(85px, 0.7fr)
+                minmax(115px, 0.9fr)
+                minmax(135px, 1fr)
+                38px;
+
+            gap: 10px;
             align-items: end;
         }
+    }
 
-        .shop-customers-field {
-            max-width: 150px;
+
+    /* =========================================================
+       TABLET
+       ========================================================= */
+
+    @media (max-width: 900px) {
+        .shop-walkin-layout {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
         }
 
+        .shop-customers-field,
         .shop-money-field {
-            max-width: 230px;
+            max-width: none;
         }
 
         .shop-computed-sales {
-            padding: 8px 0 4px 8px;
+            padding-left: 0;
         }
 
-        .expenses-panel,
-        .delivery-payments-panel {
-            margin-top: 28px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border);
-        }
 
-        .expenses-panel-header,
-        .delivery-payments-panel-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 16px;
-        }
-
-        .expenses-title,
-        .delivery-payments-title {
-            color: var(--text);
-            font-size: 16px;
-            font-weight: 700;
-            line-height: 1.4;
-        }
-
-        .expenses-subtitle,
-        .delivery-payments-subtitle {
-            margin-top: 4px;
-            color: var(--text-muted);
-            font-size: 13px;
-            line-height: 1.5;
-        }
-
-        .expense-rows,
-        .delivery-payment-rows {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+        /* Expense rows */
 
         .expense-row {
-            display: grid;
             grid-template-columns:
-                minmax(180px, 1fr)
-                minmax(160px, 0.8fr)
-                minmax(220px, 1.2fr)
-                40px;
-            gap: 14px;
-            align-items: end;
-            padding: 16px;
-            background: var(--background);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
+                1fr
+                1fr;
         }
+
+        .expense-row .expense-name-group {
+            grid-column: 1 / -1;
+        }
+
+        .expense-remove {
+            grid-column: 2;
+            justify-self: end;
+            align-self: end;
+        }
+
+
+        /* Delivery rows */
 
         .delivery-payment-row {
-            display: grid;
             grid-template-columns:
-                minmax(200px, 1.6fr)
-                minmax(70px, 0.55fr)
-                minmax(70px, 0.55fr)
-                minmax(120px, 1fr)
-                minmax(90px, 0.7fr)
-                minmax(120px, 0.9fr)
-                minmax(145px, 1fr)
-                40px;
+                1fr
+                1fr
+                1fr;
+
             gap: 12px;
-            align-items: start;
-            padding: 16px;
-            background: var(--background);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
         }
 
-        .expense-row .form-group,
-        .delivery-payment-row .form-group {
-            min-width: 0;
+        .delivery-payment-row .delivery-customer-group {
+            grid-column: 1 / -1;
         }
 
-        .expense-row .form-input:disabled {
-            background: var(--surface);
-            color: var(--text-muted);
-            opacity: 0.72;
-            cursor: not-allowed;
+        .delivery-payment-row .delivery-payment-group,
+        .delivery-payment-row .delivery-price-group {
+            grid-column: span 1;
         }
 
-        .delivery-price-group {
-            min-width: 0;
+        .delivery-payment-row .delivery-balance-group {
+            grid-column: span 2;
         }
 
-        .delivery-price-input {
-            width: 100%;
-        }
-
-        .delivery-price-input:read-only {
-            background: var(--surface);
-            color: var(--text-muted);
-            cursor: default;
-        }
-
-        .expense-remove,
         .delivery-payment-remove {
-            width: 38px;
-            height: 38px;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            align-self: start;
-            justify-self: center;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--surface);
-            color: var(--danger);
-            font-size: 19px;
-            font-weight: 600;
-            line-height: 1;
-            cursor: pointer;
-            transition:
-                background 0.15s ease,
-                border-color 0.15s ease;
-        }
-
-        .expense-remove:hover,
-        .delivery-payment-remove:hover {
-            background: var(--danger-light);
-            border-color: var(--danger);
-        }
-
-        .add-expense-button,
-        .add-delivery-payment-button {
-            margin-top: 0;
-        }
-
-        .shop-compute-message {
-            margin-top: 16px;
-        }
-
-        .shop-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 22px;
+            grid-column: 3;
+            justify-self: end;
+            align-self: end;
         }
 
         .delivery-status-legend {
-            display: flex;
-            align-items: center;
             justify-content: flex-start;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 12px;
-            color: var(--text-muted);
-            font-size: 14px;
-            line-height: 1.5;
+        }
+    }
+
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
+    @media (max-width: 650px) {
+        .shop-walkin-layout {
+            grid-template-columns: 1fr;
         }
 
-        .delivery-status-legend .legend-label {
-            margin-right: 2px;
-            color: var(--text);
-            font-weight: 700;
+        .expense-row,
+        .delivery-payment-row {
+            grid-template-columns: 1fr;
+        }
+
+
+        /* Expense */
+
+        .expense-row .expense-name-group {
+            grid-column: auto;
+        }
+
+
+        /* Delivery */
+
+        .delivery-payment-row .delivery-customer-group,
+        .delivery-payment-row .delivery-payment-group,
+        .delivery-payment-row .delivery-price-group,
+        .delivery-payment-row .delivery-balance-group {
+            grid-column: auto;
+        }
+
+
+        /* Remove buttons */
+
+        .expense-remove,
+        .delivery-payment-remove {
+            grid-column: auto;
+            justify-self: start;
+            align-self: start;
+            margin: 0;
+        }
+
+
+        /* Headers */
+
+        .expenses-panel-header,
+        .delivery-payments-panel-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+
+        /* Actions */
+
+        .shop-actions {
+            justify-content: stretch;
+        }
+
+        .shop-actions .btn {
+            flex: 1;
+        }
+
+
+        /* Status legend */
+
+        .delivery-status-legend {
+            gap: 8px 12px;
+            font-size: 13px;
         }
 
         .delivery-status-item {
-            white-space: nowrap;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .delivery-status-paid {
-            color: var(--success);
-        }
-
-        .delivery-status-due {
-            color: var(--warning);
-        }
-
-        .delivery-status-unpaid {
-            color: var(--danger);
-        }
-
-        .delivery-status-overpaid {
-            color: var(--primary);
-        }
-
-        .delivery-balance-group {
-            min-width: 0;
-        }
-
-        .delivery-balance {
-            min-height: 38px;
-            padding: 0 10px;
-            display: flex;
-            align-items: center;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--surface);
             font-size: 13px;
-            font-weight: 700;
-            line-height: 1.2;
-            white-space: nowrap;
         }
-
-        .delivery-balance-neutral {
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        .delivery-balance-paid {
-            color: var(--success);
-            background: var(--success-light);
-            border-color: rgba(46, 155, 91, 0.18);
-        }
-
-        .delivery-balance-due {
-            color: var(--warning);
-            background: var(--warning-light);
-            border-color: rgba(229, 154, 36, 0.18);
-        }
-
-        .delivery-balance-unpaid {
-            color: var(--danger);
-            background: var(--danger-light);
-            border-color: rgba(217, 83, 79, 0.18);
-        }
-
-        .delivery-balance-overpaid {
-            color: var(--primary-dark);
-            background: var(--primary-light);
-            border-color: rgba(22, 135, 201, 0.18);
-        }
-
-        .delivery-price-note {
-            display: block;
-            margin-top: 4px;
-            color: var(--text-muted);
-            font-size: 11px;
-            line-height: 1.3;
-        }
-
-        @media (max-width: 1200px) {
-            .delivery-payment-row {
-                grid-template-columns:
-                    minmax(180px, 1.4fr)
-                    minmax(65px, 0.55fr)
-                    minmax(65px, 0.55fr)
-                    minmax(115px, 1fr)
-                    minmax(85px, 0.7fr)
-                    minmax(115px, 0.9fr)
-                    minmax(135px, 1fr)
-                    38px;
-                gap: 10px;
-            }
-        }
-
-        @media (max-width: 900px) {
-            .shop-walkin-layout {
-                grid-template-columns:
-                    repeat(2, minmax(0, 1fr));
-            }
-
-            .shop-customers-field,
-            .shop-money-field {
-                max-width: none;
-            }
-
-            .shop-computed-sales {
-                padding-left: 0;
-            }
-
-            .expense-row {
-                grid-template-columns:
-                    1fr
-                    1fr;
-            }
-
-            .expense-row .expense-name-group {
-                grid-column: 1 / -1;
-            }
-
-            .expense-remove {
-                grid-column: 2;
-                justify-self: end;
-            }
-
-            .delivery-payment-row {
-                grid-template-columns:
-                    1fr
-                    1fr
-                    1fr;
-                gap: 12px;
-            }
-
-            .delivery-payment-row .delivery-customer-group {
-                grid-column: 1 / -1;
-            }
-
-            .delivery-payment-row .delivery-payment-group,
-            .delivery-payment-row .delivery-price-group {
-                grid-column: span 1;
-            }
-
-            .delivery-payment-row .delivery-balance-group {
-                grid-column: span 2;
-            }
-
-            .delivery-payment-remove {
-                grid-column: 3;
-                justify-self: end;
-            }
-
-            .delivery-status-legend {
-                justify-content: flex-start;
-            }
-        }
-
-        @media (max-width: 650px) {
-            .shop-walkin-layout {
-                grid-template-columns: 1fr;
-            }
-
-            .expense-row,
-            .delivery-payment-row {
-                grid-template-columns: 1fr;
-            }
-
-            .expense-row .expense-name-group,
-            .delivery-payment-row .delivery-customer-group,
-            .delivery-payment-row .delivery-payment-group,
-            .delivery-payment-row .delivery-price-group,
-            .delivery-payment-row .delivery-balance-group {
-                grid-column: auto;
-            }
-
-            .expense-remove,
-            .delivery-payment-remove {
-                grid-column: auto;
-                justify-self: start;
-                align-self: start;
-                margin: 0;
-            }
-
-            .expenses-panel-header,
-            .delivery-payments-panel-header {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .shop-actions {
-                justify-content: stretch;
-            }
-
-            .shop-actions .btn {
-                flex: 1;
-            }
-
-            .delivery-status-legend {
-                gap: 8px 12px;
-                font-size: 13px;
-            }
-
-            .delivery-status-item {
-                font-size: 13px;
-            }
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
     <div class="app">
@@ -1258,7 +1420,7 @@ if (
                                             for="walk_in_money"
                                             class="form-label"
                                         >
-                                            Money Received
+                                            Total Money Received (Shop only)
                                         </label>
                                         <input
                                             type="number"
@@ -1491,9 +1653,6 @@ if (
                                                     step="0.01"
                                                     placeholder="Required for new customer"
                                                 >
-                                                <span class="delivery-price-note">
-                                                    New customer only
-                                                </span>
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label">
@@ -1728,12 +1887,6 @@ if (
                     priceInput.readOnly = false;
                     priceInput.dataset.saved = '0';
 
-                    if (priceNote) {
-                        priceNote.textContent =
-                            'New customer only';
-                    }
-                }
-            }
 
             function updateDeliveryStatus(row) {
                 const customerInput =
@@ -2104,9 +2257,6 @@ if (
                             step="0.01"
                             placeholder="Required for new customer"
                         >
-                        <span class="delivery-price-note">
-                            New customer only
-                        </span>
                     </div>
                     <div class="form-group">
                         <label class="form-label">
@@ -2368,16 +2518,6 @@ if (
                         row.querySelector(
                             '.delivery-price-input'
                         ).dataset.saved = '0';
-
-                        const note =
-                            row.querySelector(
-                                '.delivery-price-note'
-                            );
-
-                        if (note) {
-                            note.textContent =
-                                'New customer only';
-                        }
 
                         row.querySelector(
                             '.delivery-method'
