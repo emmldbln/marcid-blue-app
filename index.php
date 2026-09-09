@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-brand">
 
             <div class="login-logo">
-                💧
+                <img src="assets/images/mb-logo.png" alt="Marcid Blue Logo">
             </div>
 
             <h1>Marcid Blue</h1>
