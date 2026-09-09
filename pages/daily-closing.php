@@ -33,6 +33,17 @@ $message = '';
 $messageType = '';
 
 // ==================================================
+// LOAD CUSTOMERS FOR SHOP DELIVERY PAYMENTS
+// ==================================================
+$customers = [];
+$stmt = $pdo->query("
+    SELECT id, customer_name
+    FROM customers
+    ORDER BY customer_name ASC
+");
+$customers = $stmt->fetchAll();
+
+// ==================================================
 // LOAD EXISTING SHOP / WALK-IN SALES
 // ==================================================
 if ($dailyId !== null) {
@@ -53,7 +64,8 @@ if ($dailyId !== null) {
 }
 
 // ==================================================
-// SAVE SHOP / WALK-IN + STATION EXPENSES
+// SAVE SHOP / WALK-IN + STATION EXPENSES + SHOP
+// DELIVERY PAYMENTS
 // ==================================================
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
@@ -68,15 +80,27 @@ if (
         $expenseNames = $_POST['expense_name'] ?? [];
         $expenseAmounts = $_POST['expense_amount'] ?? [];
 
-        if (!is_array($expenseCategories)) {
-            $expenseCategories = [$expenseCategories];
+        $deliveryCustomerNames = $_POST['delivery_customer'] ?? [];
+        $deliverySlimQuantities = $_POST['delivery_slim'] ?? [];
+        $deliveryRoundQuantities = $_POST['delivery_round'] ?? [];
+        $deliveryPayments = $_POST['delivery_payment'] ?? [];
+        $deliveryMethods = $_POST['delivery_method'] ?? [];
+
+        foreach ([
+            'expenseCategories' => &$expenseCategories,
+            'expenseNames' => &$expenseNames,
+            'expenseAmounts' => &$expenseAmounts,
+            'deliveryCustomerNames' => &$deliveryCustomerNames,
+            'deliverySlimQuantities' => &$deliverySlimQuantities,
+            'deliveryRoundQuantities' => &$deliveryRoundQuantities,
+            'deliveryPayments' => &$deliveryPayments,
+            'deliveryMethods' => &$deliveryMethods
+        ] as &$array) {
+            if (!is_array($array)) {
+                $array = [$array];
+            }
         }
-        if (!is_array($expenseNames)) {
-            $expenseNames = [$expenseNames];
-        }
-        if (!is_array($expenseAmounts)) {
-            $expenseAmounts = [$expenseAmounts];
-        }
+        unset($array);
 
         if ($inputCustomers !== '') {
             if (!ctype_digit($inputCustomers)) {
@@ -154,6 +178,85 @@ if (
             ];
         }
 
+        // Validate and prepare Shop delivery payments.
+        $deliveryPaymentsToSave = [];
+        $deliveryRowCount = max(
+            count($deliveryCustomerNames),
+            count($deliverySlimQuantities),
+            count($deliveryRoundQuantities),
+            count($deliveryPayments),
+            count($deliveryMethods)
+        );
+
+        $allowedPaymentMethods = ['Cash', 'GCash', 'Bank Transfer', 'Other'];
+
+        for ($i = 0; $i < $deliveryRowCount; $i++) {
+            $customerName = trim((string)($deliveryCustomerNames[$i] ?? ''));
+            $slimRaw = trim((string)($deliverySlimQuantities[$i] ?? ''));
+            $roundRaw = trim((string)($deliveryRoundQuantities[$i] ?? ''));
+            $paymentRaw = trim((string)($deliveryPayments[$i] ?? ''));
+            $method = trim((string)($deliveryMethods[$i] ?? 'Cash'));
+
+            // Completely empty delivery payment rows are ignored.
+            if ($customerName === '' && $slimRaw === '' && $roundRaw === '' && $paymentRaw === '') {
+                continue;
+            }
+
+            if ($customerName === '') {
+                throw new Exception('Please enter or select a customer for every shop delivery payment row you started.');
+            }
+
+            if ($slimRaw === '' && $roundRaw === '') {
+                throw new Exception('Please enter Slim or Round gallons for every shop delivery payment row you started.');
+            }
+
+            if ($slimRaw !== '' && (!ctype_digit($slimRaw) || (int)$slimRaw < 0)) {
+                throw new Exception('Slim quantity must be a whole number.');
+            }
+
+            if ($roundRaw !== '' && (!ctype_digit($roundRaw) || (int)$roundRaw < 0)) {
+                throw new Exception('Round quantity must be a whole number.');
+            }
+
+            $slimQuantity = $slimRaw === '' ? 0 : (int)$slimRaw;
+            $roundQuantity = $roundRaw === '' ? 0 : (int)$roundRaw;
+            $gallons = $slimQuantity + $roundQuantity;
+
+            if ($gallons <= 0) {
+                throw new Exception('Total gallons must be greater than zero for every shop delivery payment row.');
+            }
+
+            if ($paymentRaw === '' || !is_numeric($paymentRaw) || (float)$paymentRaw <= 0) {
+                throw new Exception('Please enter a valid payment amount for every shop delivery payment row.');
+            }
+
+            $paymentAmount = (float)$paymentRaw;
+
+            if (!in_array($method, $allowedPaymentMethods, true)) {
+                throw new Exception('Please select a valid payment method.');
+            }
+
+            $impliedPrice = $paymentAmount / $gallons;
+            if (abs($impliedPrice - round($impliedPrice)) > 0.000001) {
+                throw new Exception(
+                    'Payment for ' . $customerName . ' does not produce a whole-number price per gallon. '
+                    . 'Please check the Slim, Round, and Payment Made values.'
+                );
+            }
+
+            $deliveryPaymentsToSave[] = [
+                'customer_name' => $customerName,
+                'slim_quantity' => $slimQuantity,
+                'round_quantity' => $roundQuantity,
+                'gallons' => $gallons,
+                'price_per_gallon' => (float)round($impliedPrice),
+                'payment' => $paymentAmount,
+                'method' => $method
+            ];
+        }
+
+        $pdo->beginTransaction();
+
         // Save/update Shop / Walk-in sales.
         $stmt = $pdo->prepare("
             SELECT daily_sales_id
@@ -219,20 +322,113 @@ if (
             }
         }
 
+        // Save each Shop delivery payment as a delivery + Station payment.
+        if (!empty($deliveryPaymentsToSave)) {
+            foreach ($deliveryPaymentsToSave as $deliveryPayment) {
+                // Find existing customer by name, otherwise create a new customer.
+                $stmt = $pdo->prepare("
+                    SELECT id
+                    FROM customers
+                    WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
+                    LIMIT 1
+                ");
+                $stmt->execute([$deliveryPayment['customer_name']]);
+                $customer = $stmt->fetch();
+
+                if ($customer) {
+                    $customerId = (int)$customer['id'];
+                } else {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO customers (customer_name, gallon_price)
+                        VALUES (?, ?)
+                    ");
+                    $stmt->execute([
+                        $deliveryPayment['customer_name'],
+                        $deliveryPayment['price_per_gallon']
+                    ]);
+                    $customerId = (int)$pdo->lastInsertId();
+                }
+
+                // Record the delivery so the payment is linked to a real delivery.
+                $stmt = $pdo->prepare("
+                    INSERT INTO deliveries (
+                        customer_id,
+                        delivery_date,
+                        slim_quantity,
+                        round_quantity,
+                        price_per_gallon,
+                        amount_due,
+                        daily_id
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $customerId,
+                    $businessDate,
+                    $deliveryPayment['slim_quantity'],
+                    $deliveryPayment['round_quantity'],
+                    $deliveryPayment['price_per_gallon'],
+                    $deliveryPayment['payment'],
+                    $dailyId
+                ]);
+
+                $deliveryId = (int)$pdo->lastInsertId();
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO payments (
+                        delivery_id,
+                        customer_id,
+                        payment_date,
+                        amount,
+                        payment_method,
+                        daily_id,
+                        collection_location
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'Station')
+                ");
+                $stmt->execute([
+                    $deliveryId,
+                    $customerId,
+                    $businessDate,
+                    $deliveryPayment['payment'],
+                    $deliveryPayment['method'],
+                    $dailyId
+                ]);
+            }
+        }
+
+        $pdo->commit();
+
         $walkInCustomers = $customersValue;
         $walkInSales = $customersValue * $walkInPrice;
 
+        $savedParts = ['Shop / Walk-in sales'];
+
         $expenseCount = count($expensesToSave);
         if ($expenseCount > 0) {
-            $message = 'Shop / Walk-in sales and ' . $expenseCount . ' station expense'
-                . ($expenseCount === 1 ? '' : 's')
-                . ' saved successfully.';
-        } else {
-            $message = 'Shop / Walk-in sales saved successfully.';
+            $savedParts[] = $expenseCount . ' station expense' . ($expenseCount === 1 ? '' : 's');
         }
 
+        $deliveryPaymentCount = count($deliveryPaymentsToSave);
+        if ($deliveryPaymentCount > 0) {
+            $savedParts[] = $deliveryPaymentCount . ' shop delivery payment' . ($deliveryPaymentCount === 1 ? '' : 's');
+        }
+
+        $message = implode(' and ', $savedParts) . ' saved successfully.';
         $messageType = 'success';
+
+        // Refresh customer list so newly created customers are available immediately.
+        $stmt = $pdo->query("
+            SELECT id, customer_name
+            FROM customers
+            ORDER BY customer_name ASC
+        ");
+        $customers = $stmt->fetchAll();
     } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
         $message = $e->getMessage();
         $messageType = 'danger';
     }
@@ -266,13 +462,15 @@ if (
             padding: 8px 0 4px 8px;
         }
 
-        .expenses-panel {
+        .expenses-panel,
+        .delivery-payments-panel {
             margin-top: 24px;
             padding-top: 22px;
             border-top: 1px solid var(--border);
         }
 
-        .expenses-panel-header {
+        .expenses-panel-header,
+        .delivery-payments-panel-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -280,19 +478,22 @@ if (
             margin-bottom: 12px;
         }
 
-        .expenses-title {
+        .expenses-title,
+        .delivery-payments-title {
             font-size: 15px;
             font-weight: 700;
             color: var(--text);
         }
 
-        .expenses-subtitle {
+        .expenses-subtitle,
+        .delivery-payments-subtitle {
             margin-top: 3px;
             color: var(--text-muted);
             font-size: 13px;
         }
 
-        .expense-rows {
+        .expense-rows,
+        .delivery-payment-rows {
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -309,7 +510,19 @@ if (
             border-radius: var(--radius-md);
         }
 
-        .expense-row .form-group {
+        .delivery-payment-row {
+            display: grid;
+            grid-template-columns: minmax(210px, 1.5fr) minmax(75px, 0.55fr) minmax(75px, 0.55fr) minmax(90px, 0.7fr) minmax(145px, 1fr) minmax(125px, 0.8fr) 38px;
+            gap: 10px;
+            align-items: end;
+            padding: 14px;
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        .expense-row .form-group,
+        .delivery-payment-row .form-group {
             min-width: 0;
         }
 
@@ -320,7 +533,15 @@ if (
             cursor: not-allowed;
         }
 
-        .expense-remove {
+        .delivery-gallons-input {
+            background: var(--surface) !important;
+            color: var(--text) !important;
+            font-weight: 600;
+            cursor: default;
+        }
+
+        .expense-remove,
+        .delivery-payment-remove {
             width: 38px;
             height: 38px;
             border: 1px solid var(--border);
@@ -332,12 +553,14 @@ if (
             transition: 0.15s ease;
         }
 
-        .expense-remove:hover {
+        .expense-remove:hover,
+        .delivery-payment-remove:hover {
             background: var(--danger-light);
             border-color: var(--danger);
         }
 
-        .add-expense-button {
+        .add-expense-button,
+        .add-delivery-payment-button {
             margin-top: 12px;
         }
 
@@ -350,6 +573,12 @@ if (
             justify-content: flex-end;
             gap: 10px;
             margin-top: 20px;
+        }
+
+        @media (max-width: 1100px) {
+            .delivery-payment-row {
+                grid-template-columns: 1.5fr 0.7fr 0.7fr 0.8fr 1fr 0.8fr 38px;
+            }
         }
 
         @media (max-width: 900px) {
@@ -373,6 +602,22 @@ if (
                 grid-column: 2;
                 justify-self: end;
             }
+
+            .delivery-payment-row {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+
+            .delivery-payment-row .delivery-customer-group {
+                grid-column: 1 / -1;
+            }
+
+            .delivery-payment-row .delivery-payment-group {
+                grid-column: span 2;
+            }
+
+            .delivery-payment-remove {
+                justify-self: end;
+            }
         }
 
         @media (max-width: 650px) {
@@ -385,20 +630,25 @@ if (
                 max-width: none;
             }
 
-            .expense-row {
+            .expense-row,
+            .delivery-payment-row {
                 grid-template-columns: 1fr;
             }
 
-            .expense-row .expense-name-group {
+            .expense-row .expense-name-group,
+            .delivery-payment-row .delivery-customer-group,
+            .delivery-payment-row .delivery-payment-group {
                 grid-column: auto;
             }
 
-            .expense-remove {
+            .expense-remove,
+            .delivery-payment-remove {
                 grid-column: auto;
                 justify-self: start;
             }
 
-            .expenses-panel-header {
+            .expenses-panel-header,
+            .delivery-payments-panel-header {
                 align-items: flex-start;
                 flex-direction: column;
             }
@@ -533,7 +783,7 @@ if (
                         <div>
                             <div class="card-title">Shop / Walk-in</div>
                             <div class="section-description">
-                                Record regular customers, money received, and station expenses.
+                                Record regular customers, money received, station expenses, and delivery payments received at the shop.
                             </div>
                         </div>
                     </div>
@@ -656,6 +906,113 @@ if (
                                 </div>
                             </div>
 
+                            <div class="delivery-payments-panel">
+                                <div class="delivery-payments-panel-header">
+                                    <div>
+                                        <div class="delivery-payments-title">Shop Delivery Payments</div>
+                                        <div class="delivery-payments-subtitle">
+                                            Record delivery customers who paid at the shop. Gallons and price per gallon are calculated automatically.
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary add-delivery-payment-button"
+                                        id="addDeliveryPaymentButton"
+                                    >
+                                        + Payment
+                                    </button>
+                                </div>
+
+                                <div id="deliveryPaymentRows" class="delivery-payment-rows">
+                                    <div class="delivery-payment-row">
+                                        <div class="form-group delivery-customer-group">
+                                            <label class="form-label">Customer</label>
+                                            <input
+                                                type="text"
+                                                name="delivery_customer[]"
+                                                class="form-input delivery-customer"
+                                                list="shopDeliveryCustomerList"
+                                                maxlength="100"
+                                                placeholder="Select or enter customer"
+                                                autocomplete="off"
+                                            >
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">Slim</label>
+                                            <input
+                                                type="number"
+                                                name="delivery_slim[]"
+                                                class="form-input delivery-slim"
+                                                min="0"
+                                                step="1"
+                                                placeholder="0"
+                                            >
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">Round</label>
+                                            <input
+                                                type="number"
+                                                name="delivery_round[]"
+                                                class="form-input delivery-round"
+                                                min="0"
+                                                step="1"
+                                                placeholder="0"
+                                            >
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">Gallons</label>
+                                            <input
+                                                type="number"
+                                                class="form-input delivery-gallons delivery-gallons-input"
+                                                value="0"
+                                                readonly
+                                            >
+                                        </div>
+
+                                        <div class="form-group delivery-payment-group">
+                                            <label class="form-label">Payment Made</label>
+                                            <input
+                                                type="number"
+                                                name="delivery_payment[]"
+                                                class="form-input delivery-payment"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="Example: 770"
+                                            >
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">Method</label>
+                                            <select name="delivery_method[]" class="form-input delivery-method">
+                                                <option value="Cash" selected>Cash</option>
+                                                <option value="GCash">GCash</option>
+                                                <option value="Bank Transfer">Bank Transfer</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            class="delivery-payment-remove"
+                                            title="Remove payment"
+                                            aria-label="Remove payment"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <datalist id="shopDeliveryCustomerList">
+                                <?php foreach ($customers as $customer): ?>
+                                    <option value="<?= htmlspecialchars($customer['customer_name']) ?>"></option>
+                                <?php endforeach; ?>
+                            </datalist>
+
                             <div
                                 id="shopComputeMessage"
                                 class="summary-description shop-compute-message"
@@ -702,6 +1059,8 @@ if (
     const computeMessage = document.getElementById('shopComputeMessage');
     const expenseRows = document.getElementById('expenseRows');
     const addExpenseButton = document.getElementById('addExpenseButton');
+    const deliveryPaymentRows = document.getElementById('deliveryPaymentRows');
+    const addDeliveryPaymentButton = document.getElementById('addDeliveryPaymentButton');
     const pricePerCustomer = <?= json_encode($walkInPrice) ?>;
 
     function formatCurrency(value) {
@@ -730,6 +1089,17 @@ if (
         } else {
             name.value = '';
             name.placeholder = 'Not required for Food / Gas';
+        }
+    }
+
+    function updateDeliveryGallons(row) {
+        const slim = parseInt(row.querySelector('.delivery-slim')?.value || '0', 10) || 0;
+        const round = parseInt(row.querySelector('.delivery-round')?.value || '0', 10) || 0;
+        const gallons = slim + round;
+        const gallonsInput = row.querySelector('.delivery-gallons');
+
+        if (gallonsInput) {
+            gallonsInput.value = gallons;
         }
     }
 
@@ -820,6 +1190,91 @@ if (
         row.querySelector('.expense-category').focus();
     }
 
+    function createDeliveryPaymentRow() {
+        const row = document.createElement('div');
+        row.className = 'delivery-payment-row';
+        row.innerHTML = `
+            <div class="form-group delivery-customer-group">
+                <label class="form-label">Customer</label>
+                <input
+                    type="text"
+                    name="delivery_customer[]"
+                    class="form-input delivery-customer"
+                    list="shopDeliveryCustomerList"
+                    maxlength="100"
+                    placeholder="Select or enter customer"
+                    autocomplete="off"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Slim</label>
+                <input
+                    type="number"
+                    name="delivery_slim[]"
+                    class="form-input delivery-slim"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Round</label>
+                <input
+                    type="number"
+                    name="delivery_round[]"
+                    class="form-input delivery-round"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Gallons</label>
+                <input
+                    type="number"
+                    class="form-input delivery-gallons delivery-gallons-input"
+                    value="0"
+                    readonly
+                >
+            </div>
+
+            <div class="form-group delivery-payment-group">
+                <label class="form-label">Payment Made</label>
+                <input
+                    type="number"
+                    name="delivery_payment[]"
+                    class="form-input delivery-payment"
+                    min="0"
+                    step="0.01"
+                    placeholder="Example: 770"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Method</label>
+                <select name="delivery_method[]" class="form-input delivery-method">
+                    <option value="Cash" selected>Cash</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+
+            <button
+                type="button"
+                class="delivery-payment-remove"
+                title="Remove payment"
+                aria-label="Remove payment"
+            >×</button>
+        `;
+
+        deliveryPaymentRows.appendChild(row);
+        row.querySelector('.delivery-customer').focus();
+    }
+
     document.getElementById('shopComputeButton').addEventListener('click', calculateShop);
 
     customersInput.addEventListener('input', function () {
@@ -835,6 +1290,7 @@ if (
     });
 
     addExpenseButton.addEventListener('click', createExpenseRow);
+    addDeliveryPaymentButton.addEventListener('click', createDeliveryPaymentRow);
 
     expenseRows.addEventListener('change', function (event) {
         if (event.target.classList.contains('expense-category')) {
@@ -860,7 +1316,37 @@ if (
         row.remove();
     });
 
+    deliveryPaymentRows.addEventListener('input', function (event) {
+        if (
+            event.target.classList.contains('delivery-slim')
+            || event.target.classList.contains('delivery-round')
+        ) {
+            updateDeliveryGallons(event.target.closest('.delivery-payment-row'));
+        }
+    });
+
+    deliveryPaymentRows.addEventListener('click', function (event) {
+        const removeButton = event.target.closest('.delivery-payment-remove');
+        if (!removeButton) return;
+
+        const rows = deliveryPaymentRows.querySelectorAll('.delivery-payment-row');
+        const row = removeButton.closest('.delivery-payment-row');
+
+        if (rows.length === 1) {
+            row.querySelector('.delivery-customer').value = '';
+            row.querySelector('.delivery-slim').value = '';
+            row.querySelector('.delivery-round').value = '';
+            row.querySelector('.delivery-gallons').value = '0';
+            row.querySelector('.delivery-payment').value = '';
+            row.querySelector('.delivery-method').value = 'Cash';
+            return;
+        }
+
+        row.remove();
+    });
+
     expenseRows.querySelectorAll('.expense-row').forEach(updateExpenseRow);
+    deliveryPaymentRows.querySelectorAll('.delivery-payment-row').forEach(updateDeliveryGallons);
 })();
 </script>
 
