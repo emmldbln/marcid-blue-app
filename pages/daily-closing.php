@@ -20,6 +20,7 @@ $businessDate = $dailyRecord['business_date'] ?? null;
 $walkInCustomers = 0;
 $walkInPrice = 30.00;
 $walkInSales = 0.00;
+$walkInOtherSales = 0.00;
 $message = '';
 $messageType = '';
 
@@ -99,6 +100,7 @@ if ($dailyId !== null) {
     $walkInPrice = 30.00;
     $walkInCustomers = 0;
     $walkInSales = 0.00;
+    $walkInOtherSales = 0.00;
 }
 
 if (
@@ -493,40 +495,69 @@ if (
         }
 
         /*
-         * Calculate walk-in quantity using the fixed
-         * ₱30 per gallon rate.
-         */
-        $calculatedCustomers =
-            $walkInSalesValue / $walkInPrice;
+ * =====================================================
+ * WALK-IN QUANTITY + OTHER SALES
+ *
+ * The shop rate is ₱30 per gallon.
+ *
+ * The quantity must always be a whole number.
+ * Any remaining amount below ₱30 is treated as
+ * Other / Additional Sales.
+ *
+ * Example:
+ *
+ * ₱5,510 balance
+ * ÷ ₱30
+ * = 183.666...
+ *
+ * Walk-in Quantity = 183
+ * Walk-in Sales = ₱5,490
+ * Other Sales = ₱20
+ * =====================================================
+ */
 
-        /*
-         * Quantity must always be a whole number.
-         */
-        if (
-            abs(
-                $calculatedCustomers
-                - round($calculatedCustomers)
-            ) > 0.000001
-        ) {
-            throw new Exception(
-                'Shop-only balance is not divisible evenly by ₱'
-                . number_format($walkInPrice, 2)
-                . '. Please check the money received, expenses, and delivery payments.'
-            );
-        }
+/*
+ * Get the whole-number walk-in quantity.
+ */
+$customersValue =
+    (int) floor(
+        $walkInSalesValue / $walkInPrice
+    );
 
-        $customersValue =
-            (int) round($calculatedCustomers);
+/*
+ * Calculate the actual walk-in sales.
+ */
+$walkInSalesValue =
+    $customersValue * $walkInPrice;
 
-        $moneyValue =
-            $customersValue * $walkInPrice;
+/*
+ * Everything remaining below ₱30 is
+ * Other / Additional Sales.
+ */
+$otherSalesValue =
+    $walkInSalesValue >= 0
+        ? (
+            (
+                $moneyValue
+                + $totalExpenses
+                - $totalDeliveryPayments
+            )
+            - $walkInSalesValue
+        )
+        : 0.00;
 
-        /*
-         * The balanced sales value is the actual amount
-         * used to determine the walk-in quantity.
-         */
-        $walkInSalesValue =
-            $customersValue * $walkInPrice;
+/*
+ * Avoid floating-point residue.
+ */
+if (abs($otherSalesValue) < 0.005) {
+    $otherSalesValue = 0.00;
+}
+
+/*
+ * Round currency values to two decimals.
+ */
+$otherSalesValue =
+    round($otherSalesValue, 2);
 
         $pdo->beginTransaction();
 
@@ -541,38 +572,45 @@ if (
         $existing = $stmt->fetch();
 
         if ($existing) {
-            $stmt = $pdo->prepare(
-                "UPDATE daily_sales
-                 SET
-                    walk_in_customers = ?,
-                    walk_in_price = ?
-                 WHERE daily_sales_id = ?"
-            );
+    $stmt = $pdo->prepare(
+        "UPDATE daily_sales
+         SET
+            walk_in_customers = ?,
+            walk_in_price = ?,
+            other_sales = ?
+         WHERE daily_sales_id = ?"
+    );
 
-            $stmt->execute([
-                $customersValue,
-                $walkInPrice,
-                $existing['daily_sales_id'],
-            ]);
-        } else {
+    $stmt->execute([
+        $customersValue,
+        $walkInPrice,
+        $otherSalesValue,
+        $existing['daily_sales_id'],
+    ]);
+}
+
+         else {
             $stmt = $pdo->prepare(
                 "INSERT INTO daily_sales
                     (
                         sales_date,
                         walk_in_customers,
                         walk_in_price,
+                        other_sales,
                         daily_id
                     )
                  VALUES
-                    (?, ?, ?, ?)"
+                    (?, ?, ?, ?, ?)"
             );
 
             $stmt->execute([
                 $businessDate,
                 $customersValue,
                 $walkInPrice,
+                $otherSalesValue,
                 $dailyId,
             ]);
+        
         }
 
         if (!empty($expensesToSave)) {
@@ -659,8 +697,12 @@ if (
         $pdo->commit();
 
         $walkInCustomers = $customersValue;
+
         $walkInSales =
             $customersValue * $walkInPrice;
+
+        $walkInOtherSales =
+            $otherSalesValue;
 
         $savedParts = [
             'Shop / Walk-in sales',
@@ -752,6 +794,15 @@ if (
 
     .shop-computed-sales {
         padding: 8px 0 4px 8px;
+    }
+
+    .shop-other-sales {
+    padding: 8px 0 4px 8px;
+    }
+
+    .shop-other-sales .summary-value {
+    font-size: 18px;
+    font-weight: 700;
     }
 
 
@@ -1143,6 +1194,10 @@ if (
             padding-left: 0;
         }
 
+        .shop-other-sales {
+        padding-left: 0;
+        }
+
 
         /* Expense rows */
 
@@ -1521,20 +1576,36 @@ if (
     </div>
 
     <div class="shop-computed-sales">
-        <div class="summary-label">
-            Total Sales for Walk-in
-        </div>
-
-        <div
-            class="summary-value"
-            id="shopComputedSales"
-        >
-            ₱<?= number_format(
-                $walkInSales,
-                2
-            ) ?>
-        </div>
+    <div class="summary-label">
+        Total Sales for Walk-in
     </div>
+
+    <div
+        class="summary-value"
+        id="shopComputedSales"
+    >
+        ₱<?= number_format(
+            $walkInSales,
+            2
+        ) ?>
+    </div>
+</div>
+
+<div class="shop-other-sales">
+    <div class="summary-label">
+        Other / Additional Sales
+    </div>
+
+    <div
+        class="summary-value"
+        id="shopOtherSales"
+    >
+        ₱<?= number_format(
+            $walkInOtherSales,
+            2
+        ) ?>
+    </div>
+</div>
 
 </div>
                                 <div class="expenses-panel">
@@ -1830,6 +1901,9 @@ if (
 
     const computedSales =
         document.getElementById('shopComputedSales');
+    
+    const otherSales =
+    document.getElementById('shopOtherSales');
 
     const dashboardSales =
         document.getElementById('dashboardShopSales');
@@ -2404,10 +2478,13 @@ if (
         moneyInput.value.trim();
 
     /*
-     * Total Money Received is the starting point.
+     * Total Money Received is required.
      */
     if (moneyValue === '') {
         computedSales.textContent =
+            formatCurrency(0);
+
+        otherSales.textContent =
             formatCurrency(0);
 
         dashboardSales.textContent =
@@ -2416,10 +2493,12 @@ if (
         dashboardCustomers.textContent =
             '0';
 
-        customersInput.value = '0';
+        customersInput.value =
+            '0';
 
         return;
     }
+
 
     /*
      * Validate money.
@@ -2432,8 +2511,12 @@ if (
         computedSales.textContent =
             'Invalid';
 
+        otherSales.textContent =
+            'Invalid';
+
         return;
     }
+
 
     const totalMoneyReceived =
         Math.max(
@@ -2480,16 +2563,17 @@ if (
 
     /*
      * =====================================================
-     * BALANCE
+     * TOTAL SHOP BALANCE
      *
      * Money Received
      * + Expenses
      * - Delivery Payments
-     * = Walk-in Sales
+     *
+     * = Total Amount Accounted For
      * =====================================================
      */
 
-    const totalSales =
+    const totalBalance =
         totalMoneyReceived
         + totalExpenses
         - totalDeliveryPayments;
@@ -2498,53 +2582,18 @@ if (
     /*
      * Negative balance is invalid.
      */
-    if (totalSales < -0.005) {
+    if (totalBalance < -0.005) {
         computedSales.textContent =
             'Invalid';
 
-        customersInput.value = '0';
+        otherSales.textContent =
+            'Invalid';
 
-        return;
-    }
-
-
-    /*
-     * Remove tiny floating-point residue.
-     */
-    const balancedSales =
-        Math.abs(totalSales) < 0.005
-            ? 0
-            : totalSales;
-
-
-    /*
-     * =====================================================
-     * CALCULATE WALK-IN QUANTITY
-     *
-     * Fixed price = ₱30 per gallon
-     * =====================================================
-     */
-
-    const calculatedCustomers =
-        balancedSales / pricePerCustomer;
-
-
-    /*
-     * Quantity must be a whole number.
-     */
-    if (
-        Math.abs(
-            calculatedCustomers
-            - Math.round(calculatedCustomers)
-        ) > 0.000001
-    ) {
-        computedSales.textContent =
-            formatCurrency(balancedSales);
-
-        customersInput.value = '0';
+        customersInput.value =
+            '0';
 
         dashboardSales.textContent =
-            formatCurrency(balancedSales);
+            'Invalid';
 
         dashboardCustomers.textContent =
             '—';
@@ -2554,28 +2603,99 @@ if (
 
 
     /*
-     * Valid whole-number quantity.
+     * Remove tiny floating-point residue.
      */
-    const customers =
-        Math.round(calculatedCustomers);
+    const balancedSales =
+        Math.abs(totalBalance) < 0.005
+            ? 0
+            : totalBalance;
 
+
+    /*
+     * =====================================================
+     * WALK-IN QUANTITY
+     *
+     * Always use the whole-number portion.
+     *
+     * Example:
+     *
+     * ₱5,510 / ₱30
+     * = 183.666...
+     *
+     * Quantity = 183
+     * =====================================================
+     */
+
+    const customers =
+        Math.floor(
+            balancedSales / pricePerCustomer
+        );
+
+
+    /*
+     * =====================================================
+     * WALK-IN SALES
+     * =====================================================
+     */
+
+    const finalSales =
+        customers * pricePerCustomer;
+
+
+    /*
+     * =====================================================
+     * OTHER / ADDITIONAL SALES
+     *
+     * Whatever remains below ₱30.
+     *
+     * Example:
+     *
+     * ₱5,510 - ₱5,490
+     * = ₱20
+     * =====================================================
+     */
+
+    const additionalSales =
+        Math.max(
+            0,
+            balancedSales - finalSales
+        );
+
+
+    /*
+     * Update quantity.
+     */
     customersInput.value =
         customers;
 
 
     /*
-     * Total Sales for Walk-in
-     * is based on quantity × ₱30.
+     * Update Walk-in Sales.
      */
-    const finalSales =
-        customers * pricePerCustomer;
-
     computedSales.textContent =
         formatCurrency(finalSales);
 
-    dashboardSales.textContent =
-        formatCurrency(finalSales);
 
+    /*
+     * Update Other / Additional Sales.
+     */
+    otherSales.textContent =
+        formatCurrency(additionalSales);
+
+
+    /*
+     * Dashboard Shop Sales should represent
+     * the complete accounted shop balance,
+     * including Other / Additional Sales.
+     */
+    dashboardSales.textContent =
+        formatCurrency(balancedSales);
+
+
+    /*
+     * Dashboard customer count remains
+     * the actual whole-number gallon quantity.
+     */
     dashboardCustomers.textContent =
         customers.toLocaleString('en-PH');
 }
