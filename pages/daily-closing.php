@@ -10,7 +10,6 @@ requireAdmin();
 // ==================================================
 // ACTIVE DAILY RECORD
 // ==================================================
-
 $stmt = $pdo->prepare("
     SELECT *
     FROM daily_records
@@ -27,7 +26,6 @@ $businessDate = $dailyRecord['business_date'] ?? null;
 // ==================================================
 // SHOP / WALK-IN DEFAULTS
 // ==================================================
-
 $walkInCustomers = 0;
 $walkInPrice = 30.00;
 $walkInSales = 0.00;
@@ -37,7 +35,6 @@ $messageType = '';
 // ==================================================
 // LOAD EXISTING SHOP / WALK-IN SALES
 // ==================================================
-
 if ($dailyId !== null) {
     $stmt = $pdo->prepare("
         SELECT *
@@ -56,9 +53,8 @@ if ($dailyId !== null) {
 }
 
 // ==================================================
-// SAVE SHOP / WALK-IN + STATION EXPENSE
+// SAVE SHOP / WALK-IN + STATION EXPENSES
 // ==================================================
-
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
     && $dailyId !== null
@@ -67,9 +63,20 @@ if (
     try {
         $inputCustomers = trim($_POST['walk_in_customers'] ?? '');
         $inputMoney = trim($_POST['walk_in_money'] ?? '');
-        $expenseCategory = trim($_POST['expense_category'] ?? '');
-        $expenseName = trim($_POST['expense_name'] ?? '');
-        $expenseAmount = trim($_POST['expense_amount'] ?? '');
+
+        $expenseCategories = $_POST['expense_category'] ?? [];
+        $expenseNames = $_POST['expense_name'] ?? [];
+        $expenseAmounts = $_POST['expense_amount'] ?? [];
+
+        if (!is_array($expenseCategories)) {
+            $expenseCategories = [$expenseCategories];
+        }
+        if (!is_array($expenseNames)) {
+            $expenseNames = [$expenseNames];
+        }
+        if (!is_array($expenseAmounts)) {
+            $expenseAmounts = [$expenseAmounts];
+        }
 
         if ($inputCustomers !== '') {
             if (!ctype_digit($inputCustomers)) {
@@ -100,35 +107,54 @@ if (
             $moneyValue = 0;
         }
 
-        // Expense is optional. If an amount is entered, require a valid expense type.
-        if ($expenseAmount !== '') {
-            if (!is_numeric($expenseAmount) || (float)$expenseAmount < 0) {
-                throw new Exception('Expense amount must be a valid amount.');
+        $allowedCategories = [
+            'Food' => 'Food',
+            'Gas' => 'Gas',
+            'Cash Advance' => 'Cash Advance',
+            'Others' => 'Miscellaneous'
+        ];
+
+        $expensesToSave = [];
+        $rowCount = max(count($expenseCategories), count($expenseNames), count($expenseAmounts));
+
+        for ($i = 0; $i < $rowCount; $i++) {
+            $category = trim((string)($expenseCategories[$i] ?? ''));
+            $name = trim((string)($expenseNames[$i] ?? ''));
+            $amount = trim((string)($expenseAmounts[$i] ?? ''));
+
+            // Completely empty expense rows are ignored.
+            if ($category === '' && $name === '' && $amount === '') {
+                continue;
             }
 
-            $expenseAmountValue = (float)$expenseAmount;
+            if ($amount === '') {
+                throw new Exception('Please enter an amount for every expense row you started.');
+            }
 
-            $allowedCategories = [
-                'Food' => 'Food',
-                'Gas' => 'Gas',
-                'Cash Advance' => 'Cash Advance',
-                'Others' => 'Miscellaneous'
+            if (!is_numeric($amount) || (float)$amount < 0) {
+                throw new Exception('Every expense amount must be a valid amount.');
+            }
+
+            if (!isset($allowedCategories[$category])) {
+                throw new Exception('Please select an expense type for every expense row.');
+            }
+
+            if (($category === 'Cash Advance' || $category === 'Others') && $name === '') {
+                throw new Exception('Please enter a name or description for Cash Advance or Others.');
+            }
+
+            $description = in_array($category, ['Cash Advance', 'Others'], true)
+                ? $name
+                : $category;
+
+            $expensesToSave[] = [
+                'category' => $allowedCategories[$category],
+                'description' => $description,
+                'amount' => (float)$amount
             ];
-
-            if (!isset($allowedCategories[$expenseCategory])) {
-                throw new Exception('Please select an expense type.');
-            }
-
-            if (($expenseCategory === 'Cash Advance' || $expenseCategory === 'Others') && $expenseName === '') {
-                throw new Exception('Please enter a name or description for this expense.');
-            }
-
-            $expenseDescription = in_array($expenseCategory, ['Cash Advance', 'Others'], true)
-                ? $expenseName
-                : $expenseCategory;
-            $expenseDbCategory = $allowedCategories[$expenseCategory];
         }
 
+        // Save/update Shop / Walk-in sales.
         $stmt = $pdo->prepare("
             SELECT daily_sales_id
             FROM daily_sales
@@ -168,7 +194,8 @@ if (
             ]);
         }
 
-        if ($expenseAmount !== '') {
+        // Save each Station expense as its own record.
+        if (!empty($expensesToSave)) {
             $stmt = $pdo->prepare("
                 INSERT INTO expenses (
                     expense_date,
@@ -180,20 +207,30 @@ if (
                 )
                 VALUES (?, ?, ?, ?, ?, 'Station')
             ");
-            $stmt->execute([
-                $businessDate,
-                $expenseDbCategory,
-                $expenseDescription,
-                $expenseAmountValue,
-                $dailyId
-            ]);
+
+            foreach ($expensesToSave as $expense) {
+                $stmt->execute([
+                    $businessDate,
+                    $expense['category'],
+                    $expense['description'],
+                    $expense['amount'],
+                    $dailyId
+                ]);
+            }
         }
 
         $walkInCustomers = $customersValue;
         $walkInSales = $customersValue * $walkInPrice;
-        $message = $expenseAmount !== ''
-            ? 'Shop / Walk-in sales and station expense saved successfully.'
-            : 'Shop / Walk-in sales saved successfully.';
+
+        $expenseCount = count($expensesToSave);
+        if ($expenseCount > 0) {
+            $message = 'Shop / Walk-in sales and ' . $expenseCount . ' station expense'
+                . ($expenseCount === 1 ? '' : 's')
+                . ' saved successfully.';
+        } else {
+            $message = 'Shop / Walk-in sales saved successfully.';
+        }
+
         $messageType = 'success';
     } catch (Throwable $e) {
         $message = $e->getMessage();
@@ -210,10 +247,10 @@ if (
     <title>Daily Closing - Marcid Blue</title>
     <link rel="stylesheet" href="../assets/css/app.css">
     <style>
-        .shop-walkin-grid {
+        .shop-walkin-layout {
             display: grid;
-            grid-template-columns: minmax(110px, 0.7fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(170px, 0.9fr);
-            gap: 16px;
+            grid-template-columns: minmax(110px, 0.65fr) minmax(190px, 1fr) minmax(180px, 1fr);
+            gap: 18px;
             align-items: end;
         }
 
@@ -225,32 +262,153 @@ if (
             max-width: 230px;
         }
 
-        .expense-name-field {
+        .shop-computed-sales {
+            padding: 8px 0 4px 8px;
+        }
+
+        .expenses-panel {
+            margin-top: 24px;
+            padding-top: 22px;
+            border-top: 1px solid var(--border);
+        }
+
+        .expenses-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .expenses-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .expenses-subtitle {
+            margin-top: 3px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .expense-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .expense-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr) minmax(220px, 1.2fr) 38px;
+            gap: 12px;
+            align-items: end;
+            padding: 14px;
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        .expense-row .form-group {
+            min-width: 0;
+        }
+
+        .expense-row .form-input:disabled {
+            background: var(--surface);
+            color: var(--text-muted);
+            opacity: 0.72;
+            cursor: not-allowed;
+        }
+
+        .expense-remove {
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            color: var(--danger);
+            font-size: 18px;
+            cursor: pointer;
+            transition: 0.15s ease;
+        }
+
+        .expense-remove:hover {
+            background: var(--danger-light);
+            border-color: var(--danger);
+        }
+
+        .add-expense-button {
             margin-top: 12px;
         }
 
-        .shop-computed-sales {
-            padding-left: 8px;
+        .shop-compute-message {
+            margin-top: 14px;
         }
 
-        @media (max-width: 1050px) {
-            .shop-walkin-grid {
+        .shop-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .shop-walkin-layout {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .shop-computed-sales {
                 padding-left: 0;
             }
+
+            .expense-row {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .expense-row .expense-name-group {
+                grid-column: 1 / -1;
+            }
+
+            .expense-remove {
+                grid-column: 2;
+                justify-self: end;
+            }
         }
 
         @media (max-width: 650px) {
-            .shop-walkin-grid {
+            .shop-walkin-layout {
                 grid-template-columns: 1fr;
             }
 
             .shop-customers-field,
             .shop-money-field {
                 max-width: none;
+            }
+
+            .expense-row {
+                grid-template-columns: 1fr;
+            }
+
+            .expense-row .expense-name-group {
+                grid-column: auto;
+            }
+
+            .expense-remove {
+                grid-column: auto;
+                justify-self: start;
+            }
+
+            .expenses-panel-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .shop-actions {
+                justify-content: stretch;
+            }
+
+            .shop-actions .btn {
+                flex: 1;
             }
         }
     </style>
@@ -259,9 +417,6 @@ if (
 
 <div class="app">
 
-    <!-- =================================================
-         SIDEBAR / DASHBOARD NAVIGATION
-         ================================================= -->
     <aside class="sidebar">
         <div class="sidebar-brand">
             <img src="../assets/images/mb-logo.png" alt="Marcid Blue Logo">
@@ -305,10 +460,6 @@ if (
     </aside>
 
     <main class="main">
-
-        <!-- =================================================
-             TOP DASHBOARD
-             ================================================= -->
         <header class="topbar">
             <div class="topbar-title">Daily Closing</div>
             <div class="topbar-user">
@@ -318,7 +469,6 @@ if (
         </header>
 
         <section class="page">
-
             <div class="page-header">
                 <h1 class="page-title">Daily Closing</h1>
                 <p class="page-subtitle">
@@ -340,7 +490,6 @@ if (
                 </div>
             <?php else: ?>
 
-                <!-- TOP DASHBOARD SUMMARY -->
                 <div class="summary-grid">
                     <div class="card summary-card">
                         <div class="summary-label">Shop Sales</div>
@@ -379,9 +528,6 @@ if (
 
                 <br>
 
-                <!-- =================================================
-                     SHOP / WALK-IN ONLY
-                     ================================================= -->
                 <div class="card">
                     <div class="card-header">
                         <div>
@@ -393,7 +539,6 @@ if (
                     </div>
 
                     <div class="card-body">
-
                         <?php if ($message !== ''): ?>
                             <div class="alert alert-<?= htmlspecialchars($messageType) ?>">
                                 <?= htmlspecialchars($message) ?>
@@ -403,7 +548,7 @@ if (
                         <form method="POST" id="shopWalkInForm">
                             <input type="hidden" name="action" value="save_shop_walkin">
 
-                            <div class="shop-walkin-grid">
+                            <div class="shop-walkin-layout">
                                 <div class="shop-customers-field">
                                     <label for="walk_in_customers" class="form-label">
                                         Customers <span class="summary-description">(× ₱30)</span>
@@ -436,52 +581,6 @@ if (
                                     >
                                 </div>
 
-                                <div>
-                                    <label for="expense_category" class="form-label">
-                                        Expense
-                                    </label>
-                                    <select
-                                        id="expense_category"
-                                        name="expense_category"
-                                        class="form-input"
-                                    >
-                                        <option value="">No Expense</option>
-                                        <option value="Food">Food</option>
-                                        <option value="Gas">Gas</option>
-                                        <option value="Cash Advance">Cash Advance</option>
-                                        <option value="Others">Others</option>
-                                    </select>
-
-                                    <div id="expenseNameWrap" class="expense-name-field" style="display: none;">
-                                        <label for="expense_name" class="form-label" id="expenseNameLabel">
-                                            Name / Description
-                                        </label>
-                                        <input
-                                            type="text"
-                                            id="expense_name"
-                                            name="expense_name"
-                                            class="form-input"
-                                            maxlength="255"
-                                            placeholder="Enter name or description"
-                                        >
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label for="expense_amount" class="form-label">
-                                        Expense Amount
-                                    </label>
-                                    <input
-                                        type="number"
-                                        id="expense_amount"
-                                        name="expense_amount"
-                                        class="form-input"
-                                        min="0"
-                                        step="0.01"
-                                        placeholder="Example: 500"
-                                    >
-                                </div>
-
                                 <div class="shop-computed-sales">
                                     <div class="summary-label">Computed Sales</div>
                                     <div class="summary-value" id="shopComputedSales">
@@ -490,17 +589,81 @@ if (
                                 </div>
                             </div>
 
+                            <div class="expenses-panel">
+                                <div class="expenses-panel-header">
+                                    <div>
+                                        <div class="expenses-title">Station Expenses</div>
+                                        <div class="expenses-subtitle">
+                                            Add one or more expenses for today's station operation.
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary add-expense-button"
+                                        id="addExpenseButton"
+                                    >
+                                        + Expenses
+                                    </button>
+                                </div>
+
+                                <div id="expenseRows" class="expense-rows">
+                                    <div class="expense-row">
+                                        <div class="form-group">
+                                            <label class="form-label">Expense</label>
+                                            <select name="expense_category[]" class="form-input expense-category">
+                                                <option value="">No Expense</option>
+                                                <option value="Food">Food</option>
+                                                <option value="Gas">Gas</option>
+                                                <option value="Cash Advance">Cash Advance</option>
+                                                <option value="Others">Others</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">Amount</label>
+                                            <input
+                                                type="number"
+                                                name="expense_amount[]"
+                                                class="form-input expense-amount"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="Example: 500"
+                                            >
+                                        </div>
+
+                                        <div class="form-group expense-name-group">
+                                            <label class="form-label expense-name-label">Name / Description</label>
+                                            <input
+                                                type="text"
+                                                name="expense_name[]"
+                                                class="form-input expense-name"
+                                                maxlength="255"
+                                                placeholder="Only needed for Cash Advance / Others"
+                                                disabled
+                                            >
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            class="expense-remove"
+                                            title="Remove expense"
+                                            aria-label="Remove expense"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div
                                 id="shopComputeMessage"
-                                class="summary-description"
-                                style="margin-top: 12px;"
+                                class="summary-description shop-compute-message"
                             >
                                 Enter customers or money, then press Compute.
                             </div>
 
-                            <div
-                                style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;"
-                            >
+                            <div class="shop-actions">
                                 <button
                                     type="button"
                                     class="btn btn-secondary"
@@ -527,111 +690,137 @@ if (
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+(function () {
+    const form = document.getElementById('shopWalkInForm');
+    if (!form) return;
+
     const customersInput = document.getElementById('walk_in_customers');
     const moneyInput = document.getElementById('walk_in_money');
-    const expenseCategory = document.getElementById('expense_category');
-    const expenseNameWrap = document.getElementById('expenseNameWrap');
-    const expenseNameInput = document.getElementById('expense_name');
-    const expenseNameLabel = document.getElementById('expenseNameLabel');
-    const computeButton = document.getElementById('shopComputeButton');
     const computedSales = document.getElementById('shopComputedSales');
-    const computeMessage = document.getElementById('shopComputeMessage');
     const dashboardSales = document.getElementById('dashboardShopSales');
     const dashboardCustomers = document.getElementById('dashboardShopCustomers');
+    const computeMessage = document.getElementById('shopComputeMessage');
+    const expenseRows = document.getElementById('expenseRows');
+    const addExpenseButton = document.getElementById('addExpenseButton');
+    const pricePerCustomer = <?= json_encode($walkInPrice) ?>;
 
-    if (!customersInput || !moneyInput || !computeButton) {
-        return;
-    }
-
-    const price = <?= json_encode($walkInPrice) ?>;
-
-    function money(value) {
+    function formatCurrency(value) {
         return '₱' + Number(value || 0).toLocaleString('en-PH', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
     }
 
-    function updateExpenseName() {
-        if (!expenseCategory || !expenseNameWrap) {
-            return;
-        }
+    function updateExpenseRow(row) {
+        const category = row.querySelector('.expense-category');
+        const name = row.querySelector('.expense-name');
+        const label = row.querySelector('.expense-name-label');
 
-        const needsName = expenseCategory.value === 'Cash Advance' || expenseCategory.value === 'Others';
-        expenseNameWrap.style.display = needsName ? 'block' : 'none';
+        if (!category || !name || !label) return;
 
-        if (!needsName && expenseNameInput) {
-            expenseNameInput.value = '';
-        }
+        const needsName = category.value === 'Cash Advance' || category.value === 'Others';
+        name.disabled = !needsName;
+        name.required = needsName;
+        label.textContent = needsName ? 'Name / Description *' : 'Name / Description';
 
-        if (expenseNameLabel) {
-            expenseNameLabel.textContent = expenseCategory.value === 'Cash Advance'
-                ? 'Name'
-                : 'Name / Description';
-        }
-
-        if (expenseNameInput) {
-            expenseNameInput.placeholder = expenseCategory.value === 'Cash Advance'
-                ? 'Enter name'
-                : 'Enter name or description';
+        if (needsName) {
+            name.placeholder = category.value === 'Cash Advance'
+                ? 'Enter recipient name'
+                : 'Enter expense description';
+        } else {
+            name.value = '';
+            name.placeholder = 'Not required for Food / Gas';
         }
     }
 
-    function computeShop() {
-        const customerText = customersInput.value.trim();
-        const moneyText = moneyInput.value.trim();
+    function calculateShop() {
+        const customersValue = customersInput.value.trim();
+        const moneyValue = moneyInput.value.trim();
 
         let customers = 0;
         let sales = 0;
 
-        if (customerText !== '') {
-            if (!/^\d+$/.test(customerText)) {
-                computedSales.textContent = '—';
-                computeMessage.textContent = 'Customers must be a whole number.';
-                return false;
+        if (customersValue !== '') {
+            customers = Math.max(0, parseInt(customersValue, 10) || 0);
+            sales = customers * pricePerCustomer;
+
+            moneyInput.value = sales > 0 ? sales.toFixed(2) : '';
+            computeMessage.textContent = customers + ' customers × ' + formatCurrency(pricePerCustomer) + ' = ' + formatCurrency(sales);
+        } else if (moneyValue !== '') {
+            sales = Math.max(0, parseFloat(moneyValue) || 0);
+            const calculatedCustomers = sales / pricePerCustomer;
+
+            if (Math.abs(calculatedCustomers - Math.round(calculatedCustomers)) > 0.000001) {
+                computedSales.textContent = formatCurrency(sales);
+                computeMessage.textContent = 'Money received does not divide evenly by ' + formatCurrency(pricePerCustomer) + ' per customer.';
+                return;
             }
 
-            customers = parseInt(customerText, 10);
-            sales = customers * price;
-            moneyInput.value = sales.toFixed(2);
-        } else if (moneyText !== '') {
-            const moneyValue = parseFloat(moneyText);
-
-            if (!Number.isFinite(moneyValue) || moneyValue < 0) {
-                computedSales.textContent = '—';
-                computeMessage.textContent = 'Money received must be a valid amount.';
-                return false;
-            }
-
-            const calculatedCustomers = moneyValue / price;
-
-            if (!Number.isInteger(calculatedCustomers)) {
-                computedSales.textContent = '—';
-                computeMessage.textContent =
-                    'Money must divide evenly by ' + money(price) + ' per customer.';
-                return false;
-            }
-
-            customers = calculatedCustomers;
-            sales = moneyValue;
-            customersInput.value = customers;
+            customers = Math.round(calculatedCustomers);
+            customersInput.value = customers > 0 ? customers : '';
+            computeMessage.textContent = formatCurrency(sales) + ' = ' + customers + ' customers × ' + formatCurrency(pricePerCustomer);
+        } else {
+            computeMessage.textContent = 'Enter customers or money, then press Compute.';
         }
 
-        computedSales.textContent = money(sales);
-        computeMessage.textContent =
-            customers.toLocaleString('en-PH') + ' customers × ' + money(price) + ' = ' + money(sales);
-
-        if (dashboardSales) {
-            dashboardSales.textContent = money(sales);
-        }
-
-        if (dashboardCustomers) {
-            dashboardCustomers.textContent = customers.toLocaleString('en-PH');
-        }
-
-        return true;
+        computedSales.textContent = formatCurrency(sales);
+        dashboardSales.textContent = formatCurrency(sales);
+        dashboardCustomers.textContent = customers.toLocaleString('en-PH');
     }
+
+    function createExpenseRow() {
+        const row = document.createElement('div');
+        row.className = 'expense-row';
+        row.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">Expense</label>
+                <select name="expense_category[]" class="form-input expense-category">
+                    <option value="">No Expense</option>
+                    <option value="Food">Food</option>
+                    <option value="Gas">Gas</option>
+                    <option value="Cash Advance">Cash Advance</option>
+                    <option value="Others">Others</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Amount</label>
+                <input
+                    type="number"
+                    name="expense_amount[]"
+                    class="form-input expense-amount"
+                    min="0"
+                    step="0.01"
+                    placeholder="Example: 500"
+                >
+            </div>
+
+            <div class="form-group expense-name-group">
+                <label class="form-label expense-name-label">Name / Description</label>
+                <input
+                    type="text"
+                    name="expense_name[]"
+                    class="form-input expense-name"
+                    maxlength="255"
+                    placeholder="Not required for Food / Gas"
+                    disabled
+                >
+            </div>
+
+            <button
+                type="button"
+                class="expense-remove"
+                title="Remove expense"
+                aria-label="Remove expense"
+            >×</button>
+        `;
+
+        expenseRows.appendChild(row);
+        updateExpenseRow(row);
+        row.querySelector('.expense-category').focus();
+    }
+
+    document.getElementById('shopComputeButton').addEventListener('click', calculateShop);
 
     customersInput.addEventListener('input', function () {
         if (customersInput.value.trim() !== '') {
@@ -645,13 +834,34 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    if (expenseCategory) {
-        expenseCategory.addEventListener('change', updateExpenseName);
-        updateExpenseName();
-    }
+    addExpenseButton.addEventListener('click', createExpenseRow);
 
-    computeButton.addEventListener('click', computeShop);
-});
+    expenseRows.addEventListener('change', function (event) {
+        if (event.target.classList.contains('expense-category')) {
+            updateExpenseRow(event.target.closest('.expense-row'));
+        }
+    });
+
+    expenseRows.addEventListener('click', function (event) {
+        const removeButton = event.target.closest('.expense-remove');
+        if (!removeButton) return;
+
+        const rows = expenseRows.querySelectorAll('.expense-row');
+        const row = removeButton.closest('.expense-row');
+
+        if (rows.length === 1) {
+            row.querySelector('.expense-category').value = '';
+            row.querySelector('.expense-amount').value = '';
+            row.querySelector('.expense-name').value = '';
+            updateExpenseRow(row);
+            return;
+        }
+
+        row.remove();
+    });
+
+    expenseRows.querySelectorAll('.expense-row').forEach(updateExpenseRow);
+})();
 </script>
 
 </body>
