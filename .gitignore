@@ -2,10 +2,10 @@
 .env.*
 !.env.example
 
-# Local development
+config/local.php
+
 *.log
 
-# IDE / OS
 .vscode/
 .idea/
 .DS_Store
