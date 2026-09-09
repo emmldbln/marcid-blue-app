@@ -767,14 +767,46 @@ $otherSalesValue =
        ========================================================= */
 
     .shop-walkin-layout {
-        display: grid;
-        grid-template-columns:
-            minmax(110px, 0.65fr)
-            minmax(190px, 1fr)
-            minmax(180px, 1fr);
-        gap: 18px;
-        align-items: end;
-    }
+    display: grid;
+    grid-template-columns:
+        minmax(110px, 0.65fr)
+        minmax(190px, 1fr)
+        minmax(180px, 1fr);
+    gap: 18px;
+    align-items: end;
+}
+
+.shop-sales-summary-group {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: end;
+}
+
+.shop-computed-sales,
+.shop-other-sales {
+    padding: 8px 0 4px 8px;
+}
+
+.shop-computed-sales .summary-value,
+.shop-other-sales .summary-value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.shop-computed-sales,
+.shop-other-sales {
+    padding: 8px 0 4px 8px;
+}
+
+.shop-computed-sales .summary-value,
+.shop-other-sales .summary-value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.4;
+}
 
     .section-description {
     margin-top: 4px;
@@ -791,20 +823,6 @@ $otherSalesValue =
     .shop-money-field {
         max-width: 230px;
     }
-
-    .shop-computed-sales {
-        padding: 8px 0 4px 8px;
-    }
-
-    .shop-other-sales {
-    padding: 8px 0 4px 8px;
-    }
-
-    .shop-other-sales .summary-value {
-    font-size: 18px;
-    font-weight: 700;
-    }
-
 
     /* =========================================================
        EXPENSES / DELIVERY PANELS
@@ -1575,36 +1593,40 @@ $otherSalesValue =
         >
     </div>
 
+    <div class="shop-sales-summary-group">
+
     <div class="shop-computed-sales">
-    <div class="summary-label">
-        Total Sales for Walk-in
+        <div class="summary-label">
+            Total Sales for Walk-in
+        </div>
+
+        <div
+            class="summary-value"
+            id="shopComputedSales"
+        >
+            ₱<?= number_format(
+                $walkInSales,
+                2
+            ) ?>
+        </div>
     </div>
 
-    <div
-        class="summary-value"
-        id="shopComputedSales"
-    >
-        ₱<?= number_format(
-            $walkInSales,
-            2
-        ) ?>
-    </div>
-</div>
+    <div class="shop-other-sales">
+        <div class="summary-label">
+            Other / Additional Sales
+        </div>
 
-<div class="shop-other-sales">
-    <div class="summary-label">
-        Other / Additional Sales
+        <div
+            class="summary-value"
+            id="shopOtherSales"
+        >
+            ₱<?= number_format(
+                $walkInOtherSales,
+                2
+            ) ?>
+        </div>
     </div>
 
-    <div
-        class="summary-value"
-        id="shopOtherSales"
-    >
-        ₱<?= number_format(
-            $walkInOtherSales,
-            2
-        ) ?>
-    </div>
 </div>
 
 </div>
