@@ -50,17 +50,21 @@
             const shopDeliveryPayments = getShopDeliveryPayments();
             const driverDeliveryPayments = getDriverDeliveryPayments();
 
-            // Shop delivery payments have already been collected by the Station.
-            // They are therefore added to the driver's effective received amount
-            // only for remittance balancing, because they are also part of the
-            // total expected delivery money.
+            // Shop delivery payments were already collected by the Station.
+            // They count toward the driver's effective received amount only
+            // for remittance balancing because they are also expected money.
             const effectiveReceived = driverMoney + driverExpenses + shopDeliveryPayments;
             const expected = shopDeliveryPayments + driverDeliveryPayments;
             const difference = effectiveReceived - expected;
 
             statusOutput.className = 'summary-value driver-remittance-status';
 
-            if (Math.abs(difference) <= 0.005) {
+            // After Reset / on a completely empty day, there is no remittance
+            // to balance. Do not display "Balanced" for 0 vs 0.
+            if (Math.abs(effectiveReceived) <= 0.005 && Math.abs(expected) <= 0.005) {
+                statusOutput.classList.add('driver-remittance-neutral');
+                statusOutput.textContent = '—';
+            } else if (Math.abs(difference) <= 0.005) {
                 statusOutput.classList.add('driver-remittance-balanced');
                 statusOutput.textContent = 'Balanced';
             } else if (difference < 0) {
@@ -99,9 +103,6 @@
             });
         }
 
-        // The original Balance button may calculate the old formula first.
-        // Run this listener after it so the displayed status uses the corrected
-        // Shop-paid amount.
         document.getElementById('driverBalanceButton')?.addEventListener('click', scheduleUpdate);
 
         scheduleUpdate();
