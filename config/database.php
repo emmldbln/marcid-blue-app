@@ -12,15 +12,9 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 
-    /*
-     * Daily Closing does not currently include app.js directly.
-     * Load only the Daily Closing autosave modules on that page,
-     * without changing the page's large inline script.
-     */
+    /* Load Daily Closing autosave modules only on that page. */
     register_shutdown_function(function (): void {
-        $scriptName = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
-
-        if ($scriptName !== 'daily-closing.php') {
+        if (basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) !== 'daily-closing.php') {
             return;
         }
 
@@ -29,20 +23,14 @@ try {
 (function () {
     var scripts = [
         '../assets/js/customer-autosave.js',
-        '../assets/js/daily-closing-autosave.js'
+        '../assets/js/daily-closing-autosave-live.js'
     ];
 
     scripts.forEach(function (src, index) {
-        var id = 'marcid-blue-autosave-' + index;
-
-        if (document.getElementById(id)) {
-            return;
-        }
-
         var script = document.createElement('script');
-        script.id = id;
+        script.id = 'marcid-blue-autosave-' + index;
         script.src = src;
-        script.defer = true;
+        script.async = false;
         document.body.appendChild(script);
     });
 })();
