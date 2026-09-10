@@ -18,9 +18,6 @@
         if (!pageHeader) return false;
 
         let headerRow = pageHeader.querySelector('.daily-closing-header-row');
-
-        // The layout module creates this row. If it has not created it yet,
-        // wait for the next DOM mutation instead of giving up.
         if (!headerRow) return false;
 
         const finalizeButton = headerRow.querySelector('.daily-closing-finalize-button');
@@ -56,8 +53,6 @@
             finalizeButton.disabled = true;
 
             try {
-                // Do not depend on a form data attribute. The PHP endpoint can
-                // identify the current open day by itself.
                 const response = await fetch('reset-daily-closing.php', {
                     method: 'POST',
                     headers: {
@@ -74,8 +69,6 @@
 
                 clearLegacyDrafts();
 
-                // Tell the autosave module that the current draft was deliberately
-                // deleted, then reload from the clean MySQL state.
                 try {
                     window.sessionStorage.setItem('marcidBlueDailyClosingJustReset', '1');
                 } catch (error) {
@@ -97,12 +90,39 @@
             .daily-closing-header-actions {
                 flex: 0 0 auto;
             }
+
             .daily-closing-header-actions .btn {
                 margin: 0;
+                transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
             }
+
+            /* Match the same hover interaction used by the other action buttons. */
+            .daily-closing-header-actions .daily-closing-reset-button:hover:not(:disabled) {
+                background: var(--secondary-dark, #14837e) !important;
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .daily-closing-header-actions .daily-closing-finalize-button:hover:not(:disabled) {
+                background: var(--primary-dark) !important;
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .daily-closing-header-actions .btn:active:not(:disabled) {
+                transform: translateY(0);
+                box-shadow: none;
+            }
+
+            .daily-closing-header-actions .btn:disabled {
+                transform: none;
+                box-shadow: none;
+            }
+
             .daily-closing-reset-button {
                 min-width: 90px;
             }
+
             @media (max-width: 650px) {
                 .daily-closing-header-actions {
                     flex-direction: column;
@@ -122,8 +142,6 @@
     function init() {
         if (addResetButton()) return;
 
-        // The other daily-closing scripts are loaded dynamically. Observe the
-        // page until Finalize & Close Day exists, then insert Reset beside it.
         const observer = new MutationObserver(function () {
             if (addResetButton()) {
                 observer.disconnect();
