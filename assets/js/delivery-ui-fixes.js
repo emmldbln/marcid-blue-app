@@ -16,28 +16,56 @@
         });
     }
 
-    function copyShopLegendsToDriver() {
-        const driverRows = document.getElementById('driverDeliveryPaymentRows');
+    function findShopLegend() {
         const shopRows = document.getElementById('deliveryPaymentRows');
-        if (!driverRows || !shopRows || driverRows.dataset.legendsCopied === '1') return;
+        if (!shopRows) return null;
 
         const shopSection = shopRows.closest('.card, .card-body, .panel, section') || shopRows.parentElement;
-        const driverSection = driverRows.closest('.driver-panel-section');
-        if (!shopSection || !driverSection) return;
+        if (!shopSection) return null;
 
-        const shopLegends = shopSection.querySelectorAll('legend, [class*="legend"], [class*="Legend"]');
-        if (!shopLegends.length) return;
+        const selectors = [
+            '.delivery-status-legend',
+            '.delivery-legend',
+            '.status-legend',
+            '[class*="delivery-legend"]',
+            '[class*="status-legend"]'
+        ];
 
-        const driverHeader = driverSection.querySelector('.driver-panel-header');
-        if (!driverHeader) return;
+        for (const selector of selectors) {
+            const legend = shopSection.querySelector(selector);
+            if (legend) return legend;
+        }
 
-        shopLegends.forEach(function (legend) {
-            const clone = legend.cloneNode(true);
-            clone.classList.add('driver-delivery-legend-copy');
-            driverHeader.appendChild(clone);
-        });
+        return null;
+    }
 
-        driverRows.dataset.legendsCopied = '1';
+    function addDriverLegend() {
+        const driverRows = document.getElementById('driverDeliveryPaymentRows');
+        const driverSection = driverRows?.closest('.driver-panel-section');
+        if (!driverRows || !driverSection) return;
+
+        const header = driverSection.querySelector('.driver-panel-header');
+        const left = header?.firstElementChild;
+        const subtitle = left?.querySelector('.driver-panel-subtitle');
+        if (!header || !left || !subtitle) return;
+
+        if (left.querySelector('.driver-delivery-legend-copy')) return;
+
+        const shopLegend = findShopLegend();
+        let legend;
+
+        if (shopLegend) {
+            legend = shopLegend.cloneNode(true);
+            legend.classList.add('driver-delivery-legend-copy');
+        } else {
+            legend = document.createElement('div');
+            legend.className = 'driver-delivery-legend-copy';
+            legend.innerHTML = '<span>Unpaid</span><span>Paid</span><span>Due</span><span>Overpaid</span>';
+        }
+
+        /* Keep the legend in the left/header text column, immediately
+           below the Driver subtitle and above the increment controls. */
+        subtitle.insertAdjacentElement('afterend', legend);
     }
 
     function injectStyles() {
@@ -46,7 +74,7 @@
         const style = document.createElement('style');
         style.id = 'marcid-blue-delivery-ui-fixes-style';
         style.textContent = `
-            /* Use the same hover interaction as the existing action buttons. */
+            /* Match the existing action-button hover behavior. */
             #shopWalkInForm .btn-primary:hover,
             #driverDeliveriesPanel .btn-primary:hover {
                 background: var(--primary-dark) !important;
@@ -89,7 +117,21 @@
             }
 
             .driver-delivery-legend-copy {
-                margin-left: 12px;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+                margin-top: 8px;
+                margin-left: 0;
+                color: var(--text-muted);
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .driver-delivery-legend-copy span {
+                display: inline-flex;
+                align-items: center;
+                white-space: nowrap;
             }
         `;
         document.head.appendChild(style);
@@ -98,11 +140,11 @@
     function init() {
         injectStyles();
         cleanDeliveryUI();
-        copyShopLegendsToDriver();
+        addDriverLegend();
 
         const observer = new MutationObserver(function () {
             cleanDeliveryUI();
-            copyShopLegendsToDriver();
+            addDriverLegend();
         });
 
         observer.observe(document.body, {
