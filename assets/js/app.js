@@ -97,28 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
             && values.payment > 0
             && values.price === null
         ) {
-            const impliedPrice = values.payment / values.quantity;
-            const wholePrice = Math.round(impliedPrice);
-
-            if (Math.abs(impliedPrice - wholePrice) < 0.000001) {
-                if (priceInput) {
-                    priceInput.value = wholePrice;
-                    priceInput.dataset.autoPrice = 'true';
-                }
-
-                const newAmountDue = values.quantity * wholePrice;
-
-                if (output) {
-                    output.textContent = money(newAmountDue);
-                }
-
-                if (status) {
-                    status.textContent = 'Price inferred: ' + money(wholePrice) + '/gal';
-                    status.classList.add('is-valid');
-                }
-            } else if (status) {
-                status.textContent =
-                    '⚠ Payment does not divide evenly by ' + values.quantity + ' gallons.';
+            if (status) {
+                status.textContent = 'Please enter Price/Gal for this customer.';
                 status.classList.add('is-warning');
             }
         }
@@ -397,4 +377,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     computeWalkIn();
 
+});
+
+
+// ==================================================
+// DAILY CLOSING - CUSTOMER PRICE MYSQL AUTOSAVE
+// ==================================================
+// Load the dedicated customer-price autosave module.
+// The module writes customer_name + Price/Gal directly
+// to MySQL and never derives a price from payment.
+// ==================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (!document.getElementById('deliveryPaymentRows')) {
+        return;
+    }
+
+    const scriptId = 'marcid-blue-customer-autosave';
+
+    if (document.getElementById(scriptId)) {
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = '../assets/js/customer-autosave.js';
+    script.defer = true;
+    document.head.appendChild(script);
 });
