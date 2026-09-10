@@ -175,6 +175,8 @@ try {
 
     $normalizedDeliveries = [];
     $shopDeliveryPaymentsTotal = 0.0;
+    $shopDeliveryCount = count($shopDeliveries);
+
     foreach (array_merge($shopDeliveries, $driverDeliveries) as $index => $delivery) {
         if (!is_array($delivery)) continue;
         $customerName = trim((string) ($delivery['customer'] ?? ''));
@@ -199,6 +201,7 @@ try {
 
         [$customerId, $price] = $resolveCustomer($customerName, $priceRaw);
         $amountDue = money($gallons * $price);
+        $isShopDelivery = $index < $shopDeliveryCount;
 
         $normalizedDeliveries[] = [
             'customer_id' => $customerId,
@@ -209,9 +212,12 @@ try {
             'amount_due' => $amountDue,
             'payment' => $payment,
             'method' => $method,
-            'collection_location' => $index < count($shopDeliveries) ? 'Station' : 'Driver',
+            'collection_location' => $isShopDelivery ? 'Station' : 'Driver',
         ];
-        $shopDeliveryPaymentsTotal += $payment;
+
+        if ($isShopDelivery) {
+            $shopDeliveryPaymentsTotal += $payment;
+        }
     }
 
     $shopBalance = money($walkInMoney + $shopExpenseTotal - $shopDeliveryPaymentsTotal);
@@ -229,8 +235,12 @@ try {
     }
 
     $totalExpectedDeliveryMoney = money($shopDeliveryPaymentsTotal + $driverDeliveryPaymentsTotal);
+
+    // Shop-collected delivery payments count as effectively received for remittance
+    // because they are already included in the expected delivery money.
+    $effectiveReceived = money($driverMoney + $driverExpenseTotal + $shopDeliveryPaymentsTotal);
+    $remittanceDifference = money($effectiveReceived - $totalExpectedDeliveryMoney);
     $driverTotalSales = money($driverMoney + $driverExpenseTotal);
-    $remittanceDifference = money($driverTotalSales - $totalExpectedDeliveryMoney);
 
     $stmt = $pdo->prepare(
         "INSERT INTO daily_sales
