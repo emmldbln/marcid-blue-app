@@ -92,6 +92,17 @@ a { color: inherit; text-decoration: none; }
 .btn-success { background: var(--success); color: white; }
 .btn-success:hover { background: var(--success-dark); }
 
+/* Shared button motion: the same subtle lift used by the Daily Closing action controls. */
+.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-outline { background: white; color: var(--text); border: 1px solid var(--border); }
 .btn-outline:hover { background: var(--background); }
