@@ -20,24 +20,34 @@ try {
     }
 
     $dailyId = filter_input(INPUT_POST, 'daily_id', FILTER_VALIDATE_INT);
-    if (!$dailyId) {
-        failResponse('Invalid daily record.');
-    }
 
     $pdo->beginTransaction();
 
-    $stmt = $pdo->prepare(
-        "SELECT daily_id, status
-         FROM daily_records
-         WHERE daily_id = ?
-         LIMIT 1
-         FOR UPDATE"
-    );
-    $stmt->execute([$dailyId]);
-    $dailyRecord = $stmt->fetch();
+    if (!$dailyId) {
+        $stmt = $pdo->query(
+            "SELECT daily_id
+             FROM daily_records
+             WHERE status = 'Open'
+             ORDER BY daily_id DESC
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $dailyRecord = $stmt->fetch();
+        $dailyId = $dailyRecord['daily_id'] ?? null;
+    } else {
+        $stmt = $pdo->prepare(
+            "SELECT daily_id, status
+             FROM daily_records
+             WHERE daily_id = ?
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $stmt->execute([$dailyId]);
+        $dailyRecord = $stmt->fetch();
+    }
 
-    if (!$dailyRecord) {
-        throw new Exception('Daily record was not found.');
+    if (!$dailyRecord || !$dailyId) {
+        throw new Exception('No open daily record was found.');
     }
 
     if ($dailyRecord['status'] !== 'Open') {
