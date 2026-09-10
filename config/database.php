@@ -25,8 +25,7 @@ try {
         '../assets/js/customer-autosave.js',
         '../assets/js/daily-closing-autosave-live.js',
         '../assets/js/deliveries-panel.js',
-        '../assets/js/deliveries-panel-layout.js',
-        '../assets/js/deliveries-panel-ui-fixes.js'
+        '../assets/js/deliveries-panel-layout.js'
     ];
 
     scripts.forEach(function (src, index) {
