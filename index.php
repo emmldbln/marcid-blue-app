@@ -17,11 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($username === '' || $password === '') {
-
         $error = 'Please enter your username and password.';
-
     } else {
-
         $stmt = $pdo->prepare("
             SELECT
                 user_id,
@@ -36,7 +33,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
 
         $stmt->execute([$username]);
-
         $user = $stmt->fetch();
 
         if (
@@ -45,7 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user['role'] === 'Admin' &&
             password_verify($password, $user['password_hash'])
         ) {
-
             session_regenerate_id(true);
 
             $_SESSION['user_id'] = $user['user_id'];
@@ -55,11 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             header('Location: pages/home.php');
             exit;
-
-        } else {
-
-            $error = 'Invalid username or password.';
         }
+
+        $error = 'Invalid username or password.';
     }
 }
 
@@ -67,38 +60,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Marcid Blue - Login</title>
-
-    <link
-        rel="stylesheet"
-        href="assets/css/app.css"
-    >
+    <link rel="stylesheet" href="assets/css/app.css">
 
     <style>
-
         .login-page {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 24px;
-            background:
-                linear-gradient(
-                    135deg,
-                    #eaf7fd 0%,
-                    #f5f8fb 50%,
-                    #e9f9f8 100%
-                );
+            background: linear-gradient(135deg, #eaf7fd 0%, #f5f8fb 50%, #e9f9f8 100%);
         }
 
         .login-card {
@@ -166,55 +141,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: var(--text-muted);
             font-size: 12px;
         }
-
     </style>
-
 </head>
 
 <body>
-
 <div class="login-page">
-
     <div class="login-card">
-
         <div class="login-brand">
-
             <div class="login-logo">
                 <img src="assets/images/mb-logo.png" alt="Marcid Blue Logo">
             </div>
-
             <h1>Marcid Blue</h1>
-
-            <p>
-                Water Station Management System
-            </p>
-
+            <p>Water Station Management System</p>
         </div>
 
-
         <?php if ($error !== ''): ?>
-
             <div class="login-error">
                 <?= htmlspecialchars($error) ?>
             </div>
-
         <?php endif; ?>
 
-
-        <form
-            method="POST"
-            class="login-form"
-        >
-
+        <form method="POST" class="login-form">
             <div class="form-group">
-
-                <label
-                    for="username"
-                    class="form-label"
-                >
-                    Username
-                </label>
-
+                <label for="username" class="form-label">Username</label>
                 <input
                     type="text"
                     id="username"
@@ -224,19 +173,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     autocomplete="username"
                     required
                 >
-
             </div>
 
-
             <div class="form-group">
-
-                <label
-                    for="password"
-                    class="form-label"
-                >
-                    Password
-                </label>
-
+                <label for="password" class="form-label">Password</label>
                 <input
                     type="password"
                     id="password"
@@ -246,31 +186,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     autocomplete="current-password"
                     required
                 >
-
             </div>
 
-
-            <button
-                type="submit"
-                class="btn btn-primary login-button"
-            >
+            <button type="submit" class="btn btn-primary login-button">
                 Log In
             </button>
-
         </form>
-
 
         <div class="login-footer">
             Authorized access only
         </div>
-
     </div>
-
 </div>
-
-
-<script src="assets/js/app.js"></script>
-
 </body>
-
 </html>
