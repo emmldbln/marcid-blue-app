@@ -368,7 +368,6 @@
         }
 
         function setupFinalizeButton() {
-            const dailyStatusCard = findSummaryCard('Daily Status');
             const pageHeader = document.querySelector('.page-header');
             if (!pageHeader) return;
 
