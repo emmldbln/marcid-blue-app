@@ -1,32 +1,4 @@
 (function () {
-    function isGreenButton(button) {
-        const style = window.getComputedStyle(button);
-        const background = style.backgroundColor || '';
-        const match = background.match(/rgba?\(([^)]+)\)/i);
-        if (!match) return false;
-
-        const values = match[1].split(',').map(function (value) {
-            return parseFloat(value.trim());
-        });
-
-        if (values.length < 3 || values.some(function (value) { return !Number.isFinite(value); })) {
-            return false;
-        }
-
-        const red = values[0];
-        const green = values[1];
-        const blue = values[2];
-        return green > red + 10 && green > blue + 10;
-    }
-
-    function applyButtonHoverEffects() {
-        const scope = document.querySelectorAll('#shopWalkInForm button, #driverDeliveriesPanel button');
-        scope.forEach(function (button) {
-            if (!isGreenButton(button)) return;
-            button.classList.add('marcid-blue-green-action');
-        });
-    }
-
     function cleanDeliveryUI() {
         document.querySelectorAll('.driver-delivery-note, .delivery-price-note, .delivery-price-group span').forEach(function (note) {
             if (note.textContent.trim() === 'Customer price will be used when available.') {
@@ -42,16 +14,12 @@
             input.setAttribute('placeholder', '0');
             input.setAttribute('step', '5');
         });
-
-        applyButtonHoverEffects();
     }
 
     function copyShopLegendsToDriver() {
         const driverRows = document.getElementById('driverDeliveryPaymentRows');
-        if (!driverRows || driverRows.dataset.legendsCopied === '1') return;
-
         const shopRows = document.getElementById('deliveryPaymentRows');
-        if (!shopRows) return;
+        if (!driverRows || !shopRows || driverRows.dataset.legendsCopied === '1') return;
 
         const shopSection = shopRows.closest('.card, .card-body, .panel, section') || shopRows.parentElement;
         const driverSection = driverRows.closest('.driver-panel-section');
@@ -78,27 +46,44 @@
         const style = document.createElement('style');
         style.id = 'marcid-blue-delivery-ui-fixes-style';
         style.textContent = `
-            /* Match the existing blue action-button interaction on every green action button. */
-            #shopWalkInForm .marcid-blue-green-action,
-            #driverDeliveriesPanel .marcid-blue-green-action {
-                transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-            }
-
-            #shopWalkInForm .marcid-blue-green-action:hover,
-            #driverDeliveriesPanel .marcid-blue-green-action:hover {
-                background: var(--success-dark, #247d49) !important;
+            /* Use the same hover interaction as the existing action buttons. */
+            #shopWalkInForm .btn-primary:hover,
+            #driverDeliveriesPanel .btn-primary:hover {
+                background: var(--primary-dark) !important;
                 transform: translateY(-1px);
                 box-shadow: var(--shadow-sm);
             }
 
-            #shopWalkInForm .marcid-blue-green-action:active,
-            #driverDeliveriesPanel .marcid-blue-green-action:active {
+            #shopWalkInForm .btn-secondary:hover,
+            #driverDeliveriesPanel .btn-secondary:hover,
+            #shopWalkInForm .btn-success:hover,
+            #driverDeliveriesPanel .btn-success:hover {
+                background: var(--secondary-dark, var(--success-dark, #247d49)) !important;
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
+
+            #shopWalkInForm .btn-primary,
+            #driverDeliveriesPanel .btn-primary,
+            #shopWalkInForm .btn-secondary,
+            #driverDeliveriesPanel .btn-secondary,
+            #shopWalkInForm .btn-success,
+            #driverDeliveriesPanel .btn-success {
+                transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+            }
+
+            #shopWalkInForm .btn-primary:active,
+            #driverDeliveriesPanel .btn-primary:active,
+            #shopWalkInForm .btn-secondary:active,
+            #driverDeliveriesPanel .btn-secondary:active,
+            #shopWalkInForm .btn-success:active,
+            #driverDeliveriesPanel .btn-success:active {
                 transform: translateY(0);
                 box-shadow: none;
             }
 
-            #shopWalkInForm .marcid-blue-green-action:disabled,
-            #driverDeliveriesPanel .marcid-blue-green-action:disabled {
+            #shopWalkInForm .btn:disabled,
+            #driverDeliveriesPanel .btn:disabled {
                 transform: none;
                 box-shadow: none;
             }
