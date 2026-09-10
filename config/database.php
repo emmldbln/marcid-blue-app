@@ -26,7 +26,8 @@ try {
         '../assets/js/daily-closing-autosave-live.js',
         '../assets/js/deliveries-panel.js',
         '../assets/js/deliveries-panel-layout.js',
-        '../assets/js/daily-remittance-status-fix.js'
+        '../assets/js/daily-remittance-status-fix.js',
+        '../assets/js/daily-closing-reset.js'
     ];
 
     scripts.forEach(function (src, index) {
