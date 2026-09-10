@@ -97,7 +97,6 @@
                 min-width: 150px;
             }
 
-            /* Dashboard summary updates */
             .dashboard-net-profit-value {
                 display: inline-flex;
                 align-items: center;
@@ -129,21 +128,10 @@
                 letter-spacing: 2px;
             }
 
-            .dashboard-total-delivery-quantity {
-                display: flex;
-                align-items: baseline;
-                gap: 8px;
-            }
-
-            .dashboard-total-delivery-quantity .summary-value {
-                font-size: 24px;
+            .dashboard-total-delivery-quantity-value {
+                font-size: 18px;
                 font-weight: 700;
                 line-height: 1.4;
-            }
-
-            /* Put finalization at the top of the Daily Status card. */
-            .daily-status-summary-card {
-                position: relative;
             }
 
             .daily-status-finalize {
@@ -176,7 +164,6 @@
         const expectedOutput = document.getElementById('driverTotalExpectedMoney');
         const statusOutput = document.getElementById('driverRemittanceStatus');
         const balanceButton = document.getElementById('driverBalanceButton');
-        const dailyId = document.querySelector('#shopWalkInForm')?.dataset.dailyId || '';
 
         function number(value) {
             const parsed = Number.parseFloat(value);
@@ -365,25 +352,79 @@
                 if (label) label.textContent = 'Total Quantity of Deliveries';
                 if (value) {
                     value.id = 'dashboardTotalDeliveryQuantity';
+                    value.className = 'summary-value dashboard-total-delivery-quantity-value';
                     value.textContent = '0';
                 }
                 if (description) {
-                    description.textContent = 'Total Slim + Round deliveries for today';
+                    description.textContent = 'Delivered Gallons';
                 }
-                oldPriceCard.classList.add('dashboard-total-delivery-quantity');
             }
 
             const dailyStatusCard = findSummaryCard('Daily Status');
-            if (dailyStatusCard) {
-                dailyStatusCard.classList.add('daily-status-summary-card');
+            if (dailyStatusCard && !document.getElementById('driverCloseDayButton')) {
+                const finalizeWrap = document.createElement('div');
+                finalizeWrap.className = 'daily-status-finalize';
 
-                const existingFinalize = document.getElementById('driverCloseDayButton');
-                if (existingFinalize) {
-                    const finalizeWrap = document.createElement('div');
-                    finalizeWrap.className = 'daily-status-finalize';
-                    finalizeWrap.appendChild(existingFinalize);
-                    dailyStatusCard.insertBefore(finalizeWrap, dailyStatusCard.firstChild);
-                }
+                const finalizeButton = document.createElement('button');
+                finalizeButton.type = 'button';
+                finalizeButton.className = 'btn btn-primary';
+                finalizeButton.id = 'driverCloseDayButton';
+                finalizeButton.textContent = 'Finalize & Close Day';
+                finalizeWrap.appendChild(finalizeButton);
+                dailyStatusCard.insertBefore(finalizeWrap, dailyStatusCard.firstChild);
+
+                finalizeButton.addEventListener('click', function () {
+                    const values = balance();
+                    const dailyId = document.querySelector('#shopWalkInForm')?.dataset.dailyId || '';
+
+                    if (!dailyId) {
+                        alert('No open daily record was found.');
+                        return;
+                    }
+
+                    const confirmed = window.confirm(
+                        'Finalize and close this day? This will lock the daily record until it is reopened from Daily Records.'
+                    );
+                    if (!confirmed) return;
+
+                    finalizeButton.disabled = true;
+                    balanceButton.disabled = true;
+
+                    const body = new URLSearchParams();
+                    body.set('daily_id', dailyId);
+                    body.set('driver_money_received', String(values.moneyReceived));
+                    body.set('driver_expenses', String(values.driverExpenses));
+                    body.set('driver_sales', String(values.totalSales));
+                    body.set('expected_sales', String(values.expected));
+                    body.set('remittance_difference', String(values.totalSales - values.expected));
+
+                    fetch('close-daily-record.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            Accept: 'application/json'
+                        },
+                        body: body.toString()
+                    })
+                        .then(function (response) {
+                            return response.json().then(function (result) {
+                                if (!response.ok || !result.success) {
+                                    throw new Error(result.message || 'Unable to close the day.');
+                                }
+                                return result;
+                            });
+                        })
+                        .then(function () {
+                            alert('Day finalized and closed successfully.');
+                            window.location.reload();
+                        })
+                        .catch(function (error) {
+                            console.error(error);
+                            alert(error.message || 'Unable to close the day.');
+                            finalizeButton.disabled = false;
+                            balanceButton.disabled = false;
+                        });
+                });
             }
 
             updateDashboardSummary();
