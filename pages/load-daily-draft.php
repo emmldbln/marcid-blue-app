@@ -12,32 +12,38 @@ header('Content-Type: application/json; charset=utf-8');
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         http_response_code(405);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Method not allowed.'
-        ]);
+        echo json_encode(['success' => false, 'message' => 'Method not allowed.']);
         exit;
     }
 
     $dailyId = filter_input(INPUT_GET, 'daily_id', FILTER_VALIDATE_INT);
 
     if (!$dailyId) {
-        throw new Exception('Invalid daily record.');
+        $stmt = $pdo->query(
+            "SELECT daily_id, business_date
+             FROM daily_records
+             WHERE status = 'Open'
+             ORDER BY daily_id DESC
+             LIMIT 1"
+        );
+        $dailyRecord = $stmt->fetch();
+    } else {
+        $stmt = $pdo->prepare(
+            "SELECT daily_id, business_date
+             FROM daily_records
+             WHERE daily_id = ?
+               AND status = 'Open'
+             LIMIT 1"
+        );
+        $stmt->execute([$dailyId]);
+        $dailyRecord = $stmt->fetch();
     }
-
-    $stmt = $pdo->prepare(
-        "SELECT daily_id, business_date
-         FROM daily_records
-         WHERE daily_id = ?
-           AND status = 'Open'
-         LIMIT 1"
-    );
-    $stmt->execute([$dailyId]);
-    $dailyRecord = $stmt->fetch();
 
     if (!$dailyRecord) {
-        throw new Exception('The selected daily record is not open.');
+        throw new Exception('No open daily record is available.');
     }
+
+    $dailyId = (int) $dailyRecord['daily_id'];
 
     $tableExists = $pdo->query(
         "SHOW TABLES LIKE 'daily_closing_drafts'"
@@ -47,7 +53,7 @@ try {
         echo json_encode([
             'success' => true,
             'has_draft' => false,
-            'daily_id' => (int) $dailyId,
+            'daily_id' => $dailyId,
         ]);
         exit;
     }
@@ -65,7 +71,7 @@ try {
         echo json_encode([
             'success' => true,
             'has_draft' => false,
-            'daily_id' => (int) $dailyId,
+            'daily_id' => $dailyId,
         ]);
         exit;
     }
@@ -79,7 +85,7 @@ try {
     echo json_encode([
         'success' => true,
         'has_draft' => true,
-        'daily_id' => (int) $dailyId,
+        'daily_id' => $dailyId,
         'updated_at' => $draftRow['updated_at'],
         'draft' => $draft,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
