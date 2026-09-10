@@ -14,6 +14,7 @@
             actions.parentNode.insertBefore(status, actions.nextSibling);
         }
 
+        const legacyStorageKey = 'marcidBlueDailyClosingDraft_' + (window.marcidBlueBusinessDate || '<?= htmlspecialchars($businessDate ?? 'none') ?>');
         let dailyId = '';
         let timer = null;
         let saving = false;
@@ -29,6 +30,34 @@
 
         function rows(selector, root = document) {
             return Array.from(root.querySelectorAll(selector));
+        }
+
+        function number(value) {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function currency(value) {
+            return '₱' + Number(value || 0).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function clearLegacyDraft() {
+            try {
+                Object.keys(localStorage).forEach(function (key) {
+                    if (key.indexOf('marcidBlueDailyClosingDraft_') === 0) {
+                        localStorage.removeItem(key);
+                    }
+                });
+            } catch (error) {
+                console.warn('Unable to clear legacy daily closing draft.', error);
+            }
+        }
+
+        function clearLegacyDraftSoon() {
+            setTimeout(clearLegacyDraft, 0);
         }
 
         function collect() {
@@ -92,6 +121,73 @@
             row.className = 'driver-delivery-row';
             row.innerHTML = '<div class="form-group"><input type="text" class="form-input driver-delivery-customer" maxlength="100" autocomplete="off"></div><div class="form-group"><input type="number" class="form-input driver-delivery-slim" min="0" step="1"></div><div class="form-group"><input type="number" class="form-input driver-delivery-round" min="0" step="1"></div><div class="form-group"><input type="number" class="form-input driver-delivery-payment" min="0" step="0.01"></div><div class="form-group"><input type="number" class="form-input driver-delivery-price" min="0" step="0.01"></div><div class="form-group"><select class="form-input driver-delivery-method"><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div><div class="form-group"><div class="driver-delivery-balance">—</div></div><button type="button" class="driver-delivery-remove">×</button>';
             return row;
+        }
+
+        function updateShopDeliveryBalance(row) {
+            const slim = Math.max(0, Math.trunc(number(row.querySelector('.delivery-slim')?.value)));
+            const round = Math.max(0, Math.trunc(number(row.querySelector('.delivery-round')?.value)));
+            const payment = number(row.querySelector('.delivery-payment')?.value);
+            const price = number(row.querySelector('.delivery-price-input')?.value);
+            const balance = row.querySelector('.delivery-balance');
+            if (!balance) return;
+
+            balance.className = 'delivery-balance delivery-balance-neutral';
+            const gallons = slim + round;
+            if (gallons <= 0 || price <= 0) {
+                balance.textContent = '—';
+                return;
+            }
+
+            const difference = gallons * price - payment;
+            if (payment <= 0.005) {
+                balance.className = 'delivery-balance delivery-balance-unpaid';
+                balance.textContent = currency(gallons * price) + ' Unpaid';
+            } else if (Math.abs(difference) <= 0.005) {
+                balance.className = 'delivery-balance delivery-balance-paid';
+                balance.textContent = '✓ Paid';
+            } else if (difference > 0) {
+                balance.className = 'delivery-balance delivery-balance-due';
+                balance.textContent = currency(difference) + ' Due';
+            } else {
+                balance.className = 'delivery-balance delivery-balance-overpaid';
+                balance.textContent = currency(Math.abs(difference)) + ' Overpaid';
+            }
+        }
+
+        function updateDriverDeliveryBalance(row) {
+            const slim = Math.max(0, Math.trunc(number(row.querySelector('.driver-delivery-slim')?.value)));
+            const round = Math.max(0, Math.trunc(number(row.querySelector('.driver-delivery-round')?.value)));
+            const payment = number(row.querySelector('.driver-delivery-payment')?.value);
+            const price = number(row.querySelector('.driver-delivery-price')?.value);
+            const balance = row.querySelector('.driver-delivery-balance');
+            if (!balance) return;
+
+            balance.className = 'driver-delivery-balance driver-delivery-balance-neutral';
+            const gallons = slim + round;
+            if (gallons <= 0 || price <= 0) {
+                balance.textContent = '—';
+                return;
+            }
+
+            const difference = gallons * price - payment;
+            if (payment <= 0.005) {
+                balance.className = 'driver-delivery-balance driver-delivery-balance-unpaid';
+                balance.textContent = currency(gallons * price) + ' Unpaid';
+            } else if (Math.abs(difference) <= 0.005) {
+                balance.className = 'driver-delivery-balance driver-delivery-balance-paid';
+                balance.textContent = '✓ Paid';
+            } else if (difference > 0) {
+                balance.className = 'driver-delivery-balance driver-delivery-balance-due';
+                balance.textContent = currency(difference) + ' Due';
+            } else {
+                balance.className = 'driver-delivery-balance driver-delivery-balance-overpaid';
+                balance.textContent = currency(Math.abs(difference)) + ' Overpaid';
+            }
+        }
+
+        function refreshAllBalances() {
+            rows('#deliveryPaymentRows .delivery-payment-row').forEach(updateShopDeliveryBalance);
+            rows('.driver-delivery-row', driverPanel || document).forEach(updateDriverDeliveryBalance);
         }
 
         function restoreShop(draft) {
@@ -170,28 +266,23 @@
 
         function recalculateAll() {
             document.getElementById('shopComputeButton')?.click();
-
-            document.querySelectorAll('#deliveryPaymentRows .delivery-payment-row').forEach(row => {
-                row.querySelector('.delivery-payment')?.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+            refreshAllBalances();
 
             const driver = document.getElementById('driverDeliveriesPanel');
             if (driver) {
-                driver.querySelectorAll('.driver-delivery-row').forEach(row => {
-                    row.querySelector('.driver-delivery-payment')?.dispatchEvent(new Event('input', { bubbles: true }));
-                });
                 document.getElementById('driverBalanceButton')?.click();
             }
 
             document.getElementById('driverDeliveriesPanel')?.dispatchEvent(new Event('input', { bubbles: true }));
+            refreshAllBalances();
             window.dispatchEvent(new CustomEvent('marcidBlueDailyDraftRestored'));
         }
 
         function announceRestoredState() {
-            // The dashboard layout script can load after this autosave script.
-            // Emit the restore event again after the current and next event loops
-            // so the Net Profit eye receives the restored amount automatically.
             const announce = function () {
+                refreshAllBalances();
+                document.getElementById('shopComputeButton')?.click();
+                document.getElementById('driverBalanceButton')?.click();
                 window.dispatchEvent(new CustomEvent('marcidBlueDailyDraftRestored'));
             };
             announce();
@@ -202,6 +293,7 @@
 
         async function loadDraft() {
             try {
+                clearLegacyDraft();
                 const response = await fetch('load-daily-draft.php', { cache: 'no-store', headers: { Accept: 'application/json' } });
                 const result = await response.json();
                 if (!response.ok || !result.success) throw new Error(result.message || 'Unable to load draft.');
@@ -217,6 +309,10 @@
                     announceRestoredState();
                     setStatus('✓ Draft restored from MySQL');
                 } else {
+                    restoring = true;
+                    restoreShop({ walk_in_money: '', expenses: [], deliveries: [] });
+                    restoreDriver({ driver: { money_received: '', expenses: [], deliveries: [] } });
+                    restoring = false;
                     initialized = true;
                     recalculateAll();
                     announceRestoredState();
@@ -225,6 +321,7 @@
             } catch (error) {
                 console.error(error);
                 initialized = true;
+                refreshAllBalances();
                 setStatus('Draft load failed: ' + error.message, true);
             }
         }
@@ -251,6 +348,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) throw new Error(result.message || 'Unable to save draft.');
+                clearLegacyDraft();
                 setStatus('✓ Draft saved to MySQL');
             } catch (error) {
                 console.error(error);
@@ -272,6 +370,8 @@
         function onFormChange() {
             if (restoring) return;
             document.getElementById('shopComputeButton')?.click();
+            refreshAllBalances();
+            clearLegacyDraftSoon();
             schedule();
         }
 
@@ -282,11 +382,15 @@
             driverPanel.addEventListener('input', function () {
                 if (restoring) return;
                 document.getElementById('driverBalanceButton')?.click();
+                refreshAllBalances();
+                clearLegacyDraftSoon();
                 schedule();
             });
             driverPanel.addEventListener('change', function () {
                 if (restoring) return;
                 document.getElementById('driverBalanceButton')?.click();
+                refreshAllBalances();
+                clearLegacyDraftSoon();
                 schedule();
             });
         }
@@ -294,9 +398,10 @@
         window.addEventListener('marcidBlueDailyDraftRestored', function () {
             document.getElementById('shopComputeButton')?.click();
             document.getElementById('driverBalanceButton')?.click();
-            document.getElementById('driverDeliveriesPanel')?.dispatchEvent(new Event('input', { bubbles: true }));
+            refreshAllBalances();
         });
 
+        clearLegacyDraft();
         loadDraft();
     }
 
