@@ -864,7 +864,13 @@ $otherSalesValue =
     .delivery-payment-rows {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 0;
+
+        padding: 0 16px;
+
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
     }
 
 
@@ -882,11 +888,16 @@ $otherSalesValue =
         gap: 14px;
         align-items: end;
 
-        padding: 16px;
+        padding: 16px 0;
 
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .expense-row + .expense-row,
+    .delivery-payment-row + .delivery-payment-row {
+        border-top: 1px solid var(--border);
     }
 
 
@@ -908,17 +919,25 @@ $otherSalesValue =
         gap: 12px;
         align-items: end;
 
-        padding: 16px;
+        padding: 16px 0;
 
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
+        background: transparent;
+        border: 0;
+        border-radius: 0;
     }
 
 
     /* =========================================================
        FORM GROUPS
        ========================================================= */
+
+    @media (min-width: 901px) {
+        .expense-row:not(:first-child) .form-label,
+        .delivery-payment-row:not(:first-child) .form-label {
+            display: none;
+        }
+    }
+
 
     .expense-row .form-group,
     .delivery-payment-row .form-group {
