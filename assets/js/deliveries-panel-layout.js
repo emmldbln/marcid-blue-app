@@ -129,7 +129,7 @@
             }
 
             .dashboard-total-delivery-quantity-value {
-                font-size: 18px;
+                font-size: 27px;
                 font-weight: 700;
                 line-height: 1.4;
             }
@@ -352,7 +352,7 @@
                 const value = oldPriceCard.querySelector('.summary-value');
                 const description = oldPriceCard.querySelector('.summary-description');
 
-                if (label) label.textContent = 'Total Quantity of Deliveries';
+                if (label) label.textContent = 'Total Deliveries for Today';
                 if (value) {
                     value.id = 'dashboardTotalDeliveryQuantity';
                     value.className = 'summary-value dashboard-total-delivery-quantity-value';

@@ -1492,7 +1492,7 @@ $otherSalesValue =
                         </div>
                         <div class="card summary-card">
                             <div class="summary-label">
-                                Shop Customers
+                                Total Walk-in For Today
                             </div>
                             <div
                                 class="summary-value"
