@@ -50,21 +50,53 @@ try {
         throw new Exception('The selected daily record is not open.');
     }
 
-    /*
-     * This endpoint intentionally stores only the current form state.
-     * It does NOT insert deliveries, payments, or expenses into their
-     * permanent tables, so repeated autosaves cannot create duplicates.
-     *
-     * The draft is kept in the browser for now. This endpoint validates
-     * the active daily record and provides a safe server-side boundary
-     * for the next MySQL draft-storage step.
-     */
+    /* Keep drafts separate from permanent accounting records. */
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS daily_closing_drafts (
+            draft_id INT NOT NULL AUTO_INCREMENT,
+            daily_id INT NOT NULL,
+            draft_data LONGTEXT NOT NULL,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (draft_id),
+            UNIQUE KEY uq_daily_closing_draft_daily_id (daily_id),
+            KEY idx_daily_closing_draft_daily_id (daily_id),
+            CONSTRAINT fk_daily_closing_draft_daily
+                FOREIGN KEY (daily_id)
+                REFERENCES daily_records (daily_id)
+                ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+    );
+
+    $encodedDraft = json_encode(
+        $draft,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+
+    if ($encodedDraft === false) {
+        throw new Exception('Unable to encode daily draft.');
+    }
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO daily_closing_drafts
+            (daily_id, draft_data)
+         VALUES
+            (?, ?)
+         ON DUPLICATE KEY UPDATE
+            draft_data = VALUES(draft_data),
+            updated_at = CURRENT_TIMESTAMP"
+    );
+
+    $stmt->execute([
+        $dailyId,
+        $encodedDraft,
+    ]);
 
     echo json_encode([
         'success' => true,
         'daily_id' => (int) $dailyRecord['daily_id'],
         'business_date' => $dailyRecord['business_date'],
-        'message' => 'Daily draft accepted.'
+        'message' => 'Daily draft saved to MySQL.'
     ]);
 } catch (Throwable $e) {
     http_response_code(400);
