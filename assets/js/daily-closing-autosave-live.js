@@ -187,6 +187,19 @@
             window.dispatchEvent(new CustomEvent('marcidBlueDailyDraftRestored'));
         }
 
+        function announceRestoredState() {
+            // The dashboard layout script can load after this autosave script.
+            // Emit the restore event again after the current and next event loops
+            // so the Net Profit eye receives the restored amount automatically.
+            const announce = function () {
+                window.dispatchEvent(new CustomEvent('marcidBlueDailyDraftRestored'));
+            };
+            announce();
+            setTimeout(announce, 0);
+            setTimeout(announce, 150);
+            setTimeout(announce, 500);
+        }
+
         async function loadDraft() {
             try {
                 const response = await fetch('load-daily-draft.php', { cache: 'no-store', headers: { Accept: 'application/json' } });
@@ -201,10 +214,12 @@
                     restoring = false;
                     initialized = true;
                     recalculateAll();
+                    announceRestoredState();
                     setStatus('✓ Draft restored from MySQL');
                 } else {
                     initialized = true;
                     recalculateAll();
+                    announceRestoredState();
                     setStatus('MySQL draft autosave ready');
                 }
             } catch (error) {
