@@ -1,23 +1,38 @@
 (function () {
-    function init() {
-        const form = document.getElementById('shopWalkInForm');
+    function clearLegacyDrafts() {
+        try {
+            Object.keys(localStorage).forEach(function (key) {
+                if (key.indexOf('marcidBlueDailyClosingDraft_') === 0) {
+                    localStorage.removeItem(key);
+                }
+            });
+        } catch (error) {
+            console.warn('Unable to clear legacy browser draft:', error);
+        }
+    }
+
+    function addResetButton() {
+        if (document.getElementById('dailyClosingResetButton')) return true;
+
         const pageHeader = document.querySelector('.page-header');
-        if (!form || !pageHeader) return;
+        if (!pageHeader) return false;
 
-        const dailyId = form.dataset.dailyId || '';
-        if (!dailyId || pageHeader.querySelector('.daily-closing-reset-button')) return;
+        let headerRow = pageHeader.querySelector('.daily-closing-header-row');
 
-        const headerRow = pageHeader.querySelector('.daily-closing-header-row');
-        if (!headerRow) return;
+        // The layout module creates this row. If it has not created it yet,
+        // wait for the next DOM mutation instead of giving up.
+        if (!headerRow) return false;
 
         const finalizeButton = headerRow.querySelector('.daily-closing-finalize-button');
-        if (!finalizeButton) return;
+        if (!finalizeButton) return false;
 
         const resetButton = document.createElement('button');
         resetButton.type = 'button';
+        resetButton.id = 'dailyClosingResetButton';
         resetButton.className = 'btn btn-secondary daily-closing-reset-button';
         resetButton.textContent = 'Reset';
-        resetButton.title = 'Clear all Daily Closing data for this open day';
+        resetButton.title = 'Clear all data for the current open day';
+        resetButton.setAttribute('aria-label', 'Reset Daily Closing');
 
         const actions = document.createElement('div');
         actions.className = 'daily-closing-header-actions';
@@ -31,24 +46,25 @@
 
         resetButton.addEventListener('click', async function () {
             const confirmed = window.confirm(
-                'Reset this day completely?\n\nAll fields will be cleared and any autosaved or already-saved data for this open day will be permanently deleted. This cannot be undone.'
+                'Reset this day completely?\n\n' +
+                'All fields will be cleared and any autosaved or already-saved data for the current open day will be permanently deleted. This cannot be undone.'
             );
+
             if (!confirmed) return;
 
             resetButton.disabled = true;
             finalizeButton.disabled = true;
 
             try {
-                const body = new URLSearchParams();
-                body.set('daily_id', dailyId);
-
+                // Do not depend on a form data attribute. The PHP endpoint can
+                // identify the current open day by itself.
                 const response = await fetch('reset-daily-closing.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                         Accept: 'application/json'
                     },
-                    body: body.toString()
+                    body: ''
                 });
 
                 const result = await response.json();
@@ -56,15 +72,16 @@
                     throw new Error(result.message || 'Unable to reset the day.');
                 }
 
-                // Remove every legacy browser draft so it cannot restore old values.
-                Object.keys(localStorage).forEach(function (key) {
-                    if (key.indexOf('marcidBlueDailyClosingDraft_') === 0) {
-                        localStorage.removeItem(key);
-                    }
-                });
+                clearLegacyDrafts();
 
-                // Reload from the clean MySQL state. The autosave module will find
-                // no draft and leave every field empty/zero.
+                // Tell the autosave module that the current draft was deliberately
+                // deleted, then reload from the clean MySQL state.
+                try {
+                    window.sessionStorage.setItem('marcidBlueDailyClosingJustReset', '1');
+                } catch (error) {
+                    console.warn('Unable to set reset session flag:', error);
+                }
+
                 window.location.reload();
             } catch (error) {
                 console.error(error);
@@ -75,8 +92,12 @@
         });
 
         const style = document.createElement('style');
+        style.id = 'daily-closing-reset-style';
         style.textContent = `
-            .daily-closing-header-actions .daily-closing-finalize-button {
+            .daily-closing-header-actions {
+                flex: 0 0 auto;
+            }
+            .daily-closing-header-actions .btn {
                 margin: 0;
             }
             .daily-closing-reset-button {
@@ -86,6 +107,7 @@
                 .daily-closing-header-actions {
                     flex-direction: column;
                     align-items: stretch !important;
+                    width: 100%;
                 }
                 .daily-closing-header-actions .btn {
                     width: 100%;
@@ -93,7 +115,32 @@
             }
         `;
         document.head.appendChild(style);
+
+        return true;
     }
+
+    function init() {
+        if (addResetButton()) return;
+
+        // The other daily-closing scripts are loaded dynamically. Observe the
+        // page until Finalize & Close Day exists, then insert Reset beside it.
+        const observer = new MutationObserver(function () {
+            if (addResetButton()) {
+                observer.disconnect();
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        window.setTimeout(function () {
+            if (addResetButton()) observer.disconnect();
+        }, 3000);
+    }
+
+    clearLegacyDrafts();
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });
