@@ -12,7 +12,7 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 
-    /* Load Daily Closing autosave modules only on that page. */
+    /* Load Daily Closing autosave and panel modules only on that page. */
     register_shutdown_function(function (): void {
         if (basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) !== 'daily-closing.php') {
             return;
@@ -23,7 +23,8 @@ try {
 (function () {
     var scripts = [
         '../assets/js/customer-autosave.js',
-        '../assets/js/daily-closing-autosave-live.js'
+        '../assets/js/daily-closing-autosave-live.js',
+        '../assets/js/deliveries-panel.js'
     ];
 
     scripts.forEach(function (src, index) {
