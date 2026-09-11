@@ -21,6 +21,13 @@ Customer Price / Gallon Autosave
             };
         }
 
+        function unlockPriceFields() {
+            deliveryRows.querySelectorAll('.delivery-price-input').forEach(price => {
+                price.readOnly = false;
+                price.removeAttribute('readonly');
+            });
+        }
+
         function findCustomerOption(name) {
             const list = document.getElementById('shopDeliveryCustomerList');
             if (!list) return null;
@@ -68,6 +75,8 @@ Customer Price / Gallon Autosave
                 }
 
                 price.value = Number(result.gallon_price).toFixed(2).replace(/\.00$/, '');
+                price.readOnly = false;
+                price.removeAttribute('readonly');
                 price.dataset.saved = '1';
                 addCustomerToList(result.customer_name);
             } catch (error) {
@@ -90,10 +99,20 @@ Customer Price / Gallon Autosave
             saveTimers.set(row, timer);
         }
 
+        // Existing customers may have been marked readonly by the page's
+        // customer-selection logic. Always keep Price/Gal editable.
+        unlockPriceFields();
+
         deliveryRows.addEventListener('input', event => {
             const row = event.target.closest('.delivery-payment-row');
             if (!row) return;
+
             if (event.target.classList.contains('delivery-customer') || event.target.classList.contains('delivery-price-input')) {
+                const price = row.querySelector('.delivery-price-input');
+                if (price) {
+                    price.readOnly = false;
+                    price.removeAttribute('readonly');
+                }
                 scheduleSave(row);
             }
         });
@@ -101,7 +120,13 @@ Customer Price / Gallon Autosave
         deliveryRows.addEventListener('change', event => {
             const row = event.target.closest('.delivery-payment-row');
             if (!row) return;
+
             if (event.target.classList.contains('delivery-customer') || event.target.classList.contains('delivery-price-input')) {
+                const price = row.querySelector('.delivery-price-input');
+                if (price) {
+                    price.readOnly = false;
+                    price.removeAttribute('readonly');
+                }
                 scheduleSave(row);
             }
         });
