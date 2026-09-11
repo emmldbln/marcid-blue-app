@@ -204,6 +204,28 @@
             return total;
         }
 
+        function getTotalExpectedDeliveryMoney() {
+            let total = 0;
+
+            document.querySelectorAll('#deliveryPaymentRows .delivery-payment-row').forEach(function (row) {
+                const slim = number(row.querySelector('.delivery-slim')?.value);
+                const round = number(row.querySelector('.delivery-round')?.value);
+                const price = number(row.querySelector('.delivery-price-input')?.value);
+
+                total += (slim + round) * price;
+            });
+
+            card.querySelectorAll('.driver-delivery-row').forEach(function (row) {
+                const slim = number(row.querySelector('.driver-delivery-slim')?.value);
+                const round = number(row.querySelector('.driver-delivery-round')?.value);
+                const price = number(row.querySelector('.driver-delivery-price')?.value);
+
+                total += (slim + round) * price;
+            });
+
+            return total;
+        }
+
         function getShopMoneyReceived() {
             return number(document.getElementById('walk_in_money')?.value);
         }
@@ -228,7 +250,7 @@
             const moneyReceived = number(moneyInput?.value);
             const driverExpenses = getDriverExpenses();
             const totalSales = moneyReceived + driverExpenses;
-            const expected = getShopPayments() + getDriverPayments();
+            const expected = getTotalExpectedDeliveryMoney();
 
             salesOutput.textContent = currency(totalSales);
             expectedOutput.textContent = currency(expected);
