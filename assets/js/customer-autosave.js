@@ -38,23 +38,6 @@ Customer Price / Gallon Autosave
             list.appendChild(option);
         }
 
-        function showStatus(row, message, success = true) {
-            let status = row.querySelector('.customer-autosave-status');
-            if (!status) {
-                const priceGroup = row.querySelector('.delivery-price-group');
-                if (!priceGroup) return;
-                status = document.createElement('small');
-                status.className = 'customer-autosave-status';
-                status.style.display = 'block';
-                status.style.marginTop = '6px';
-                status.style.fontSize = '12px';
-                priceGroup.appendChild(status);
-            }
-            status.textContent = message;
-            status.classList.toggle('is-success', success);
-            status.classList.toggle('is-error', !success);
-        }
-
         async function saveCustomer(row) {
             if (!row || savingRows.has(row)) return;
             const { customer, price } = getFields(row);
@@ -66,10 +49,8 @@ Customer Price / Gallon Autosave
 
             const numericPrice = Number(priceValue);
             if (!Number.isFinite(numericPrice) || numericPrice <= 0) return;
-            if (price.readOnly) return;
 
             savingRows.add(row);
-            showStatus(row, 'Saving customer price…');
 
             try {
                 const body = new URLSearchParams();
@@ -87,13 +68,10 @@ Customer Price / Gallon Autosave
                 }
 
                 price.value = Number(result.gallon_price).toFixed(2).replace(/\.00$/, '');
-                price.readOnly = true;
                 price.dataset.saved = '1';
                 addCustomerToList(result.customer_name);
-                showStatus(row, '✓ Customer price saved to MySQL');
             } catch (error) {
                 console.error('Customer autosave failed:', error);
-                showStatus(row, 'Unable to save customer price: ' + error.message, false);
             } finally {
                 savingRows.delete(row);
             }
@@ -103,10 +81,12 @@ Customer Price / Gallon Autosave
             if (!row) return;
             const existingTimer = saveTimers.get(row);
             if (existingTimer) clearTimeout(existingTimer);
+
+            // Give the user enough time to finish typing a multi-digit Price/Gal.
             const timer = setTimeout(() => {
                 saveTimers.delete(row);
                 saveCustomer(row);
-            }, 700);
+            }, 1500);
             saveTimers.set(row, timer);
         }
 
