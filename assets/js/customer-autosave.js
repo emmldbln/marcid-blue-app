@@ -12,7 +12,7 @@ Customer Price/Gal is always editable.
 */
 
 (function () {
-    const SAVE_DELAY = 1500;
+    const SAVE_DELAY = 15000; // 15 seconds
     const saveTimers = new WeakMap();
     const savingRows = new WeakSet();
 
