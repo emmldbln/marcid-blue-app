@@ -21,14 +21,14 @@
         const salesGroup = document.createElement('div');
         salesGroup.className = 'driver-summary-field';
         salesGroup.innerHTML = `
-            <div class="summary-label">Total Sales for Deliver</div>
+            <div class="summary-label">Total Sales of Delivery</div>
             <div class="summary-value" id="driverTotalDeliverySales">₱0.00</div>
         `;
 
         const expectedGroup = document.createElement('div');
         expectedGroup.className = 'driver-summary-field';
         expectedGroup.innerHTML = `
-            <div class="summary-label">Total Expected Money for Delivery</div>
+            <div class="summary-label">Total Expected Money of Delivery</div>
             <div class="summary-value" id="driverTotalExpectedMoney">₱0.00</div>
         `;
 
