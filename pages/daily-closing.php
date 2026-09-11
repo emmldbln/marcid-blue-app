@@ -360,16 +360,41 @@ if (
             $stmt->execute([$customerName]);
             $customer = $stmt->fetch();
 
-            if ($customer) {
-                $customerId = (int) $customer['customer_id'];
-                $pricePerGallon = (float) $customer['gallon_price'];
+           if ($customer) {
+    $customerId = (int) $customer['customer_id'];
 
-                if ($pricePerGallon <= 0) {
-                    throw new Exception(
-                        'This customer does not have a valid Price/Gal saved. Please update the customer price first.'
-                    );
-                }
-            } else {
+    /*
+     * Existing customer:
+     * Use the Price/Gal entered in this delivery.
+     */
+    if (
+        $priceRaw === ''
+        || !is_numeric($priceRaw)
+        || (float) $priceRaw <= 0
+    ) {
+        throw new Exception(
+            'Please enter a valid Price/Gal for every delivery.'
+        );
+    }
+
+    $pricePerGallon = (float) $priceRaw;
+
+    /*
+     * Save the updated customer price
+     * for future transactions.
+     */
+    $stmt = $pdo->prepare(
+        "UPDATE customers
+         SET gallon_price = ?
+         WHERE customer_id = ?"
+    );
+
+    $stmt->execute([
+        $pricePerGallon,
+        $customerId,
+    ]);
+}
+            else {
                 if (
                     $priceRaw === ''
                     || !is_numeric($priceRaw)
@@ -1843,7 +1868,7 @@ $otherSalesValue =
                                                     class="form-input delivery-price-input"
                                                     min="0"
                                                     step="0.01"
-                                                    placeholder="Required for new customer"
+                                                    placeholder="0.00"
                                                 >
                                             </div>
                                             <div class="form-group">
@@ -2141,67 +2166,59 @@ $otherSalesValue =
        ========================================================= */
 
     function setPriceFromCustomer(row) {
-        if (!row) {
-            return;
-        }
+    if (!row) {
+        return;
+    }
 
-        const customerInput =
-            row.querySelector('.delivery-customer');
+    const customerInput =
+        row.querySelector('.delivery-customer');
 
-        const priceInput =
-            row.querySelector('.delivery-price-input');
+    const priceInput =
+        row.querySelector('.delivery-price-input');
 
-        const priceNote =
-            row.querySelector('.delivery-price-note');
+    if (!customerInput || !priceInput) {
+        return;
+    }
 
-        if (!customerInput || !priceInput) {
-            return;
-        }
+    const name =
+        customerInput.value
+            .trim()
+            .toLowerCase();
 
-        const name =
-            customerInput.value
-                .trim()
-                .toLowerCase();
+    const account =
+        customerAccounts[name];
 
-        const account =
-            customerAccounts[name];
-
-        if (
-            account
-            && Number(account.gallon_price) > 0
-        ) {
-            priceInput.value =
-                Number(account.gallon_price)
-                    .toFixed(2)
-                    .replace(/\.00$/, '');
-
-            priceInput.readOnly = true;
-            priceInput.dataset.saved = '1';
-
-            if (priceNote) {
-                priceNote.textContent =
-                    'Saved customer price';
-            }
-
-            return;
-        }
-
-        /*
-         * New customer.
-         * Allow the user to enter the price manually.
-         */
-        if (priceInput.dataset.saved === '1') {
-            priceInput.value = '';
-        }
+    /*
+     * Existing customer:
+     * Load the saved SQL price as the starting value,
+     * but keep the Price/Gal field editable.
+     */
+    if (
+        account
+        && Number(account.gallon_price) > 0
+    ) {
+        priceInput.value =
+            Number(account.gallon_price)
+                .toFixed(2)
+                .replace(/\.00$/, '');
 
         priceInput.readOnly = false;
-        priceInput.dataset.saved = '0';
+        priceInput.dataset.saved = '1';
 
-        if (priceNote) {
-            priceNote.textContent =
-                'Enter price for new customer';
-        }
+        return;
     }
+
+    /*
+     * New customer:
+     * Allow the user to enter the price manually.
+     */
+    if (priceInput.dataset.saved === '1') {
+        priceInput.value = '';
+    }
+
+    priceInput.readOnly = false;
+    priceInput.dataset.saved = '0';
+ }
 
 
     /* =========================================================
@@ -2238,11 +2255,7 @@ $otherSalesValue =
             return;
         }
 
-        /*
-         * Set saved customer price first.
-         */
-        setPriceFromCustomer(row);
-
+    
         const slim =
             parseInt(
                 slimInput?.value || '0',
@@ -2438,7 +2451,7 @@ $otherSalesValue =
                     class="form-input delivery-price-input"
                     min="0"
                     step="0.01"
-                    placeholder="Required for new customer"
+                    placeholder="0.00"
                 >
             </div>
 
