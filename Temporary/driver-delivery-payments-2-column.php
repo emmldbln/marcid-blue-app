@@ -15,25 +15,83 @@ requireAdmin();
 /* =========================================================
    DRIVER DELIVERY PAYMENTS - 2 COLUMN TEST
    ========================================================= */
-.driver-deliveries-card{margin-top:24px}.driver-panel-section{margin-top:28px;padding-top:24px;border-top:1px solid var(--border)}.driver-panel-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}.driver-panel-title{color:var(--text);font-size:16px;font-weight:700;line-height:1.4}.driver-panel-subtitle{margin-top:4px;color:var(--text-muted);font-size:13px;line-height:1.5}
+.driver-deliveries-card{margin-top:24px}
+.driver-panel-section{margin-top:28px;padding-top:24px;border-top:1px solid var(--border)}
+.driver-panel-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px}
+.driver-panel-title{color:var(--text);font-size:16px;font-weight:700;line-height:1.4}
+.driver-panel-subtitle{margin-top:4px;color:var(--text-muted);font-size:13px;line-height:1.5}
+
 /* =========================================================
    LEGEND / CONTROLS
    ========================================================= */
-.driver-delivery-legend-copy{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px;color:var(--text-muted);font-size:12px;line-height:1.4}.driver-delivery-legend-copy span{display:inline-flex;align-items:center;white-space:nowrap}.driver-delivery-legend-copy .legend-label{color:var(--text);font-weight:700}.delivery-status-item{font-weight:600}.delivery-status-paid{color:var(--success)}.delivery-status-due{color:var(--warning)}.delivery-status-unpaid{color:var(--danger)}.delivery-status-overpaid{color:var(--primary-dark)}.driver-payment-controls{display:flex;flex-wrap:wrap;gap:8px}.driver-payment-controls .btn{min-width:48px;height:38px;padding:0 12px}
+.driver-delivery-legend-copy{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px;color:var(--text-muted);font-size:11px;line-height:1.4}
+.driver-delivery-legend-copy span{display:inline-flex;align-items:center;white-space:nowrap}
+.driver-delivery-legend-copy .legend-label{color:var(--text);font-weight:700}
+.delivery-status-item{font-weight:600}
+.delivery-status-paid{color:var(--success)}
+.delivery-status-due{color:var(--warning)}
+.delivery-status-unpaid{color:var(--danger)}
+.delivery-status-overpaid{color:var(--primary-dark)}
+.driver-payment-controls{display:flex;flex-wrap:wrap;gap:8px}
+.driver-payment-controls .btn{min-width:48px;height:38px;padding:0 12px}
+
 /* =========================================================
    TWO CUSTOMERS PER ROW
    ========================================================= */
-.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px;padding:0 16px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(62px,.55fr) minmax(62px,.55fr) minmax(95px,.8fr) 58px 76px minmax(100px,.8fr) 34px;gap:8px;align-items:end;min-width:0;padding:14px 0}.driver-delivery-entry:nth-child(n+3){border-top:1px solid var(--border)}.driver-delivery-entry:nth-child(even){padding-left:16px;border-left:1px solid var(--border)}.driver-delivery-entry .form-group{min-width:0;margin:0}.driver-delivery-entry .form-input,.driver-delivery-entry .driver-delivery-balance{width:100%;height:38px;min-height:38px;box-sizing:border-box}.driver-delivery-entry select.form-input{padding:0 18px 0 8px;line-height:normal}.driver-delivery-entry .driver-delivery-price{width:58px;max-width:58px;padding-left:8px;padding-right:8px}.driver-delivery-entry .driver-delivery-method{width:76px;max-width:76px;padding-left:7px;padding-right:18px}
+.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;padding:0 18px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}
+.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(52px,.55fr) minmax(52px,.55fr) minmax(88px,.85fr) 52px 88px minmax(82px,.75fr) 32px;gap:7px;align-items:end;min-width:0;padding:13px 0}
+.driver-delivery-entry:nth-child(n+3){border-top:1px solid var(--border)}
+.driver-delivery-entry:nth-child(even){padding-left:18px;border-left:1px solid var(--border)}
+.driver-delivery-entry .form-group{min-width:0;margin:0}
+.driver-delivery-entry .form-input,.driver-delivery-entry .driver-delivery-balance{width:100%;height:36px;min-height:36px;box-sizing:border-box}
+
+/* Smaller field labels so the compressed row stays clean. */
+.driver-delivery-entry .form-label{font-size:11px;line-height:1.2;margin-bottom:4px;white-space:nowrap}
+
+/* Price/Gal: compact enough for a normal two-digit price. */
+.driver-delivery-entry .driver-delivery-price{width:52px;max-width:52px;padding:0 6px;font-size:12px}
+
+/* Method: slightly wider again so the option text is comfortable. */
+.driver-delivery-entry .driver-delivery-method{width:88px;max-width:88px;padding:0 16px 0 7px;font-size:11px}
+.driver-delivery-entry select.form-input{line-height:normal}
+
+/* Keep new numeric/text fields genuinely empty; placeholders are suggestions only. */
+.driver-delivery-entry input{background-color:var(--surface)}
+
 /* =========================================================
    BALANCE / REMOVE
    ========================================================= */
-.driver-delivery-balance{padding:0 8px;display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:12px;font-weight:700;line-height:1.2;white-space:nowrap}.driver-delivery-balance-neutral{color:var(--text-muted);font-weight:500}.driver-delivery-balance-paid{color:var(--success);background:var(--success-light);border-color:rgba(46,155,91,.18)}.driver-delivery-balance-due{color:var(--warning);background:var(--warning-light);border-color:rgba(229,154,36,.18)}.driver-delivery-balance-unpaid{color:var(--danger);background:var(--danger-light);border-color:rgba(217,83,79,.18)}.driver-delivery-balance-overpaid{color:var(--primary-dark);background:var(--primary-light);border-color:rgba(22,135,201,.18)}.driver-delivery-remove{width:34px;height:38px;min-width:34px;margin:0;padding:0;display:flex;align-items:center;justify-content:center;align-self:end;justify-self:center;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--danger);font-size:19px;font-weight:600;line-height:1;cursor:pointer}.driver-delivery-remove:hover{background:var(--danger-light);border-color:var(--danger)}
+.driver-delivery-balance{width:82px!important;max-width:82px!important;padding:0 6px;display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden}
+.driver-delivery-balance-neutral{color:var(--text-muted);font-weight:500}
+.driver-delivery-balance-paid{color:var(--success);background:var(--success-light);border-color:rgba(46,155,91,.18)}
+.driver-delivery-balance-due{color:var(--warning);background:var(--warning-light);border-color:rgba(229,154,36,.18)}
+.driver-delivery-balance-unpaid{color:var(--danger);background:var(--danger-light);border-color:rgba(217,83,79,.18)}
+.driver-delivery-balance-overpaid{color:var(--primary-dark);background:var(--primary-light);border-color:rgba(22,135,201,.18)}
+.driver-delivery-remove{width:32px;height:36px;min-width:32px;margin:0;padding:0;display:flex;align-items:center;justify-content:center;align-self:end;justify-self:center;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--danger);font-size:18px;font-weight:600;line-height:1;cursor:pointer}
+.driver-delivery-remove:hover{background:var(--danger-light);border-color:var(--danger)}
+
 /* =========================================================
    RESPONSIVE
    ========================================================= */
-@media(max-width:1200px){.driver-delivery-payment-rows{grid-template-columns:1fr}.driver-delivery-entry:nth-child(even){padding-left:0;border-left:0}.driver-delivery-entry:nth-child(n+2){border-top:1px solid var(--border)}}
-@media(max-width:850px){.driver-panel-header{flex-direction:column;align-items:stretch}.driver-payment-controls{width:100%}.driver-payment-controls .btn{flex:1}.driver-delivery-entry{grid-template-columns:repeat(4,minmax(0,1fr))}.driver-delivery-entry .driver-delivery-customer-group{grid-column:1/-1}.driver-delivery-entry .driver-delivery-balance-group{grid-column:span 2}.driver-delivery-remove{grid-column:4}}
-@media(max-width:550px){.driver-delivery-entry{grid-template-columns:1fr 1fr}.driver-delivery-entry .driver-delivery-customer-group,.driver-delivery-entry .driver-delivery-balance-group{grid-column:auto}.driver-delivery-remove{grid-column:auto;justify-self:start}}
+@media(max-width:1200px){
+.driver-delivery-payment-rows{grid-template-columns:1fr;row-gap:0}
+.driver-delivery-entry:nth-child(even){padding-left:0;border-left:0}
+.driver-delivery-entry:nth-child(n+2){border-top:1px solid var(--border)}
+}
+@media(max-width:850px){
+.driver-panel-header{flex-direction:column;align-items:stretch}
+.driver-payment-controls{width:100%}
+.driver-payment-controls .btn{flex:1}
+.driver-delivery-entry{grid-template-columns:repeat(4,minmax(0,1fr))}
+.driver-delivery-entry .driver-delivery-customer-group{grid-column:1/-1}
+.driver-delivery-entry .driver-delivery-balance-group{grid-column:span 2}
+.driver-delivery-remove{grid-column:4}
+}
+@media(max-width:550px){
+.driver-delivery-entry{grid-template-columns:1fr 1fr}
+.driver-delivery-entry .driver-delivery-customer-group,.driver-delivery-entry .driver-delivery-balance-group{grid-column:auto}
+.driver-delivery-remove{grid-column:auto;justify-self:start}
+}
 </style>
 </head>
 <body>
@@ -66,21 +124,21 @@ requireAdmin();
 </div>
 <div id="driverDeliveryPaymentRows" class="driver-delivery-payment-rows">
 <div class="driver-delivery-entry">
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>
 </div>
 <div class="driver-delivery-entry">
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>
@@ -98,21 +156,27 @@ requireAdmin();
 const rowsContainer=document.getElementById('driverDeliveryPaymentRows');
 if(!rowsContainer)return;
 
+/* =========================================================
+   CREATE EMPTY CUSTOMER ENTRY
+   ========================================================= */
 function createEntry(){
 const entry=document.createElement('div');
 entry.className='driver-delivery-entry';
 entry.innerHTML=`
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>`;
 return entry;
 }
 
+/* =========================================================
+   BALANCE STATUS
+   ========================================================= */
 function updateBalance(entry){
 const slim=parseFloat(entry.querySelector('.driver-delivery-slim')?.value)||0;
 const round=parseFloat(entry.querySelector('.driver-delivery-round')?.value)||0;
@@ -132,6 +196,9 @@ balance.classList.add('driver-delivery-balance-overpaid');balance.textContent=`O
 }
 function refreshBalances(){rowsContainer.querySelectorAll('.driver-delivery-entry').forEach(updateBalance)}
 
+/* =========================================================
+   LIVE CALCULATION
+   ========================================================= */
 rowsContainer.addEventListener('input',e=>{const entry=e.target.closest('.driver-delivery-entry');if(entry)updateBalance(entry)});
 rowsContainer.addEventListener('change',e=>{const entry=e.target.closest('.driver-delivery-entry');if(entry)updateBalance(entry)});
 
@@ -141,9 +208,9 @@ rowsContainer.addEventListener('change',e=>{const entry=e.target.closest('.drive
 document.querySelectorAll('[data-driver-payment-adjust]').forEach(button=>{
 button.addEventListener('click',()=>{
 const amount=Number(button.dataset.driverPaymentAdjust);
-if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());return refreshBalances();}
+if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());refreshBalances();return}
 const removeCount=Math.min(Math.abs(amount),Math.max(0,rowsContainer.querySelectorAll('.driver-delivery-entry').length-1));
-for(let i=0;i<removeCount;i++){const entries=rowsContainer.querySelectorAll('.driver-delivery-entry');entries[entries.length-1]?.remove();}
+for(let i=0;i<removeCount;i++){const entries=rowsContainer.querySelectorAll('.driver-delivery-entry');entries[entries.length-1]?.remove()}
 refreshBalances();
 });
 });
@@ -157,13 +224,6 @@ if(!button)return;
 const entries=rowsContainer.querySelectorAll('.driver-delivery-entry');
 if(entries.length<=1)return;
 button.closest('.driver-delivery-entry')?.remove();
-});
-
-/* Keep Price/Gal at a maximum of two digits even when typed/pasted. */
-rowsContainer.addEventListener('input',e=>{
-if(!e.target.classList.contains('driver-delivery-price'))return;
-const value=e.target.value.replace(/\D/g,'').slice(0,2);
-if(e.target.value!==value)e.target.value=value;
 });
 
 refreshBalances();
