@@ -38,21 +38,27 @@ requireAdmin();
 /* =========================================================
    TWO CUSTOMERS PER ROW
    ========================================================= */
-.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px;padding:0 18px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}
-.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(52px,.55fr) minmax(52px,.55fr) minmax(88px,.85fr) 52px 88px minmax(82px,.75fr) 32px;gap:7px;align-items:end;min-width:0;padding:13px 0}
+.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px;padding:0 18px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}
+.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(52px,.55fr) minmax(52px,.55fr) minmax(76px,.75fr) 52px 80px minmax(78px,.7fr) 32px;gap:7px;align-items:end;min-width:0;padding:13px 0}
 .driver-delivery-entry:nth-child(n+3){border-top:1px solid var(--border)}
-.driver-delivery-entry:nth-child(even){padding-left:18px;border-left:1px solid var(--border)}
+.driver-delivery-entry:nth-child(even){padding-left:12px;border-left:0}
 .driver-delivery-entry .form-group{min-width:0;margin:0}
 .driver-delivery-entry .form-input,.driver-delivery-entry .driver-delivery-balance{width:100%;height:36px;min-height:36px;box-sizing:border-box}
 
 /* Smaller field labels so the compressed row stays clean. */
-.driver-delivery-entry .form-label{font-size:11px;line-height:1.2;margin-bottom:4px;white-space:nowrap}
+.driver-delivery-entry .form-label{font-size:10px;line-height:1.2;margin-bottom:4px;white-space:nowrap}
+
+/* Customer: shorter field and smaller suggestion text. */
+.driver-delivery-entry .driver-delivery-customer{font-size:10px;padding:0 7px}
+
+/* Payment: slightly narrower while keeping the amount readable. */
+.driver-delivery-entry .driver-delivery-payment{font-size:11px;padding:0 6px}
 
 /* Price/Gal: compact enough for a normal two-digit price. */
 .driver-delivery-entry .driver-delivery-price{width:52px;max-width:52px;padding:0 6px;font-size:12px}
 
 /* Method: slightly wider again so the option text is comfortable. */
-.driver-delivery-entry .driver-delivery-method{width:88px;max-width:88px;padding:0 16px 0 7px;font-size:11px}
+.driver-delivery-entry .driver-delivery-method{width:80px;max-width:80px;padding:0 14px 0 6px;font-size:11px}
 .driver-delivery-entry select.form-input{line-height:normal}
 
 /* Keep new numeric/text fields genuinely empty; placeholders are suggestions only. */
@@ -61,7 +67,7 @@ requireAdmin();
 /* =========================================================
    BALANCE / REMOVE
    ========================================================= */
-.driver-delivery-balance{width:82px!important;max-width:82px!important;padding:0 6px;display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden}
+.driver-delivery-balance{width:78px!important;max-width:78px!important;padding:0 6px;display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden}
 .driver-delivery-balance-neutral{color:var(--text-muted);font-weight:500}
 .driver-delivery-balance-paid{color:var(--success);background:var(--success-light);border-color:rgba(46,155,91,.18)}
 .driver-delivery-balance-due{color:var(--warning);background:var(--warning-light);border-color:rgba(229,154,36,.18)}
@@ -199,18 +205,28 @@ function refreshBalances(){rowsContainer.querySelectorAll('.driver-delivery-entr
 /* =========================================================
    LIVE CALCULATION
    ========================================================= */
-rowsContainer.addEventListener('input',e=>{const entry=e.target.closest('.driver-delivery-entry');if(entry)updateBalance(entry)});
-rowsContainer.addEventListener('change',e=>{const entry=e.target.closest('.driver-delivery-entry');if(entry)updateBalance(entry)});
+rowsContainer.addEventListener('input',e=>{
+if(e.target.classList.contains('driver-delivery-price')){
+const value=e.target.value.replace(/\D/g,'').slice(0,2);
+if(e.target.value!==value)e.target.value=value;
+}
+const entry=e.target.closest('.driver-delivery-entry');
+if(entry)updateBalance(entry);
+});
+rowsContainer.addEventListener('change',e=>{
+const entry=e.target.closest('.driver-delivery-entry');
+if(entry)updateBalance(entry);
+});
 
 /* =========================================================
-   +/- BUTTONS
+   + / - BUTTONS
    ========================================================= */
 document.querySelectorAll('[data-driver-payment-adjust]').forEach(button=>{
 button.addEventListener('click',()=>{
-const amount=Number(button.dataset.driverPaymentAdjust);
-if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());refreshBalances();return}
-const removeCount=Math.min(Math.abs(amount),Math.max(0,rowsContainer.querySelectorAll('.driver-delivery-entry').length-1));
-for(let i=0;i<removeCount;i++){const entries=rowsContainer.querySelectorAll('.driver-delivery-entry');entries[entries.length-1]?.remove()}
+const amount=parseInt(button.dataset.driverPaymentAdjust,10)||0;
+if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());return}
+const removeCount=Math.min(Math.abs(amount),Math.max(0,rowsContainer.children.length-1));
+for(let i=0;i<removeCount;i++)rowsContainer.lastElementChild?.remove();
 refreshBalances();
 });
 });
@@ -221,9 +237,9 @@ refreshBalances();
 rowsContainer.addEventListener('click',e=>{
 const button=e.target.closest('.driver-delivery-remove');
 if(!button)return;
-const entries=rowsContainer.querySelectorAll('.driver-delivery-entry');
-if(entries.length<=1)return;
+if(rowsContainer.children.length<=1)return;
 button.closest('.driver-delivery-entry')?.remove();
+refreshBalances();
 });
 
 refreshBalances();
