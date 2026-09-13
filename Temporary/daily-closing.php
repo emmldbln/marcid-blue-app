@@ -227,26 +227,6 @@ $walkInOtherSales = 0.00;
 
     /*
      * =========================================================
-     * SHOP ACTIONS
-     * =========================================================
-     */
-
-    .shop-actions {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 12px;
-        margin-top: 28px;
-        padding-top: 20px;
-        border-top: 1px solid var(--border);
-    }
-
-    .shop-actions .btn {
-        min-width: 150px;
-    }
-
-    /*
-     * =========================================================
      * EXPENSES / SHOP DELIVERY PANELS
      * =========================================================
      */
@@ -490,7 +470,8 @@ $walkInOtherSales = 0.00;
         line-height: 1.4;
     }
 
-    .delivery-status-legend .legend-label {
+    .delivery-status-legend .legend-label,
+    .driver-delivery-legend-copy .legend-label {
         color: var(--text);
         font-weight: 700;
     }
@@ -597,25 +578,6 @@ $walkInOtherSales = 0.00;
      * Therefore it is intentionally NOT displayed here.
      * =========================================================
      */
-
-    /*
-     * =========================================================
-     * DRIVER ACTIONS
-     * =========================================================
-     */
-
-    .driver-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 12px;
-        margin-top: 28px;
-        padding-top: 20px;
-        border-top: 1px solid var(--border);
-    }
-
-    .driver-actions .btn {
-        min-width: 150px;
-    }
 
     /*
      * =========================================================
@@ -1019,18 +981,6 @@ $walkInOtherSales = 0.00;
         }
 
         /*
-        * SHOP ACTION
-        */
-
-        .shop-actions {
-            flex-direction: column;
-        }
-
-        .shop-actions .btn {
-            width: 100%;
-        }
-
-        /*
         * DRIVER TOP
         */
 
@@ -1100,18 +1050,6 @@ $walkInOtherSales = 0.00;
 
         .driver-payment-controls .btn {
             flex: 1;
-        }
-
-        /*
-        * DRIVER ACTION
-        */
-
-        .driver-actions {
-            flex-direction: column;
-        }
-
-        .driver-actions .btn {
-            width: 100%;
         }
 
     }
@@ -1977,23 +1915,6 @@ $walkInOtherSales = 0.00;
                         <datalist id="shopDeliveryCustomerList">
                         </datalist>
 
-
-                        <!-- =================================================
-                             SHOP ACTIONS
-                             ================================================= -->
-
-                        <div class="shop-actions">
-
-                            <button
-                                type="button"
-                                class="btn btn-secondary"
-                                id="shopComputeButton"
-                            >
-                                Compute
-                            </button>
-
-                        </div>
-
                     </form>
 
                 </div>
@@ -2562,23 +2483,6 @@ $walkInOtherSales = 0.00;
                                 </button>
 
                             </div>
-
-                        </div>
-
-
-                        <!-- =================================================
-                             DRIVER BALANCE ACTION
-                             ================================================= -->
-
-                        <div class="driver-actions">
-
-                            <button
-                                type="button"
-                                class="btn btn-secondary"
-                                id="driverBalanceButton"
-                            >
-                                Balance
-                            </button>
 
                         </div>
 
@@ -3883,67 +3787,6 @@ if (
             updateDriverExpenseRow(row);
 
         });
-
-
-    /*
-     * =========================================================
-     * BALANCE BUTTON
-     *
-     * Intentionally UI-only for now.
-     *
-     * The real remittance calculation will be rebuilt later.
-     * =========================================================
-     */
-
-    const driverBalanceButton =
-        document.getElementById(
-            'driverBalanceButton'
-        );
-
-    if (driverBalanceButton) {
-
-        driverBalanceButton.addEventListener(
-            'click',
-            function () {
-
-                /*
-                 * Intentionally no calculation yet.
-                 */
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =========================================================
-     * COMPUTE
-     *
-     * Intentionally inactive for this UI rebuild.
-     * =========================================================
-     */
-
-    const shopComputeButton =
-        document.getElementById(
-            'shopComputeButton'
-        );
-
-
-    if (shopComputeButton) {
-
-        shopComputeButton.addEventListener(
-            'click',
-            function () {
-
-                /*
-                 * Calculations will be rebuilt later.
-                 */
-
-            }
-        );
-
-    }
 
 
     /*
