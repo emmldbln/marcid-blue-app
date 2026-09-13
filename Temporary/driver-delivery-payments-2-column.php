@@ -38,50 +38,64 @@ requireAdmin();
 /* =========================================================
    TWO CUSTOMERS PER ROW
    ========================================================= */
-.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px;padding:0 18px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}
-.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(52px,.55fr) minmax(52px,.55fr) minmax(76px,.75fr) 52px 80px minmax(78px,.7fr) 32px;gap:7px;align-items:end;min-width:0;padding:13px 0}
+.driver-delivery-payment-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:34px;padding:0 18px;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md)}
+.driver-delivery-entry{display:grid;grid-template-columns:minmax(0,.95fr) 42px 42px minmax(72px,.72fr) 50px 78px 74px 30px;gap:6px;align-items:end;min-width:0;padding:14px 12px 12px;margin:10px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-sizing:border-box}
 .driver-delivery-entry:nth-child(n+3){border-top:1px solid var(--border)}
-.driver-delivery-entry:nth-child(even){padding-left:12px;border-left:0}
+.driver-delivery-entry:nth-child(even){padding-left:12px;border-left:1px solid var(--border)}
 .driver-delivery-entry .form-group{min-width:0;margin:0}
 .driver-delivery-entry .form-input,.driver-delivery-entry .driver-delivery-balance{width:100%;height:36px;min-height:36px;box-sizing:border-box}
 
-/* Smaller field labels so the compressed row stays clean. */
-.driver-delivery-entry .form-label{font-size:10px;line-height:1.2;margin-bottom:4px;white-space:nowrap}
+/* Matching text sizes across all fields. */
+.driver-delivery-entry .form-label{font-size:11px;line-height:1.2;margin-bottom:4px;white-space:nowrap}
+.driver-delivery-entry .form-input{font-size:12px}
+.driver-delivery-entry input::placeholder{font-size:12px;color:var(--text-muted);opacity:0}
 
-/* Customer: shorter field and smaller suggestion text. */
-.driver-delivery-entry .driver-delivery-customer{font-size:10px;padding:0 7px}
+/* Customer: shorter and centered. */
+.driver-delivery-entry .driver-delivery-customer{font-size:12px;padding:0 6px;text-align:center}
 
-/* Payment: slightly narrower while keeping the amount readable. */
-.driver-delivery-entry .driver-delivery-payment{font-size:11px;padding:0 6px}
+/* Slim / Round: smaller fields, centered, and completely empty. */
+.driver-delivery-entry .driver-delivery-slim,.driver-delivery-entry .driver-delivery-round{width:42px;max-width:42px;padding:0 4px;text-align:center}
 
-/* Price/Gal: compact enough for a normal two-digit price. */
-.driver-delivery-entry .driver-delivery-price{width:52px;max-width:52px;padding:0 6px;font-size:12px}
+/* Payment: compact and centered. */
+.driver-delivery-entry .driver-delivery-payment{width:72px;max-width:72px;padding:0 5px;text-align:center}
 
-/* Method: slightly wider again so the option text is comfortable. */
-.driver-delivery-entry .driver-delivery-method{width:80px;max-width:80px;padding:0 14px 0 6px;font-size:11px}
-.driver-delivery-entry select.form-input{line-height:normal}
+/* Price/Gal: compact two-digit field and completely empty. */
+.driver-delivery-entry .driver-delivery-price{width:50px;max-width:50px;padding:0 5px;font-size:12px;text-align:center}
 
-/* Keep new numeric/text fields genuinely empty; placeholders are suggestions only. */
-.driver-delivery-entry input{background-color:var(--surface)}
+/* Method: enough room for the option text and centered. */
+.driver-delivery-entry .driver-delivery-method{width:78px;max-width:78px;padding:0 12px 0 5px;font-size:12px;text-align:center}
+.driver-delivery-entry select.form-input{line-height:normal;text-align:center}
 
 /* =========================================================
    BALANCE / REMOVE
    ========================================================= */
-.driver-delivery-balance{width:78px!important;max-width:78px!important;padding:0 6px;display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden}
+.driver-delivery-balance{width:74px!important;max-width:74px!important;padding:0 4px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-align:center}
 .driver-delivery-balance-neutral{color:var(--text-muted);font-weight:500}
 .driver-delivery-balance-paid{color:var(--success);background:var(--success-light);border-color:rgba(46,155,91,.18)}
 .driver-delivery-balance-due{color:var(--warning);background:var(--warning-light);border-color:rgba(229,154,36,.18)}
 .driver-delivery-balance-unpaid{color:var(--danger);background:var(--danger-light);border-color:rgba(217,83,79,.18)}
 .driver-delivery-balance-overpaid{color:var(--primary-dark);background:var(--primary-light);border-color:rgba(22,135,201,.18)}
-.driver-delivery-remove{width:32px;height:36px;min-width:32px;margin:0;padding:0;display:flex;align-items:center;justify-content:center;align-self:end;justify-self:center;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--danger);font-size:18px;font-weight:600;line-height:1;cursor:pointer}
+.driver-delivery-remove{width:30px;height:36px;min-width:30px;margin:0;padding:0;display:flex;align-items:center;justify-content:center;align-self:end;justify-self:start;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--danger);font-size:17px;font-weight:600;line-height:1;cursor:pointer}
 .driver-delivery-remove:hover{background:var(--danger-light);border-color:var(--danger)}
+
+/* =========================================================
+   CUSTOMER STATUS OUTLINE
+   ========================================================= */
+.driver-delivery-entry.status-paid{border-color:var(--success)}
+.driver-delivery-entry.status-due{border-color:var(--warning)}
+.driver-delivery-entry.status-unpaid{border-color:var(--danger)}
+.driver-delivery-entry.status-overpaid{border-color:var(--primary-dark)}
+
+/* Added customers are compact and do not repeat the field subtext. */
+.driver-delivery-entry-added .form-label{display:none}
+.driver-delivery-entry-added{padding-top:9px;padding-bottom:9px}
 
 /* =========================================================
    RESPONSIVE
    ========================================================= */
 @media(max-width:1200px){
 .driver-delivery-payment-rows{grid-template-columns:1fr;row-gap:0}
-.driver-delivery-entry:nth-child(even){padding-left:0;border-left:0}
+.driver-delivery-entry:nth-child(even){padding-left:12px;border-left:1px solid var(--border)}
 .driver-delivery-entry:nth-child(n+2){border-top:1px solid var(--border)}
 }
 @media(max-width:850px){
@@ -130,21 +144,21 @@ requireAdmin();
 </div>
 <div id="driverDeliveryPaymentRows" class="driver-delivery-payment-rows">
 <div class="driver-delivery-entry">
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder=""></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>
 </div>
 <div class="driver-delivery-entry">
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder=""></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>
@@ -167,13 +181,13 @@ if(!rowsContainer)return;
    ========================================================= */
 function createEntry(){
 const entry=document.createElement('div');
-entry.className='driver-delivery-entry';
+entry.className='driver-delivery-entry driver-delivery-entry-added';
 entry.innerHTML=`
-<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="Select or enter customer" autocomplete="off"></div>
-<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder="0"></div>
-<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="30" maxlength="2" inputmode="numeric"></div>
+<div class="form-group driver-delivery-customer-group"><label class="form-label">Customer</label><input type="text" class="form-input driver-delivery-customer" value="" placeholder="" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Slim</label><input type="number" class="form-input driver-delivery-slim" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Round</label><input type="number" class="form-input driver-delivery-round" value="" min="0" step="1" placeholder=""></div>
+<div class="form-group"><label class="form-label">Payment</label><input type="number" class="form-input driver-delivery-payment" value="" min="0" step="0.01" placeholder=""></div>
+<div class="form-group"><label class="form-label">Price/Gal</label><input type="number" class="form-input driver-delivery-price" value="" min="0" max="99" step="5" placeholder="" maxlength="2" inputmode="numeric"></div>
 <div class="form-group"><label class="form-label">Method</label><select class="form-input driver-delivery-method"><option value="">Select</option><option value="Cash">Cash</option><option value="GCash">GCash</option><option value="Bank Transfer">Bank Transfer</option><option value="Other">Other</option></select></div>
 <div class="form-group driver-delivery-balance-group"><label class="form-label">Balance</label><div class="driver-delivery-balance driver-delivery-balance-neutral">—</div></div>
 <button type="button" class="driver-delivery-remove" title="Remove customer">×</button>`;
@@ -193,12 +207,13 @@ if(!balance)return;
 const gallons=slim+round;
 const expected=gallons*price;
 const difference=expected-payment;
+entry.classList.remove('status-paid','status-due','status-unpaid','status-overpaid');
 balance.className='driver-delivery-balance';
 if(gallons<=0||price<=0){balance.classList.add('driver-delivery-balance-neutral');balance.textContent='—';return}
-if(payment<=0){balance.classList.add('driver-delivery-balance-unpaid');balance.textContent='Unpaid';return}
-if(Math.abs(difference)<=0.005){balance.classList.add('driver-delivery-balance-paid');balance.textContent='Paid';return}
-if(difference>0){balance.classList.add('driver-delivery-balance-due');balance.textContent=`Due ₱${difference.toFixed(2)}`;return}
-balance.classList.add('driver-delivery-balance-overpaid');balance.textContent=`Over ₱${Math.abs(difference).toFixed(2)}`;
+if(payment<=0){balance.classList.add('driver-delivery-balance-unpaid');entry.classList.add('status-unpaid');balance.textContent='Unpaid';return}
+if(Math.abs(difference)<=0.005){balance.classList.add('driver-delivery-balance-paid');entry.classList.add('status-paid');balance.textContent='Paid';return}
+if(difference>0){balance.classList.add('driver-delivery-balance-due');entry.classList.add('status-due');balance.textContent=`Due ₱${difference.toFixed(2)}`;return}
+balance.classList.add('driver-delivery-balance-overpaid');entry.classList.add('status-overpaid');balance.textContent=`Over ₱${Math.abs(difference).toFixed(2)}`;
 }
 function refreshBalances(){rowsContainer.querySelectorAll('.driver-delivery-entry').forEach(updateBalance)}
 
@@ -224,7 +239,7 @@ if(entry)updateBalance(entry);
 document.querySelectorAll('[data-driver-payment-adjust]').forEach(button=>{
 button.addEventListener('click',()=>{
 const amount=parseInt(button.dataset.driverPaymentAdjust,10)||0;
-if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());return}
+if(amount>0){for(let i=0;i<amount;i++)rowsContainer.appendChild(createEntry());refreshBalances();return}
 const removeCount=Math.min(Math.abs(amount),Math.max(0,rowsContainer.children.length-1));
 for(let i=0;i<removeCount;i++)rowsContainer.lastElementChild?.remove();
 refreshBalances();
