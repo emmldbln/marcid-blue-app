@@ -2300,21 +2300,25 @@ $walkInOtherSales = 0.00;
                                     aria-label="Driver delivery payment status legend"
                                 >
 
-                                    <span class="delivery-status-unpaid">
-                                        ● Unpaid
-                                    </span>
+                                    <span class="legend-label">
+                                            Status:
+                                        </span>
 
-                                    <span class="delivery-status-paid">
-                                        ● Paid
-                                    </span>
+                                        <span class="delivery-status-item delivery-status-paid">
+                                            ● Paid
+                                        </span>
 
-                                    <span class="delivery-status-due">
-                                        ● Due
-                                    </span>
+                                        <span class="delivery-status-item delivery-status-due">
+                                            ● Due
+                                        </span>
 
-                                    <span class="delivery-status-overpaid">
-                                        ● Overpaid
-                                    </span>
+                                        <span class="delivery-status-item delivery-status-unpaid">
+                                            ● Unpaid
+                                        </span>
+
+                                        <span class="delivery-status-item delivery-status-overpaid">
+                                            ● Overpaid
+                                        </span>
 
                                 </div>
 
@@ -4004,6 +4008,8 @@ if (
 })();
 
 </script>
+
+<script src="daily-closing-calculation.js"></script>
 
 </body>
 
