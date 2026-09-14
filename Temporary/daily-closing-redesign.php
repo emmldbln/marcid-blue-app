@@ -1384,6 +1384,60 @@ $walkInOtherSales = 0.00;
 
     }
 
+    /* =========================================================
+   DRIVER DELIVERY PAYMENT OUTSIDE GLOW
+   ========================================================= */
+
+        .driver-delivery-entry {
+            position: relative;
+            z-index: 0;
+        }
+
+        .driver-delivery-entry::before {
+            content: "";
+            position: absolute;
+            inset: -6px;
+            border-radius: 14px;
+            pointer-events: none;
+            opacity: 0;
+            z-index: -1;
+            transition:
+                opacity 0.2s ease,
+                box-shadow 0.2s ease;
+        }
+
+        /* Paid */
+        .driver-delivery-entry.status-paid::before {
+            opacity: 1;
+            box-shadow:
+                0 0 8px rgba(34, 197, 94, 0.45),
+                0 0 18px rgba(34, 197, 94, 0.28);
+        }
+
+        /* Due */
+        .driver-delivery-entry.status-due::before {
+            opacity: 1;
+            box-shadow:
+                0 0 8px rgba(245, 158, 11, 0.45),
+                0 0 18px rgba(245, 158, 11, 0.28);
+        }
+
+        /* Unpaid */
+        .driver-delivery-entry.status-unpaid::before {
+            opacity: 1;
+            box-shadow:
+                0 0 8px rgba(239, 68, 68, 0.45),
+                0 0 18px rgba(239, 68, 68, 0.28);
+        }
+
+        /* Overpaid */
+        .driver-delivery-entry.status-overpaid::before {
+            opacity: 1;
+            box-shadow:
+                0 0 8px rgba(59, 130, 246, 0.45),
+                0 0 18px rgba(59, 130, 246, 0.28);
+        }
+
     </style>
 
 </head>
@@ -2679,7 +2733,7 @@ $walkInOtherSales = 0.00;
                                  FIRST CUSTOMER
                                  ================================================= -->
 
-                            <div class="driver-delivery-entry">
+                            <div class="driver-delivery-entry driver-delivery-row">
 
 
                                 <div class="form-group driver-delivery-customer-group">
@@ -2853,7 +2907,7 @@ $walkInOtherSales = 0.00;
                                  SECOND CUSTOMER
                                  ================================================= -->
 
-                            <div class="driver-delivery-entry">
+                            <div class="driver-delivery-entry driver-delivery-row">
 
 
                                 <div class="form-group driver-delivery-customer-group">
@@ -4386,7 +4440,7 @@ class DriverDeliveryPaymentController
             document.createElement('div');
 
         entry.className =
-            'driver-delivery-entry driver-delivery-entry-added';
+            'driver-delivery-entry driver-delivery-row driver-delivery-entry-added';
 
 
         entry.innerHTML = `
