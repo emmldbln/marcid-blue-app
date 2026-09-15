@@ -4879,76 +4879,6 @@ class DriverDeliveryPaymentController
 
 /*
  * =========================================================
- * DAILY CLOSING ACTION CONTROLLER
- * =========================================================
- *
- * These buttons remain inactive for the current UI rebuild.
- * =========================================================
- */
-
-class DailyClosingActionController {
-
-    constructor() {
-
-        this.resetButton =
-            document.getElementById(
-                'resetDailyClosingButton'
-            );
-
-        this.finalizeButton =
-            document.getElementById(
-                'finalizeDailyClosingButton'
-            );
-
-    }
-
-
-    init() {
-
-        if (this.resetButton) {
-
-            this.resetButton.addEventListener(
-                'click',
-                () => this.handleReset()
-            );
-
-        }
-
-
-        if (this.finalizeButton) {
-
-            this.finalizeButton.addEventListener(
-                'click',
-                () => this.handleFinalize()
-            );
-
-        }
-
-    }
-
-
-    handleReset() {
-
-        /*
-         * Reset processing will be rebuilt later.
-         */
-
-    }
-
-
-    handleFinalize() {
-
-        /*
-         * Finalization processing will be rebuilt later.
-         */
-
-    }
-
-}
-
-
-/*
- * =========================================================
  * DAILY CLOSING UI APPLICATION
  * =========================================================
  *
@@ -4981,10 +4911,6 @@ class DailyClosingUI {
         this.driverDeliveryPayments =
             new DriverDeliveryPaymentController();
 
-
-        this.actions =
-            new DailyClosingActionController();
-
     }
 
 
@@ -4999,8 +4925,6 @@ class DailyClosingUI {
         this.driverExpenses.init();
 
         this.driverDeliveryPayments.init();
-
-        this.actions.init();
 
     }
 
@@ -5046,10 +4970,8 @@ document.addEventListener(
      - Dashboard totals
      ========================================================= -->
 
-<script
-    src="daily-closing-calculation.js"
-></script>
-
+<script src="daily-closing-calculation.js"></script>
+<script src="daily-closing-scripts/daily-closing-data.js"></script>
 
 </body>
 
