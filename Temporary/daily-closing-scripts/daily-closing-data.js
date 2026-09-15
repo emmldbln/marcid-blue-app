@@ -1,32 +1,28 @@
 /*
  * =========================================================
  * MARCID BLUE
- * TEMPORARY DAILY CLOSING DATA CONTROLLER
+ * TEMPORARY DAILY CLOSING DATA MANAGER
  *
  * File:
  *     Temporary/daily-closing-scripts/daily-closing-data.js
  *
- * Responsibilities:
+ * PURPOSE
+ * ---------------------------------------------------------
+ * This file connects the redesigned Daily Closing UI
+ * to the standalone PHP backend.
  *
- *     - Load daily context
- *     - Load customer list
- *     - Customer autocomplete
- *     - Load saved customer price
- *     - Save new customers
- *     - Collect current form data
- *     - Autosave draft
- *     - Restore saved draft
- *     - Reset daily closing
- *     - Finalize and close daily record
+ * It handles DATA and ACTIONS only.
  *
- * This file does NOT:
+ * It does NOT:
  *
- *     - Create delivery rows
- *     - Remove delivery rows
- *     - Create expense rows
- *     - Remove expense rows
- *     - Perform calculations
- *     - Replace daily-closing-calculation.js
+ * - Create delivery rows
+ * - Remove delivery rows
+ * - Create expense rows
+ * - Remove expense rows
+ * - Perform financial calculations
+ * - Replace daily-closing-calculation.js
+ *
+ * Those responsibilities remain in their own controllers.
  *
  * =========================================================
  */
@@ -40,11 +36,11 @@
      * =====================================================
      * INITIALIZATION GUARD
      * =====================================================
+     *
+     * Prevents this controller from being initialized twice.
      */
 
-    if (
-        window.marcidBlueDailyClosingDataInitialized
-    ) {
+    if (window.marcidBlueDailyClosingDataInitialized) {
         return;
     }
 
@@ -57,1891 +53,1138 @@
      * =====================================================
      */
 
-    const BACKEND_URL =
-        'daily-closing-scripts/daily-closing-backend.php';
+    const CONFIG = {
 
-    const AUTOSAVE_DELAY = 700;
+        backendUrl:
+            'daily-closing-scripts/daily-closing-backend.php',
 
+        autosaveDelay:
+            700,
 
-    /*
-     * =====================================================
-     * STATE
-     * =====================================================
-     */
-
-    const state = {
-
-        dailyId: null,
-
-        businessDate: null,
-
-        status: null,
-
-        customers: [],
-
-        restoring: false,
-
-        autosaveTimer: null,
-
-        autosaveInProgress: false,
-
-        autosaveQueued: false,
-
-        initialized: false
+        autosaveIndicatorDuration:
+            1200
 
     };
 
 
     /*
      * =====================================================
-     * BASIC HELPERS
+     * API CLIENT
      * =====================================================
+     *
+     * Only this class communicates with PHP.
+     *
+     * This prevents fetch() code from being duplicated
+     * throughout the application.
      */
 
-    function getElement(selector) {
+    class ApiClient {
 
-        return document.querySelector(selector);
+        constructor(url) {
 
-    }
+            this.url = url;
 
-
-    function getElements(selector) {
-
-        return Array.from(
-            document.querySelectorAll(selector)
-        );
-
-    }
-
-
-    function getValue(element) {
-
-        if (!element) {
-            return '';
         }
 
-        return String(
-            element.value ?? ''
-        ).trim();
 
-    }
+        async request(action, method = 'GET', body = null) {
 
+            const url =
+                `${this.url}?action=${encodeURIComponent(action)}`;
 
-    function setValue(element, value) {
+            const options = {
 
-        if (!element) {
-            return;
-        }
+                method,
 
-        element.value =
-            value ?? '';
+                credentials:
+                    'same-origin',
 
-    }
+                headers: {
 
+                    'Accept':
+                        'application/json'
 
-    function numberValue(element) {
-
-        if (!element) {
-            return 0;
-        }
-
-        const value =
-            parseFloat(element.value);
-
-        if (
-            Number.isNaN(value)
-        ) {
-            return 0;
-        }
-
-        return value;
-
-    }
-
-
-    function dispatchInput(element) {
-
-        if (!element) {
-            return;
-        }
-
-        element.dispatchEvent(
-            new Event(
-                'input',
-                {
-                    bubbles: true
                 }
-            )
-        );
 
-    }
+            };
 
 
-    function dispatchChange(element) {
+            if (method !== 'GET') {
 
-        if (!element) {
-            return;
-        }
+                options.headers['Content-Type'] =
+                    'application/json';
 
-        element.dispatchEvent(
-            new Event(
-                'change',
-                {
-                    bubbles: true
-                }
-            )
-        );
-
-    }
-
-
-    function escapeHtml(value) {
-
-        return String(
-            value ?? ''
-        )
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-
-    }
-
-
-    /*
-     * =====================================================
-     * BACKEND REQUEST
-     * =====================================================
-     */
-
-    async function request(
-        action,
-        options = {}
-    ) {
-
-        const method =
-            options.method || 'GET';
-
-        const url =
-            `${BACKEND_URL}?action=${encodeURIComponent(action)}`;
-
-
-        const fetchOptions = {
-
-            method,
-
-            credentials: 'same-origin',
-
-            headers: {
-
-                'Accept':
-                    'application/json'
+                options.body =
+                    JSON.stringify(body || {});
 
             }
 
-        };
-
-
-        if (
-            method !== 'GET'
-        ) {
-
-            fetchOptions.headers[
-                'Content-Type'
-            ] =
-                'application/json';
-
-
-            fetchOptions.body =
-                JSON.stringify(
-                    options.body || {}
-                );
-
-        }
-
-
-        const response =
-            await fetch(
-                url,
-                fetchOptions
-            );
-
-
-        let data;
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch (error) {
-
-            throw new Error(
-                'The server returned an invalid response.'
-            );
-
-        }
-
-
-        if (
-            !response.ok ||
-            !data.success
-        ) {
-
-            throw new Error(
-                data.message ||
-                'The request could not be completed.'
-            );
-
-        }
-
-
-        return data;
-
-    }
-
-
-    /*
-     * =====================================================
-     * CUSTOMER DATA
-     * =====================================================
-     */
-
-    function customerKey(name) {
-
-        return String(
-            name ?? ''
-        )
-            .trim()
-            .toLowerCase();
-
-    }
-
-
-    function findCustomer(name) {
-
-        const key =
-            customerKey(name);
-
-
-        if (!key) {
-            return null;
-        }
-
-
-        return (
-            state.customers.find(
-                customer =>
-                    customerKey(
-                        customer.customer_name
-                    ) === key
-            ) ||
-            null
-        );
-
-    }
-
-
-    function updateCustomerDatalist() {
-
-        const lists =
-            getElements(
-                '#shopDeliveryCustomerList, #driverDeliveryCustomerList'
-            );
-
-
-        lists.forEach(
-            list => {
-
-                list.innerHTML = '';
-
-
-                state.customers.forEach(
-                    customer => {
-
-                        const option =
-                            document.createElement(
-                                'option'
-                            );
-
-
-                        option.value =
-                            customer.customer_name;
-
-
-                        /*
-                         * Price is intentionally not displayed
-                         * inside the datalist.
-                         *
-                         * The price field is populated separately.
-                         */
-
-                        list.appendChild(
-                            option
-                        );
-
-                    }
-                );
-
-            }
-        );
-
-    }
-
-
-    function loadCustomerPrice(
-        customerInput,
-        priceInput
-    ) {
-
-        if (
-            !customerInput ||
-            !priceInput
-        ) {
-            return;
-        }
-
-
-        const name =
-            getValue(
-                customerInput
-            );
-
-
-        if (!name) {
-            return;
-        }
-
-
-        const customer =
-            findCustomer(name);
-
-
-        if (!customer) {
-
-            /*
-             * New customer.
-             *
-             * Do NOT erase the manually entered price.
-             *
-             * This is important because the user must be
-             * able to enter a price for a new customer.
-             */
-
-            return;
-
-        }
-
-
-        setValue(
-            priceInput,
-            Number(
-                customer.gallon_price
-            ).toFixed(2)
-        );
-
-
-        dispatchInput(
-            priceInput
-        );
-
-
-        dispatchChange(
-            priceInput
-        );
-
-    }
-
-
-    function handleCustomerInput(
-        event
-    ) {
-
-        const customerInput =
-            event.target;
-
-
-        if (
-            !customerInput
-        ) {
-            return;
-        }
-
-
-        const row =
-            customerInput.closest(
-                '.delivery-payment-row, .driver-delivery-row, .driver-delivery-entry'
-            );
-
-
-        if (!row) {
-            return;
-        }
-
-
-        const priceInput =
-            row.querySelector(
-                'input[name="delivery_price_per_gallon[]"], ' +
-                'input[name="driver_delivery_price_per_gallon[]"], ' +
-                '.delivery-price, ' +
-                '.driver-delivery-price'
-            );
-
-
-        loadCustomerPrice(
-            customerInput,
-            priceInput
-        );
-
-
-        scheduleAutosave();
-
-    }
-
-
-    function bindCustomerInputs() {
-
-        const customerInputs =
-            getElements(
-                'input[name="delivery_customer[]"], ' +
-                'input[name="driver_delivery_customer[]"], ' +
-                '.driver-delivery-customer'
-            );
-
-
-        customerInputs.forEach(
-            input => {
-
-                if (
-                    input.dataset.dataControllerBound === '1'
-                ) {
-                    return;
-                }
-
-
-                input.dataset.dataControllerBound =
-                    '1';
-
-
-                input.addEventListener(
-                    'input',
-                    handleCustomerInput
-                );
-
-
-                input.addEventListener(
-                    'change',
-                    handleCustomerInput
-                );
-
-
-                input.addEventListener(
-                    'blur',
-                    handleCustomerInput
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * SAVE NEW CUSTOMER
-     * =====================================================
-     *
-     * We only save a customer when:
-     *
-     *     - the name is entered
-     *     - a valid price is entered
-     *     - the name does not already exist
-     *
-     * Existing customer prices are never overwritten here.
-     * =====================================================
-     */
-
-    async function saveCustomerIfNeeded(
-        customerInput,
-        priceInput
-    ) {
-
-        if (
-            !customerInput ||
-            !priceInput
-        ) {
-            return null;
-        }
-
-
-        const name =
-            getValue(
-                customerInput
-            );
-
-
-        const price =
-            getValue(
-                priceInput
-            );
-
-
-        if (
-            !name ||
-            !price
-        ) {
-            return null;
-        }
-
-
-        if (
-            !Number.isFinite(
-                Number(price)
-            ) ||
-            Number(price) <= 0
-        ) {
-            return null;
-        }
-
-
-        const existing =
-            findCustomer(name);
-
-
-        if (existing) {
-
-            /*
-             * Existing customer.
-             *
-             * Never overwrite the saved price.
-             */
-
-            return existing;
-
-        }
-
-
-        try {
 
             const response =
-                await request(
-                    'save_customer',
-                    {
-
-                        method: 'POST',
-
-                        body: {
-
-                            customer_name:
-                                name,
-
-                            gallon_price:
-                                price
-
-                        }
-
-                    }
+                await fetch(
+                    url,
+                    options
                 );
+
+
+            let data;
+
+            try {
+
+                data =
+                    await response.json();
+
+            } catch (error) {
+
+                throw new Error(
+                    'The server returned an invalid response.'
+                );
+
+            }
 
 
             if (
-                response.customer
+                !response.ok ||
+                !data.success
             ) {
 
-                const customer =
-                    response.customer;
+                throw new Error(
+                    data.message ||
+                    'The request could not be completed.'
+                );
+
+            }
 
 
-                state.customers =
-                    state.customers.filter(
-                        item =>
-                            customerKey(
-                                item.customer_name
-                            ) !==
-                            customerKey(
-                                customer.customer_name
-                            )
-                    );
+            return data;
+
+        }
+
+    }
 
 
-                state.customers.push(
-                    customer
+    /*
+     * =====================================================
+     * CUSTOMER MANAGER
+     * =====================================================
+     *
+     * Responsibilities:
+     *
+     * - Store customer list
+     * - Populate datalists
+     * - Find customers
+     * - Load saved prices
+     * - Save new customers
+     */
+
+    class CustomerManager {
+
+        constructor(api) {
+
+            this.api =
+                api;
+
+            this.customers =
+                [];
+
+        }
+
+
+        normalizeName(name) {
+
+            return String(
+                name ?? ''
+            )
+                .trim()
+                .toLowerCase();
+
+        }
+
+
+        find(name) {
+
+            const key =
+                this.normalizeName(name);
+
+
+            if (!key) {
+                return null;
+            }
+
+
+            return (
+                this.customers.find(
+                    customer =>
+                        this.normalizeName(
+                            customer.customer_name
+                        ) === key
+                ) || null
+            );
+
+        }
+
+
+        setCustomers(customers) {
+
+            this.customers =
+                Array.isArray(customers)
+                    ? customers
+                    : [];
+
+            this.customers.sort(
+                (a, b) =>
+                    String(
+                        a.customer_name
+                    ).localeCompare(
+                        String(
+                            b.customer_name
+                        )
+                    )
+            );
+
+        }
+
+
+        populateDatalists() {
+
+            const lists =
+                document.querySelectorAll(
+                    '#shopDeliveryCustomerList, ' +
+                    '#driverDeliveryCustomerList'
                 );
 
 
-                state.customers.sort(
-                    (
-                        a,
-                        b
-                    ) =>
-                        String(
-                            a.customer_name
-                        ).localeCompare(
-                            String(
-                                b.customer_name
-                            )
+            lists.forEach(
+                list => {
+
+                    list.innerHTML = '';
+
+
+                    this.customers.forEach(
+                        customer => {
+
+                            const option =
+                                document.createElement(
+                                    'option'
+                                );
+
+                            option.value =
+                                customer.customer_name;
+
+                            list.appendChild(
+                                option
+                            );
+
+                        }
+                    );
+
+                }
+            );
+
+        }
+
+
+        loadPrice(
+            customerInput,
+            priceInput
+        ) {
+
+            if (
+                !customerInput ||
+                !priceInput
+            ) {
+                return;
+            }
+
+
+            const name =
+                String(
+                    customerInput.value || ''
+                ).trim();
+
+
+            if (!name) {
+                return;
+            }
+
+
+            const customer =
+                this.find(name);
+
+
+            /*
+             * If this is a new customer, do not erase
+             * the manually entered price.
+             */
+
+            if (!customer) {
+                return;
+            }
+
+
+            priceInput.value =
+                Number(
+                    customer.gallon_price
+                ).toFixed(2);
+
+
+            this.dispatchInput(
+                priceInput
+            );
+
+            this.dispatchChange(
+                priceInput
+            );
+
+        }
+
+
+        async saveCustomer(
+            customerInput,
+            priceInput
+        ) {
+
+            if (
+                !customerInput ||
+                !priceInput
+            ) {
+                return null;
+            }
+
+
+            const name =
+                String(
+                    customerInput.value || ''
+                ).trim();
+
+
+            const price =
+                String(
+                    priceInput.value || ''
+                ).trim();
+
+
+            if (!name) {
+                return null;
+            }
+
+
+            if (
+                !price ||
+                !Number.isFinite(
+                    Number(price)
+                ) ||
+                Number(price) <= 0
+            ) {
+
+                return null;
+
+            }
+
+
+            /*
+             * Existing customer:
+             *
+             * Do not create a duplicate.
+             */
+
+            const existing =
+                this.find(name);
+
+
+            if (existing) {
+
+                return existing;
+
+            }
+
+
+            const response =
+                await this.api.request(
+                    'save_customer',
+                    'POST',
+                    {
+
+                        customer_name:
+                            name,
+
+                        gallon_price:
+                            price
+
+                    }
+                );
+
+
+            if (!response.customer) {
+                return null;
+            }
+
+
+            /*
+             * Add the newly created customer
+             * to our local list immediately.
+             */
+
+            this.customers =
+                this.customers.filter(
+                    customer =>
+                        this.normalizeName(
+                            customer.customer_name
+                        ) !==
+                        this.normalizeName(
+                            response.customer.customer_name
                         )
                 );
 
 
-                updateCustomerDatalist();
-
-
-                return customer;
-
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Customer save failed:',
-                error
+            this.customers.push(
+                response.customer
             );
 
-            /*
-             * Do not interrupt normal data entry.
-             *
-             * Finalization will still validate the customer.
-             */
+
+            this.customers.sort(
+                (a, b) =>
+                    String(
+                        a.customer_name
+                    ).localeCompare(
+                        String(
+                            b.customer_name
+                        )
+                    )
+            );
+
+
+            this.populateDatalists();
+
+
+            return response.customer;
 
         }
 
 
-        return null;
+        dispatchInput(element) {
+
+            element.dispatchEvent(
+                new Event(
+                    'input',
+                    {
+                        bubbles: true
+                    }
+                )
+            );
+
+        }
+
+
+        dispatchChange(element) {
+
+            element.dispatchEvent(
+                new Event(
+                    'change',
+                    {
+                        bubbles: true
+                    }
+                )
+            );
+
+        }
+
+
+        bind() {
+
+            document.addEventListener(
+                'input',
+                event => {
+
+                    const input =
+                        event.target;
+
+
+                    if (
+                        !input.matches(
+                            'input[name="delivery_customer[]"], ' +
+                            'input[name="driver_delivery_customer[]"], ' +
+                            '.driver-delivery-customer'
+                        )
+                    ) {
+                        return;
+                    }
+
+
+                    this.handleCustomerInput(
+                        input
+                    );
+
+                }
+            );
+
+
+            document.addEventListener(
+                'change',
+                event => {
+
+                    const input =
+                        event.target;
+
+
+                    if (
+                        !input.matches(
+                            'input[name="delivery_customer[]"], ' +
+                            'input[name="driver_delivery_customer[]"], ' +
+                            '.driver-delivery-customer'
+                        )
+                    ) {
+                        return;
+                    }
+
+
+                    this.handleCustomerInput(
+                        input
+                    );
+
+                }
+            );
+
+
+            document.addEventListener(
+                'blur',
+                event => {
+
+                    const input =
+                        event.target;
+
+
+                    if (
+                        !input.matches(
+                            'input[name="delivery_customer[]"], ' +
+                            'input[name="driver_delivery_customer[]"], ' +
+                            '.driver-delivery-customer'
+                        )
+                    ) {
+                        return;
+                    }
+
+
+                    this.handleCustomerBlur(
+                        input
+                    );
+
+                },
+                true
+            );
+
+        }
+
+
+        handleCustomerInput(
+            customerInput
+        ) {
+
+            const row =
+                customerInput.closest(
+                    '.delivery-payment-row, ' +
+                    '.driver-delivery-row, ' +
+                    '.driver-delivery-entry'
+                );
+
+
+            if (!row) {
+                return;
+            }
+
+
+            const priceInput =
+                row.querySelector(
+                    'input[name="delivery_price_per_gallon[]"], ' +
+                    'input[name="driver_delivery_price_per_gallon[]"], ' +
+                    '.delivery-price, ' +
+                    '.driver-delivery-price'
+                );
+
+
+            this.loadPrice(
+                customerInput,
+                priceInput
+            );
+
+
+            window.marcidBlueDailyClosingData
+                ?.scheduleAutosave();
+
+        }
+
+
+        async handleCustomerBlur(
+            customerInput
+        ) {
+
+            const row =
+                customerInput.closest(
+                    '.delivery-payment-row, ' +
+                    '.driver-delivery-row, ' +
+                    '.driver-delivery-entry'
+                );
+
+
+            if (!row) {
+                return;
+            }
+
+
+            const priceInput =
+                row.querySelector(
+                    'input[name="delivery_price_per_gallon[]"], ' +
+                    'input[name="driver_delivery_price_per_gallon[]"], ' +
+                    '.delivery-price, ' +
+                    '.driver-delivery-price'
+                );
+
+
+            try {
+
+                await this.saveCustomer(
+                    customerInput,
+                    priceInput
+                );
+
+            } catch (error) {
+
+                console.error(
+                    'Customer save failed:',
+                    error
+                );
+
+            }
+
+
+            window.marcidBlueDailyClosingData
+                ?.scheduleAutosave();
+
+        }
 
     }
 
 
-    function bindNewCustomerSaving() {
+    /*
+     * =====================================================
+     * FORM DATA COLLECTOR
+     * =====================================================
+     *
+     * Converts the current DOM into the exact structure
+     * expected by the backend.
+     *
+     * It does not calculate totals.
+     */
 
-        const inputs =
-            getElements(
-                'input[name="delivery_customer[]"], ' +
-                'input[name="driver_delivery_customer[]"], ' +
-                '.driver-delivery-customer'
-            );
+    class FormDataCollector {
+
+        getValue(element) {
+
+            if (!element) {
+                return '';
+            }
+
+            return String(
+                element.value ?? ''
+            ).trim();
+
+        }
 
 
-        inputs.forEach(
-            customerInput => {
+        collectExpenses() {
 
-                if (
-                    customerInput.dataset.customerSaveBound === '1'
-                ) {
-                    return;
-                }
+            const expenses = [];
 
 
-                customerInput.dataset.customerSaveBound =
-                    '1';
+            document
+                .querySelectorAll(
+                    '#expenseRows .expense-row'
+                )
+                .forEach(
+                    row => {
 
+                        const category =
+                            row.querySelector(
+                                'select[name="expense_category[]"]'
+                            );
 
-                customerInput.addEventListener(
-                    'blur',
-                    async () => {
+                        const name =
+                            row.querySelector(
+                                'input[name="expense_name[]"]'
+                            );
 
-                        const row =
-                            customerInput.closest(
-                                '.delivery-payment-row, .driver-delivery-row, .driver-delivery-entry'
+                        const amount =
+                            row.querySelector(
+                                'input[name="expense_amount[]"]'
                             );
 
 
-                        if (!row) {
-                            return;
-                        }
+                        expenses.push({
+
+                            category:
+                                this.getValue(category),
+
+                            name:
+                                this.getValue(name),
+
+                            amount:
+                                this.getValue(amount)
+
+                        });
+
+                    }
+                );
 
 
-                        const priceInput =
+            return expenses;
+
+        }
+
+
+        collectShopDeliveries() {
+
+            const deliveries = [];
+
+
+            document
+                .querySelectorAll(
+                    '#deliveryPaymentRows .delivery-payment-row'
+                )
+                .forEach(
+                    row => {
+
+                        const customer =
                             row.querySelector(
-                                'input[name="delivery_price_per_gallon[]"], ' +
+                                'input[name="delivery_customer[]"]'
+                            );
+
+                        const slim =
+                            row.querySelector(
+                                'input[name="delivery_slim[]"]'
+                            );
+
+                        const round =
+                            row.querySelector(
+                                'input[name="delivery_round[]"]'
+                            );
+
+                        const payment =
+                            row.querySelector(
+                                'input[name="delivery_payment[]"]'
+                            );
+
+                        const price =
+                            row.querySelector(
+                                'input[name="delivery_price_per_gallon[]"]'
+                            );
+
+                        const method =
+                            row.querySelector(
+                                'select[name="delivery_method[]"]'
+                            );
+
+
+                        deliveries.push({
+
+                            customer:
+                                this.getValue(customer),
+
+                            slim:
+                                this.getValue(slim),
+
+                            round:
+                                this.getValue(round),
+
+                            payment:
+                                this.getValue(payment),
+
+                            price:
+                                this.getValue(price),
+
+                            method:
+                                this.getValue(method) ||
+                                'Cash'
+
+                        });
+
+                    }
+                );
+
+
+            return deliveries;
+
+        }
+
+
+        collectDriverExpenses() {
+
+            const expenses = [];
+
+
+            document
+                .querySelectorAll(
+                    '#driverExpenseRows .driver-expense-row'
+                )
+                .forEach(
+                    row => {
+
+                        const category =
+                            row.querySelector(
+                                'select[name="driver_expense_category[]"]'
+                            );
+
+                        const name =
+                            row.querySelector(
+                                'input[name="driver_expense_name[]"]'
+                            );
+
+                        const amount =
+                            row.querySelector(
+                                'input[name="driver_expense_amount[]"]'
+                            );
+
+
+                        expenses.push({
+
+                            category:
+                                this.getValue(category),
+
+                            name:
+                                this.getValue(name),
+
+                            amount:
+                                this.getValue(amount)
+
+                        });
+
+                    }
+                );
+
+
+            return expenses;
+
+        }
+
+
+        collectDriverDeliveries() {
+
+            const deliveries = [];
+
+
+            document
+                .querySelectorAll(
+                    '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
+                    '#driverDeliveryPaymentRows .driver-delivery-row'
+                )
+                .forEach(
+                    row => {
+
+                        const customer =
+                            row.querySelector(
+                                'input[name="driver_delivery_customer[]"], ' +
+                                '.driver-delivery-customer'
+                            );
+
+                        const slim =
+                            row.querySelector(
+                                'input[name="driver_delivery_slim[]"]'
+                            );
+
+                        const round =
+                            row.querySelector(
+                                'input[name="driver_delivery_round[]"]'
+                            );
+
+                        const payment =
+                            row.querySelector(
+                                'input[name="driver_delivery_payment[]"]'
+                            );
+
+                        const price =
+                            row.querySelector(
                                 'input[name="driver_delivery_price_per_gallon[]"], ' +
-                                '.delivery-price, ' +
                                 '.driver-delivery-price'
                             );
 
+                        const method =
+                            row.querySelector(
+                                'select[name="driver_delivery_method[]"]'
+                            );
 
-                        await saveCustomerIfNeeded(
-                            customerInput,
-                            priceInput
-                        );
+
+                        deliveries.push({
+
+                            customer:
+                                this.getValue(customer),
+
+                            slim:
+                                this.getValue(slim),
+
+                            round:
+                                this.getValue(round),
+
+                            payment:
+                                this.getValue(payment),
+
+                            price:
+                                this.getValue(price),
+
+                            method:
+                                this.getValue(method) ||
+                                'Cash'
+
+                        });
 
                     }
                 );
 
-            }
-        );
 
-    }
+            return deliveries;
 
+        }
 
-    /*
-     * =====================================================
-     * ROW EVENT BINDING
-     * =====================================================
-     *
-     * Existing PHP controllers create rows dynamically.
-     *
-     * Therefore this function can be called repeatedly
-     * after a row is added without duplicating listeners.
-     * =====================================================
-     */
 
-    function bindDynamicRows() {
+        collect() {
 
-        bindCustomerInputs();
+            const walkInMoney =
+                document.querySelector(
+                    '#walk_in_money'
+                );
 
-        bindNewCustomerSaving();
 
-    }
+            const walkInCustomers =
+                document.querySelector(
+                    '#walk_in_customers'
+                );
 
 
-    /*
-     * =====================================================
-     * COLLECT SHOP EXPENSES
-     * =====================================================
-     */
+            const driverMoney =
+                document.querySelector(
+                    '#driver_money_received'
+                );
 
-    function collectExpenses() {
 
-        const expenses = [];
+            return {
 
+                walk_in_money:
+                    this.getValue(
+                        walkInMoney
+                    ),
 
-        getElements(
-            '#expenseRows .expense-row'
-        ).forEach(
-            row => {
-
-                const category =
-                    row.querySelector(
-                        'select[name="expense_category[]"]'
-                    );
-
-
-                const name =
-                    row.querySelector(
-                        'input[name="expense_name[]"]'
-                    );
-
-
-                const amount =
-                    row.querySelector(
-                        'input[name="expense_amount[]"]'
-                    );
-
-
-                expenses.push({
-
-                    category:
-                        getValue(category),
-
-                    name:
-                        getValue(name),
-
-                    amount:
-                        getValue(amount)
-
-                });
-
-            }
-        );
-
-
-        return expenses;
-
-    }
-
-
-    /*
-     * =====================================================
-     * COLLECT SHOP DELIVERIES
-     * =====================================================
-     */
-
-    function collectShopDeliveries() {
-
-        const deliveries = [];
-
-
-        getElements(
-            '#deliveryPaymentRows .delivery-payment-row'
-        ).forEach(
-            row => {
-
-                const customer =
-                    row.querySelector(
-                        'input[name="delivery_customer[]"]'
-                    );
-
-
-                const slim =
-                    row.querySelector(
-                        'input[name="delivery_slim[]"]'
-                    );
-
-
-                const round =
-                    row.querySelector(
-                        'input[name="delivery_round[]"]'
-                    );
-
-
-                const payment =
-                    row.querySelector(
-                        'input[name="delivery_payment[]"]'
-                    );
-
-
-                const price =
-                    row.querySelector(
-                        'input[name="delivery_price_per_gallon[]"]'
-                    );
-
-
-                const method =
-                    row.querySelector(
-                        'select[name="delivery_method[]"]'
-                    );
-
-
-                deliveries.push({
-
-                    customer:
-                        getValue(customer),
-
-                    slim:
-                        getValue(slim),
-
-                    round:
-                        getValue(round),
-
-                    payment:
-                        getValue(payment),
-
-                    price:
-                        getValue(price),
-
-                    method:
-                        getValue(method) ||
-                        'Cash'
-
-                });
-
-            }
-        );
-
-
-        return deliveries;
-
-    }
-
-
-    /*
-     * =====================================================
-     * COLLECT DRIVER EXPENSES
-     * =====================================================
-     */
-
-    function collectDriverExpenses() {
-
-        const expenses = [];
-
-
-        getElements(
-            '#driverExpenseRows .driver-expense-row'
-        ).forEach(
-            row => {
-
-                const category =
-                    row.querySelector(
-                        'select[name="driver_expense_category[]"]'
-                    );
-
-
-                const name =
-                    row.querySelector(
-                        'input[name="driver_expense_name[]"]'
-                    );
-
-
-                const amount =
-                    row.querySelector(
-                        'input[name="driver_expense_amount[]"]'
-                    );
-
-
-                expenses.push({
-
-                    category:
-                        getValue(category),
-
-                    name:
-                        getValue(name),
-
-                    amount:
-                        getValue(amount)
-
-                });
-
-            }
-        );
-
-
-        return expenses;
-
-    }
-
-
-    /*
-     * =====================================================
-     * COLLECT DRIVER DELIVERIES
-     * =====================================================
-     */
-
-    function collectDriverDeliveries() {
-
-        const deliveries = [];
-
-
-        getElements(
-            '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
-            '#driverDeliveryPaymentRows .driver-delivery-row'
-        ).forEach(
-            row => {
-
-                const customer =
-                    row.querySelector(
-                        'input[name="driver_delivery_customer[]"]'
-                    );
-
-
-                const slim =
-                    row.querySelector(
-                        'input[name="driver_delivery_slim[]"]'
-                    );
-
-
-                const round =
-                    row.querySelector(
-                        'input[name="driver_delivery_round[]"]'
-                    );
-
-
-                const payment =
-                    row.querySelector(
-                        'input[name="driver_delivery_payment[]"]'
-                    );
-
-
-                const price =
-                    row.querySelector(
-                        'input[name="driver_delivery_price_per_gallon[]"]'
-                    );
-
-
-                const method =
-                    row.querySelector(
-                        'select[name="driver_delivery_method[]"]'
-                    );
-
-
-                deliveries.push({
-
-                    customer:
-                        getValue(customer),
-
-                    slim:
-                        getValue(slim),
-
-                    round:
-                        getValue(round),
-
-                    payment:
-                        getValue(payment),
-
-                    price:
-                        getValue(price),
-
-                    method:
-                        getValue(method) ||
-                        'Cash'
-
-                });
-
-            }
-        );
-
-
-        return deliveries;
-
-    }
-
-
-    /*
-     * =====================================================
-     * COLLECT COMPLETE DRAFT
-     * =====================================================
-     */
-
-    function collectDraft() {
-
-        const walkInMoney =
-            getElement(
-                '#walk_in_money'
-            );
-
-
-        const walkInCustomers =
-            getElement(
-                '#walk_in_customers'
-            );
-
-
-        const driverMoney =
-            getElement(
-                '#driver_money_received'
-            );
-
-
-        return {
-
-            walk_in_money:
-                getValue(
-                    walkInMoney
-                ),
-
-            walk_in_customers:
-                getValue(
-                    walkInCustomers
-                ),
-
-            expenses:
-                collectExpenses(),
-
-            deliveries:
-                collectShopDeliveries(),
-
-            driver: {
-
-                money_received:
-                    getValue(
-                        driverMoney
+                walk_in_customers:
+                    this.getValue(
+                        walkInCustomers
                     ),
 
                 expenses:
-                    collectDriverExpenses(),
+                    this.collectExpenses(),
 
                 deliveries:
-                    collectDriverDeliveries()
+                    this.collectShopDeliveries(),
 
-            }
+                driver: {
 
-        };
+                    money_received:
+                        this.getValue(
+                            driverMoney
+                        ),
+
+                    expenses:
+                        this.collectDriverExpenses(),
+
+                    deliveries:
+                        this.collectDriverDeliveries()
+
+                }
+
+            };
+
+        }
 
     }
 
 
     /*
      * =====================================================
-     * AUTOSAVE
+     * DRAFT MANAGER
      * =====================================================
+     *
+     * Responsible only for:
+     *
+     * - Autosave
+     * - Load draft
+     * - Restore draft
+     *
+     * It does not calculate anything.
      */
 
-    function scheduleAutosave() {
+    class DraftManager {
 
-        if (
-            state.restoring
+        constructor(
+            api,
+            collector,
+            customerManager
         ) {
-            return;
+
+            this.api =
+                api;
+
+            this.collector =
+                collector;
+
+            this.customerManager =
+                customerManager;
+
+            this.timer =
+                null;
+
+            this.inProgress =
+                false;
+
+            this.queued =
+                false;
+
         }
 
 
-        if (
-            !state.dailyId
-        ) {
-            return;
-        }
+        schedule() {
 
-
-        clearTimeout(
-            state.autosaveTimer
-        );
-
-
-        state.autosaveTimer =
-            setTimeout(
-                () => {
-
-                    saveDraft();
-
-                },
-                AUTOSAVE_DELAY
+            clearTimeout(
+                this.timer
             );
 
-    }
 
+            this.timer =
+                setTimeout(
+                    () => {
 
-    async function saveDraft() {
+                        this.save();
 
-        if (
-            state.restoring ||
-            !state.dailyId
-        ) {
-            return;
+                    },
+                    CONFIG.autosaveDelay
+                );
+
         }
 
 
-        if (
-            state.autosaveInProgress
-        ) {
+        async save() {
 
-            state.autosaveQueued =
+            if (
+                this.inProgress
+            ) {
+
+                this.queued =
+                    true;
+
+                return;
+
+            }
+
+
+            const dailyId =
+                window.marcidBlueDailyClosing
+                    ?.dailyId ||
+                window.marcidBlueDailyClosingData
+                    ?.dailyId ||
+                null;
+
+
+            if (!dailyId) {
+                return;
+            }
+
+
+            this.inProgress =
                 true;
 
-            return;
+
+            try {
+
+                const draft =
+                    this.collector.collect();
+
+
+                await this.api.request(
+                    'save_draft',
+                    'POST',
+                    {
+
+                        daily_id:
+                            dailyId,
+
+                        draft
+
+                    }
+                );
+
+
+                this.showStatus(
+                    'saved'
+                );
+
+            } catch (error) {
+
+                console.error(
+                    'Draft autosave failed:',
+                    error
+                );
+
+
+                this.showStatus(
+                    'error'
+                );
+
+            } finally {
+
+                this.inProgress =
+                    false;
+
+
+                if (this.queued) {
+
+                    this.queued =
+                        false;
+
+                    this.schedule();
+
+                }
+
+            }
 
         }
 
 
-        state.autosaveInProgress =
-            true;
+        async load() {
 
-
-        try {
-
-            await request(
-                'save_draft',
-                {
-
-                    method: 'POST',
-
-                    body: {
-
-                        daily_id:
-                            state.dailyId,
-
-                        draft:
-                            collectDraft()
-
-                    }
-
-                }
-            );
-
-        } catch (error) {
-
-            console.error(
-                'Daily draft autosave failed:',
-                error
-            );
-
-        } finally {
-
-            state.autosaveInProgress =
-                false;
+            const response =
+                await this.api.request(
+                    'load_draft'
+                );
 
 
             if (
-                state.autosaveQueued
+                !response.has_draft ||
+                !response.draft
             ) {
 
-                state.autosaveQueued =
-                    false;
-
-                scheduleAutosave();
+                return null;
 
             }
 
-        }
 
-    }
+            return response.draft;
 
-
-    /*
-     * =====================================================
-     * AUTOSAVE EVENT MONITOR
-     * =====================================================
-     */
-
-    function bindAutosaveEvents() {
-
-        const container =
-            document.querySelector(
-                '.daily-closing-page, main, body'
-            );
-
-
-        if (!container) {
-            return;
         }
 
 
-        if (
-            container.dataset.autosaveBound === '1'
-        ) {
-            return;
-        }
-
-
-        container.dataset.autosaveBound =
-            '1';
-
-
-        container.addEventListener(
-            'input',
-            event => {
-
-                if (
-                    event.target.matches(
-                        'input, textarea'
-                    )
-                ) {
-
-                    scheduleAutosave();
-
-                }
-
-            }
-        );
-
-
-        container.addEventListener(
-            'change',
-            event => {
-
-                if (
-                    event.target.matches(
-                        'input, select, textarea'
-                    )
-                ) {
-
-                    scheduleAutosave();
-
-                }
-
-            }
-        );
-
-
-        /*
-         * Existing UI uses dynamically created rows.
-         *
-         * Event delegation means newly created rows are
-         * automatically covered.
-         */
-
-    }
-
-
-    /*
-     * =====================================================
-     * CREATE ROWS DURING RESTORE
-     * =====================================================
-     *
-     * We deliberately use the existing Add buttons.
-     *
-     * This means row creation remains owned by the existing
-     * PHP/UI controllers.
-     * =====================================================
-     */
-
-    function ensureRowCount(
-        containerSelector,
-        rowSelector,
-        buttonSelector,
-        desiredCount
-    ) {
-
-        const container =
-            getElement(
-                containerSelector
-            );
-
-
-        if (!container) {
-            return;
-        }
-
-
-        let rows =
-            container.querySelectorAll(
-                rowSelector
-            );
-
-
-        while (
-            rows.length <
-            desiredCount
+        async restore(
+            draft
         ) {
 
-            const button =
-                getElement(
-                    buttonSelector
-                );
-
-
-            if (!button) {
-                break;
+            if (!draft) {
+                return;
             }
 
-
-            button.click();
-
-
-            rows =
-                container.querySelectorAll(
-                    rowSelector
-                );
-
-        }
-
-    }
-
-
-    /*
-     * =====================================================
-     * RESTORE EXPENSES
-     * =====================================================
-     */
-
-    function restoreExpenses(
-        expenses
-    ) {
-
-        if (
-            !Array.isArray(expenses)
-        ) {
-            return;
-        }
-
-
-        if (
-            expenses.length === 0
-        ) {
-            return;
-        }
-
-
-        ensureRowCount(
-            '#expenseRows',
-            '.expense-row',
-            '#addExpenseButton',
-            expenses.length
-        );
-
-
-        const rows =
-            getElements(
-                '#expenseRows .expense-row'
-            );
-
-
-        expenses.forEach(
-            (
-                expense,
-                index
-            ) => {
-
-                const row =
-                    rows[index];
-
-
-                if (!row) {
-                    return;
-                }
-
-
-                const category =
-                    row.querySelector(
-                        'select[name="expense_category[]"]'
-                    );
-
-
-                const name =
-                    row.querySelector(
-                        'input[name="expense_name[]"]'
-                    );
-
-
-                const amount =
-                    row.querySelector(
-                        'input[name="expense_amount[]"]'
-                    );
-
-
-                setValue(
-                    category,
-                    expense.category
-                );
-
-
-                setValue(
-                    name,
-                    expense.name
-                );
-
-
-                setValue(
-                    amount,
-                    expense.amount
-                );
-
-
-                dispatchChange(
-                    category
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * RESTORE SHOP DELIVERIES
-     * =====================================================
-     */
-
-    function restoreShopDeliveries(
-        deliveries
-    ) {
-
-        if (
-            !Array.isArray(deliveries)
-        ) {
-            return;
-        }
-
-
-        if (
-            deliveries.length === 0
-        ) {
-            return;
-        }
-
-
-        ensureRowCount(
-            '#deliveryPaymentRows',
-            '.delivery-payment-row',
-            '#addDeliveryPaymentButton',
-            deliveries.length
-        );
-
-
-        const rows =
-            getElements(
-                '#deliveryPaymentRows .delivery-payment-row'
-            );
-
-
-        deliveries.forEach(
-            (
-                delivery,
-                index
-            ) => {
-
-                const row =
-                    rows[index];
-
-
-                if (!row) {
-                    return;
-                }
-
-
-                const customer =
-                    row.querySelector(
-                        'input[name="delivery_customer[]"]'
-                    );
-
-
-                const slim =
-                    row.querySelector(
-                        'input[name="delivery_slim[]"]'
-                    );
-
-
-                const round =
-                    row.querySelector(
-                        'input[name="delivery_round[]"]'
-                    );
-
-
-                const payment =
-                    row.querySelector(
-                        'input[name="delivery_payment[]"]'
-                    );
-
-
-                const price =
-                    row.querySelector(
-                        'input[name="delivery_price_per_gallon[]"]'
-                    );
-
-
-                const method =
-                    row.querySelector(
-                        'select[name="delivery_method[]"]'
-                    );
-
-
-                setValue(
-                    customer,
-                    delivery.customer
-                );
-
-
-                setValue(
-                    slim,
-                    delivery.slim
-                );
-
-
-                setValue(
-                    round,
-                    delivery.round
-                );
-
-
-                setValue(
-                    payment,
-                    delivery.payment
-                );
-
-
-                setValue(
-                    price,
-                    delivery.price
-                );
-
-
-                setValue(
-                    method,
-                    delivery.method ||
-                    'Cash'
-                );
-
-
-                dispatchInput(
-                    customer
-                );
-
-
-                dispatchInput(
-                    slim
-                );
-
-
-                dispatchInput(
-                    round
-                );
-
-
-                dispatchInput(
-                    payment
-                );
-
-
-                dispatchInput(
-                    price
-                );
-
-
-                dispatchChange(
-                    method
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * RESTORE DRIVER EXPENSES
-     * =====================================================
-     */
-
-    function restoreDriverExpenses(
-        expenses
-    ) {
-
-        if (
-            !Array.isArray(expenses)
-        ) {
-            return;
-        }
-
-
-        if (
-            expenses.length === 0
-        ) {
-            return;
-        }
-
-
-        ensureRowCount(
-            '#driverExpenseRows',
-            '.driver-expense-row',
-            '#addDriverExpenseButton',
-            expenses.length
-        );
-
-
-        const rows =
-            getElements(
-                '#driverExpenseRows .driver-expense-row'
-            );
-
-
-        expenses.forEach(
-            (
-                expense,
-                index
-            ) => {
-
-                const row =
-                    rows[index];
-
-
-                if (!row) {
-                    return;
-                }
-
-
-                const category =
-                    row.querySelector(
-                        'select[name="driver_expense_category[]"]'
-                    );
-
-
-                const name =
-                    row.querySelector(
-                        'input[name="driver_expense_name[]"]'
-                    );
-
-
-                const amount =
-                    row.querySelector(
-                        'input[name="driver_expense_amount[]"]'
-                    );
-
-
-                setValue(
-                    category,
-                    expense.category
-                );
-
-
-                setValue(
-                    name,
-                    expense.name
-                );
-
-
-                setValue(
-                    amount,
-                    expense.amount
-                );
-
-
-                dispatchChange(
-                    category
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * RESTORE DRIVER DELIVERIES
-     * =====================================================
-     */
-
-    function restoreDriverDeliveries(
-        deliveries
-    ) {
-
-        if (
-            !Array.isArray(deliveries)
-        ) {
-            return;
-        }
-
-
-        if (
-            deliveries.length === 0
-        ) {
-            return;
-        }
-
-
-        ensureRowCount(
-            '#driverDeliveryPaymentRows',
-            '.driver-delivery-entry, .driver-delivery-row',
-            '#addDriverDeliveryButton, #addDriverDeliveryPaymentButton',
-            deliveries.length
-        );
-
-
-        const rows =
-            getElements(
-                '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
-                '#driverDeliveryPaymentRows .driver-delivery-row'
-            );
-
-
-        deliveries.forEach(
-            (
-                delivery,
-                index
-            ) => {
-
-                const row =
-                    rows[index];
-
-
-                if (!row) {
-                    return;
-                }
-
-
-                const customer =
-                    row.querySelector(
-                        'input[name="driver_delivery_customer[]"]'
-                    );
-
-
-                const slim =
-                    row.querySelector(
-                        'input[name="driver_delivery_slim[]"]'
-                    );
-
-
-                const round =
-                    row.querySelector(
-                        'input[name="driver_delivery_round[]"]'
-                    );
-
-
-                const payment =
-                    row.querySelector(
-                        'input[name="driver_delivery_payment[]"]'
-                    );
-
-
-                const price =
-                    row.querySelector(
-                        'input[name="driver_delivery_price_per_gallon[]"]'
-                    );
-
-
-                const method =
-                    row.querySelector(
-                        'select[name="driver_delivery_method[]"]'
-                    );
-
-
-                setValue(
-                    customer,
-                    delivery.customer
-                );
-
-
-                setValue(
-                    slim,
-                    delivery.slim
-                );
-
-
-                setValue(
-                    round,
-                    delivery.round
-                );
-
-
-                setValue(
-                    payment,
-                    delivery.payment
-                );
-
-
-                setValue(
-                    price,
-                    delivery.price
-                );
-
-
-                setValue(
-                    method,
-                    delivery.method ||
-                    'Cash'
-                );
-
-
-                dispatchInput(
-                    customer
-                );
-
-
-                dispatchInput(
-                    slim
-                );
-
-
-                dispatchInput(
-                    round
-                );
-
-
-                dispatchInput(
-                    payment
-                );
-
-
-                dispatchInput(
-                    price
-                );
-
-
-                dispatchChange(
-                    method
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * RESTORE COMPLETE DRAFT
-     * =====================================================
-     */
-
-    function restoreDraft(
-        draft
-    ) {
-
-        if (
-            !draft ||
-            typeof draft !== 'object'
-        ) {
-            return;
-        }
-
-
-        state.restoring =
-            true;
-
-
-        try {
 
             /*
              * -------------------------------------------------
@@ -1949,20 +1192,19 @@
              * -------------------------------------------------
              */
 
-            setValue(
-                getElement(
-                    '#walk_in_money'
-                ),
+            this.setInputValue(
+                '#walk_in_money',
                 draft.walk_in_money
             );
 
 
-            setValue(
-                getElement(
-                    '#walk_in_customers'
-                ),
-                draft.walk_in_customers
-            );
+            /*
+             * Walk-in customers are calculated by the
+             * calculation controller.
+             *
+             * We intentionally do NOT manually calculate
+             * them here.
+             */
 
 
             /*
@@ -1971,8 +1213,8 @@
              * -------------------------------------------------
              */
 
-            restoreExpenses(
-                draft.expenses
+            this.restoreExpenses(
+                draft.expenses || []
             );
 
 
@@ -1982,8 +1224,8 @@
              * -------------------------------------------------
              */
 
-            restoreShopDeliveries(
-                draft.deliveries
+            await this.restoreShopDeliveries(
+                draft.deliveries || []
             );
 
 
@@ -1993,722 +1235,1003 @@
              * -------------------------------------------------
              */
 
-            const driver =
-                draft.driver || {};
-
-
-            setValue(
-                getElement(
-                    '#driver_money_received'
-                ),
-                driver.money_received
+            this.setInputValue(
+                '#driver_money_received',
+                draft.driver?.money_received ?? 0
             );
 
 
-            restoreDriverExpenses(
-                driver.expenses
+            this.restoreDriverExpenses(
+                draft.driver?.expenses || []
             );
 
 
-            restoreDriverDeliveries(
-                driver.deliveries
+            await this.restoreDriverDeliveries(
+                draft.driver?.deliveries || []
             );
+
+
+            this.triggerCalculation();
 
 
             /*
-             * -------------------------------------------------
-             * Rebind dynamically created customer fields.
-             * -------------------------------------------------
+             * Give the UI controllers a moment to finish
+             * dynamically-created rows before binding data
+             * listeners again.
              */
 
-            bindDynamicRows();
+            setTimeout(
+                () => {
 
+                    this.customerManager
+                        .populateDatalists();
 
-            /*
-             * -------------------------------------------------
-             * Recalculate after restoring values.
-             * -------------------------------------------------
-             */
-
-            if (
-                window.marcidBlueDailyClosing &&
-                typeof window
-                    .marcidBlueDailyClosing
-                    .calculateEverything ===
-                    'function'
-            ) {
-
-                window
-                    .marcidBlueDailyClosing
-                    .calculateEverything();
-
-            }
-
-        } finally {
-
-            state.restoring =
-                false;
+                },
+                50
+            );
 
         }
 
-    }
 
-
-    /*
-     * =====================================================
-     * LOAD CONTEXT
-     * =====================================================
-     */
-
-    async function loadContext() {
-
-        const response =
-            await request(
-                'context'
-            );
-
-
-        state.dailyId =
-            Number(
-                response.daily_id
-            );
-
-
-        state.businessDate =
-            response.business_date;
-
-
-        state.status =
-            response.status;
-
-
-        state.customers =
-            Array.isArray(
-                response.customers
-            )
-                ? response.customers
-                : [];
-
-
-        updateCustomerDatalist();
-
-
-        bindDynamicRows();
-
-
-        updateDailyInformation();
-
-
-        return response;
-
-    }
-
-
-    /*
-     * =====================================================
-     * UPDATE DAILY INFORMATION
-     * =====================================================
-     *
-     * This intentionally updates only elements that already
-     * exist. It does not create new UI.
-     * =====================================================
-     */
-
-    function updateDailyInformation() {
-
-        const dateElements =
-            getElements(
-                '[data-daily-business-date]'
-            );
-
-
-        dateElements.forEach(
-            element => {
-
-                if (
-                    state.businessDate
-                ) {
-
-                    element.textContent =
-                        state.businessDate;
-
-                }
-
-            }
-        );
-
-
-        const idElements =
-            getElements(
-                '[data-daily-id]'
-            );
-
-
-        idElements.forEach(
-            element => {
-
-                if (
-                    state.dailyId
-                ) {
-
-                    element.textContent =
-                        state.dailyId;
-
-                }
-
-            }
-        );
-
-
-        const statusElements =
-            getElements(
-                '[data-daily-status]'
-            );
-
-
-        statusElements.forEach(
-            element => {
-
-                if (
-                    state.status
-                ) {
-
-                    element.textContent =
-                        state.status;
-
-                }
-
-            }
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * LOAD SAVED DRAFT
-     * =====================================================
-     */
-
-    async function loadDraft() {
-
-        const response =
-            await request(
-                'load_draft'
-            );
-
-
-        /*
-         * Backend is authoritative about the current
-         * open daily record.
-         */
-
-        state.dailyId =
-            Number(
-                response.daily_id
-            );
-
-
-        state.businessDate =
-            response.business_date;
-
-
-        updateDailyInformation();
-
-
-        if (
-            response.has_draft &&
-            response.draft
+        restoreExpenses(
+            expenses
         ) {
 
-            restoreDraft(
-                response.draft
+            if (!Array.isArray(expenses)) {
+                return;
+            }
+
+
+            const rows =
+                document.querySelectorAll(
+                    '#expenseRows .expense-row'
+                );
+
+
+            /*
+             * The existing UI already creates the initial row.
+             *
+             * If more rows are needed, we use the existing
+             * "Add Expense" button instead of creating our
+             * own row HTML.
+             */
+
+            this.ensureRowCount(
+                '#expenseRows .expense-row',
+                expenses.length,
+                [
+                    '#addExpenseButton',
+                    '[data-action="add-expense"]',
+                    '.add-expense-button'
+                ]
+            );
+
+
+            const restoredRows =
+                document.querySelectorAll(
+                    '#expenseRows .expense-row'
+                );
+
+
+            expenses.forEach(
+                (expense, index) => {
+
+                    const row =
+                        restoredRows[index];
+
+
+                    if (!row) {
+                        return;
+                    }
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'select[name="expense_category[]"]'
+                        ),
+                        expense.category
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="expense_name[]"]'
+                        ),
+                        expense.name
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="expense_amount[]"]'
+                        ),
+                        expense.amount
+                    );
+
+                }
             );
 
         }
 
-    }
+
+        async restoreShopDeliveries(
+            deliveries
+        ) {
+
+            if (!Array.isArray(deliveries)) {
+                return;
+            }
 
 
-    /*
-     * =====================================================
-     * RESET
-     * =====================================================
-     */
-
-    async function handleReset() {
-
-        const confirmed =
-            window.confirm(
-                'Are you sure you want to reset this daily closing?\n\n' +
-                'All current daily entries and saved draft data will be cleared.'
+            this.ensureRowCount(
+                '#deliveryPaymentRows .delivery-payment-row',
+                deliveries.length,
+                [
+                    '#addDeliveryPaymentButton',
+                    '#addDeliveryButton',
+                    '[data-action="add-delivery"]',
+                    '.add-delivery-payment-button'
+                ]
             );
 
 
-        if (!confirmed) {
-            return;
-        }
+            const rows =
+                document.querySelectorAll(
+                    '#deliveryPaymentRows .delivery-payment-row'
+                );
 
 
-        const button =
-            getElement(
-                '#resetDailyClosingButton'
-            );
+            deliveries.forEach(
+                (delivery, index) => {
+
+                    const row =
+                        rows[index];
 
 
-        if (button) {
-            button.disabled = true;
-        }
+                    if (!row) {
+                        return;
+                    }
 
 
-        try {
+                    const customer =
+                        row.querySelector(
+                            'input[name="delivery_customer[]"]'
+                        );
 
-            const response =
-                await request(
-                    'reset',
-                    {
 
-                        method: 'POST',
+                    const price =
+                        row.querySelector(
+                            'input[name="delivery_price_per_gallon[]"]'
+                        );
 
-                        body: {}
+
+                    this.setInputValue(
+                        customer,
+                        delivery.customer
+                    );
+
+
+                    /*
+                     * Set the saved customer price first.
+                     *
+                     * If this customer exists, the database
+                     * value is authoritative.
+                     */
+
+                    this.customerManager.loadPrice(
+                        customer,
+                        price
+                    );
+
+
+                    /*
+                     * If this is a new customer, restore the
+                     * draft's manually entered price.
+                     */
+
+                    if (
+                        !this.customerManager.find(
+                            delivery.customer
+                        )
+                    ) {
+
+                        this.setInputValue(
+                            price,
+                            delivery.price
+                        );
 
                     }
-                );
 
 
-            /*
-             * Clear the current browser form.
-             *
-             * We do this through the existing Reset/UI
-             * controls where possible.
-             */
-
-            clearCurrentForm();
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="delivery_slim[]"]'
+                        ),
+                        delivery.slim
+                    );
 
 
-            state.dailyId =
-                Number(
-                    response.daily_id
-                );
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="delivery_round[]"]'
+                        ),
+                        delivery.round
+                    );
 
 
-            state.businessDate =
-                response.business_date;
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="delivery_payment[]"]'
+                        ),
+                        delivery.payment
+                    );
 
 
-            state.status =
-                'Open';
+                    this.setInputValue(
+                        row.querySelector(
+                            'select[name="delivery_method[]"]'
+                        ),
+                        delivery.method
+                    );
 
 
-            updateDailyInformation();
+                    this.dispatchInput(
+                        customer
+                    );
 
+                    this.dispatchChange(
+                        customer
+                    );
 
-            if (
-                window.marcidBlueDailyClosing &&
-                typeof window
-                    .marcidBlueDailyClosing
-                    .calculateEverything ===
-                    'function'
-            ) {
-
-                window
-                    .marcidBlueDailyClosing
-                    .calculateEverything();
-
-            }
-
-
-            window.alert(
-                'Daily closing has been reset.'
+                }
             );
-
-        } catch (error) {
-
-            console.error(
-                'Daily reset failed:',
-                error
-            );
-
-
-            window.alert(
-                error.message ||
-                'Unable to reset the daily closing.'
-            );
-
-        } finally {
-
-            if (button) {
-                button.disabled = false;
-            }
 
         }
 
-    }
 
-
-    /*
-     * =====================================================
-     * CLEAR CURRENT FORM
-     * =====================================================
-     *
-     * We use existing clear/remove controls instead of
-     * duplicating row-management logic.
-     * =====================================================
-     */
-
-    function clickRemoveButtonsUntilMinimum(
-        containerSelector,
-        rowSelector
-    ) {
-
-        const container =
-            getElement(
-                containerSelector
-            );
-
-
-        if (!container) {
-            return;
-        }
-
-
-        let rows =
-            container.querySelectorAll(
-                rowSelector
-            );
-
-
-        /*
-         * Keep one row if the existing UI requires a minimum
-         * row. The existing controller decides whether the
-         * row can actually be removed.
-         */
-
-        while (
-            rows.length > 1
+        restoreDriverExpenses(
+            expenses
         ) {
 
-            const row =
-                rows[
-                    rows.length - 1
-                ];
-
-
-            const removeButton =
-                row.querySelector(
-                    '[data-remove-row], ' +
-                    '.remove-row, ' +
-                    '.remove-expense, ' +
-                    '.remove-delivery, ' +
-                    'button[type="button"].remove'
-                );
-
-
-            if (!removeButton) {
-                break;
+            if (!Array.isArray(expenses)) {
+                return;
             }
 
 
-            removeButton.click();
+            this.ensureRowCount(
+                '#driverExpenseRows .driver-expense-row',
+                expenses.length,
+                [
+                    '#addDriverExpenseButton',
+                    '[data-action="add-driver-expense"]',
+                    '.add-driver-expense-button'
+                ]
+            );
 
 
-            rows =
-                container.querySelectorAll(
-                    rowSelector
+            const rows =
+                document.querySelectorAll(
+                    '#driverExpenseRows .driver-expense-row'
                 );
+
+
+            expenses.forEach(
+                (expense, index) => {
+
+                    const row =
+                        rows[index];
+
+
+                    if (!row) {
+                        return;
+                    }
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'select[name="driver_expense_category[]"]'
+                        ),
+                        expense.category
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="driver_expense_name[]"]'
+                        ),
+                        expense.name
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="driver_expense_amount[]"]'
+                        ),
+                        expense.amount
+                    );
+
+                }
+            );
 
         }
 
-    }
+
+        async restoreDriverDeliveries(
+            deliveries
+        ) {
+
+            if (!Array.isArray(deliveries)) {
+                return;
+            }
 
 
-    function clearCurrentForm() {
-
-        /*
-         * Simple scalar fields.
-         */
-
-        const scalarSelectors = [
-
-            '#walk_in_money',
-
-            '#walk_in_customers',
-
-            '#driver_money_received'
-
-        ];
+            this.ensureRowCount(
+                '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
+                '#driverDeliveryPaymentRows .driver-delivery-row',
+                deliveries.length,
+                [
+                    '#addDriverDeliveryButton',
+                    '#addDriverDeliveryPaymentButton',
+                    '[data-action="add-driver-delivery"]',
+                    '.add-driver-delivery-button'
+                ]
+            );
 
 
-        scalarSelectors.forEach(
-            selector => {
+            const rows =
+                document.querySelectorAll(
+                    '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
+                    '#driverDeliveryPaymentRows .driver-delivery-row'
+                );
+
+
+            deliveries.forEach(
+                (delivery, index) => {
+
+                    const row =
+                        rows[index];
+
+
+                    if (!row) {
+                        return;
+                    }
+
+
+                    const customer =
+                        row.querySelector(
+                            'input[name="driver_delivery_customer[]"], ' +
+                            '.driver-delivery-customer'
+                        );
+
+
+                    const price =
+                        row.querySelector(
+                            'input[name="driver_delivery_price_per_gallon[]"], ' +
+                            '.driver-delivery-price'
+                        );
+
+
+                    this.setInputValue(
+                        customer,
+                        delivery.customer
+                    );
+
+
+                    this.customerManager.loadPrice(
+                        customer,
+                        price
+                    );
+
+
+                    if (
+                        !this.customerManager.find(
+                            delivery.customer
+                        )
+                    ) {
+
+                        this.setInputValue(
+                            price,
+                            delivery.price
+                        );
+
+                    }
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="driver_delivery_slim[]"]'
+                        ),
+                        delivery.slim
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="driver_delivery_round[]"]'
+                        ),
+                        delivery.round
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'input[name="driver_delivery_payment[]"]'
+                        ),
+                        delivery.payment
+                    );
+
+
+                    this.setInputValue(
+                        row.querySelector(
+                            'select[name="driver_delivery_method[]"]'
+                        ),
+                        delivery.method
+                    );
+
+
+                    this.dispatchInput(
+                        customer
+                    );
+
+                    this.dispatchChange(
+                        customer
+                    );
+
+                }
+            );
+
+        }
+
+
+        ensureRowCount(
+            selector,
+            requiredCount,
+            buttonSelectors
+        ) {
+
+            if (
+                requiredCount <= 0
+            ) {
+                return;
+            }
+
+
+            let rows =
+                document.querySelectorAll(
+                    selector
+                );
+
+
+            while (
+                rows.length < requiredCount
+            ) {
+
+                const button =
+                    this.findFirstButton(
+                        buttonSelectors
+                    );
+
+
+                if (!button) {
+
+                    console.warn(
+                        'Unable to find existing row-add button for:',
+                        selector
+                    );
+
+                    break;
+
+                }
+
+
+                button.click();
+
+
+                rows =
+                    document.querySelectorAll(
+                        selector
+                    );
+
+            }
+
+        }
+
+
+        findFirstButton(
+            selectors
+        ) {
+
+            for (
+                const selector of selectors
+            ) {
 
                 const element =
-                    getElement(
+                    document.querySelector(
                         selector
                     );
 
 
                 if (element) {
-
-                    if (
-                        element.hasAttribute(
-                            'readonly'
-                        )
-                    ) {
-
-                        /*
-                         * readonly values are recalculated
-                         * by the calculation controller.
-                         */
-
-                        return;
-
-                    }
-
-
-                    element.value = '';
-
+                    return element;
                 }
 
             }
-        );
 
 
-        /*
-         * Existing row controllers generally keep one
-         * blank row. Clear values from all remaining rows.
-         */
+            return null;
 
-        getElements(
-            '#expenseRows .expense-row'
-        ).forEach(
-            row => {
+        }
 
-                row.querySelectorAll(
-                    'input, select, textarea'
-                ).forEach(
-                    element => {
 
-                        if (
-                            !element.disabled
-                        ) {
+        setInputValue(
+            selectorOrElement,
+            value
+        ) {
 
-                            element.value =
-                                '';
+            const element =
+                typeof selectorOrElement === 'string'
+                    ? document.querySelector(
+                        selectorOrElement
+                    )
+                    : selectorOrElement;
 
-                        }
 
+            if (!element) {
+                return;
+            }
+
+
+            element.value =
+                value ?? '';
+
+        }
+
+
+        dispatchInput(element) {
+
+            if (!element) {
+                return;
+            }
+
+
+            element.dispatchEvent(
+                new Event(
+                    'input',
+                    {
+                        bubbles: true
                     }
-                );
+                )
+            );
 
+        }
+
+
+        dispatchChange(element) {
+
+            if (!element) {
+                return;
             }
-        );
 
 
-        getElements(
-            '#deliveryPaymentRows .delivery-payment-row'
-        ).forEach(
-            row => {
-
-                row.querySelectorAll(
-                    'input, select, textarea'
-                ).forEach(
-                    element => {
-
-                        if (
-                            !element.disabled
-                        ) {
-
-                            element.value =
-                                '';
-
-                        }
-
+            element.dispatchEvent(
+                new Event(
+                    'change',
+                    {
+                        bubbles: true
                     }
-                );
+                )
+            );
 
-            }
-        );
+        }
 
 
-        getElements(
-            '#driverExpenseRows .driver-expense-row'
-        ).forEach(
-            row => {
+        triggerCalculation() {
 
-                row.querySelectorAll(
-                    'input, select, textarea'
-                ).forEach(
-                    element => {
+            /*
+             * We do not perform calculations here.
+             *
+             * We simply notify the existing calculation
+             * controller that data changed.
+             */
 
-                        if (
-                            !element.disabled
-                        ) {
-
-                            element.value =
-                                '';
-
-                        }
-
+            document.dispatchEvent(
+                new Event(
+                    'input',
+                    {
+                        bubbles: true
                     }
-                );
-
-            }
-        );
+                )
+            );
 
 
-        getElements(
-            '#driverDeliveryPaymentRows .driver-delivery-entry, ' +
-            '#driverDeliveryPaymentRows .driver-delivery-row'
-        ).forEach(
-            row => {
-
-                row.querySelectorAll(
-                    'input, select, textarea'
-                ).forEach(
-                    element => {
-
-                        if (
-                            !element.disabled
-                        ) {
-
-                            element.value =
-                                '';
-
-                        }
-
+            document.dispatchEvent(
+                new Event(
+                    'change',
+                    {
+                        bubbles: true
                     }
+                )
+            );
+
+        }
+
+
+        showStatus(
+            status
+        ) {
+
+            const element =
+                document.querySelector(
+                    '[data-daily-closing-autosave-status]'
+                );
+
+
+            if (!element) {
+                return;
+            }
+
+
+            if (status === 'saved') {
+
+                element.textContent =
+                    'Draft saved';
+
+                element.classList.remove(
+                    'is-error'
+                );
+
+                element.classList.add(
+                    'is-saved'
+                );
+
+            } else if (
+                status === 'error'
+            ) {
+
+                element.textContent =
+                    'Draft save failed';
+
+                element.classList.remove(
+                    'is-saved'
+                );
+
+                element.classList.add(
+                    'is-error'
                 );
 
             }
-        );
 
-
-        /*
-         * Trigger existing calculations.
-         */
-
-        getElements(
-            'input, select'
-        ).forEach(
-            element => {
-
-                dispatchInput(
-                    element
-                );
-
-                dispatchChange(
-                    element
-                );
-
-            }
-        );
+        }
 
     }
 
 
     /*
      * =====================================================
-     * FINALIZE
+     * DAILY CLOSING ACTION MANAGER
      * =====================================================
+     *
+     * Handles:
+     *
+     * - Context loading
+     * - Reset
+     * - Finalize
+     *
+     * This class does not perform calculations.
      */
 
-    async function handleFinalize() {
+    class DailyClosingActionManager {
 
-        /*
-         * Make sure the most recent values are saved before
-         * asking the backend to finalize.
-         */
+        constructor(
+            api,
+            customerManager,
+            draftManager
+        ) {
 
-        clearTimeout(
-            state.autosaveTimer
-        );
+            this.api =
+                api;
 
+            this.customerManager =
+                customerManager;
 
-        await saveDraft();
+            this.draftManager =
+                draftManager;
 
+            this.dailyId =
+                null;
 
-        const confirmed =
-            window.confirm(
-                'Finalize and close this daily record?\n\n' +
-                'After closing, the daily record will no longer be editable.'
-            );
+            this.businessDate =
+                null;
 
+            this.status =
+                null;
 
-        if (!confirmed) {
-            return;
         }
 
 
-        const button =
-            getElement(
-                '#finalizeDailyClosingButton'
-            );
+        async initialize() {
 
-
-        if (button) {
-            button.disabled = true;
-        }
-
-
-        try {
-
-            const response =
-                await request(
-                    'finalize',
-                    {
-
-                        method: 'POST',
-
-                        body: {
-
-                            daily_id:
-                                state.dailyId
-
-                        }
-
-                    }
+            const context =
+                await this.api.request(
+                    'context'
                 );
 
 
-            state.status =
-                'Closed';
+            if (
+                !context.daily
+            ) {
+
+                throw new Error(
+                    'Daily closing context is unavailable.'
+                );
+
+            }
 
 
-            updateDailyInformation();
+            this.dailyId =
+                Number(
+                    context.daily.daily_id
+                );
 
 
-            window.alert(
-                response.message ||
-                'Daily record finalized successfully.'
+            this.businessDate =
+                context.daily.business_date;
+
+
+            this.status =
+                context.daily.status;
+
+
+            this.customerManager
+                .setCustomers(
+                    context.customers || []
+                );
+
+
+            this.customerManager
+                .populateDatalists();
+
+
+            this.updateGlobalState();
+
+        }
+
+
+        updateGlobalState() {
+
+            window.marcidBlueDailyClosingData = {
+
+                dailyId:
+                    this.dailyId,
+
+                businessDate:
+                    this.businessDate,
+
+                status:
+                    this.status,
+
+                scheduleAutosave:
+                    () => {
+
+                        window.marcidBlueDailyClosingDataManager
+                            ?.scheduleAutosave();
+
+                    }
+
+            };
+
+        }
+
+
+        async reset() {
+
+            const confirmed =
+                window.confirm(
+                    'Reset today’s Daily Closing?\n\n' +
+                    'This will remove the current daily entries and saved draft for the open day.'
+                );
+
+
+            if (!confirmed) {
+                return false;
+            }
+
+
+            await this.api.request(
+                'reset',
+                'POST',
+                {
+
+                    daily_id:
+                        this.dailyId
+
+                }
             );
 
 
             /*
-             * Reload the page so the existing authentication
-             * and daily-record UI can determine what should
-             * happen next.
+             * Reloading is intentional.
+             *
+             * It returns the page to its original blank UI
+             * without duplicating every row controller's
+             * reset logic here.
              */
 
             window.location.reload();
 
-        } catch (error) {
+            return true;
 
-            console.error(
-                'Daily finalization failed:',
-                error
-            );
+        }
 
 
-            window.alert(
-                error.message ||
-                'Unable to finalize the daily record.'
-            );
+        async finalize() {
 
-        } finally {
+            /*
+             * IMPORTANT:
+             *
+             * Finalization uses the autosaved draft in MySQL.
+             *
+             * Therefore save the latest DOM state FIRST.
+             */
 
-            if (button) {
-                button.disabled = false;
+            await this.draftManager.save();
+
+
+            const response =
+                await this.api.request(
+                    'finalize',
+                    'POST',
+                    {
+
+                        daily_id:
+                            this.dailyId
+
+                    }
+                );
+
+
+            return response;
+
+        }
+
+    }
+
+
+    /*
+     * =====================================================
+     * UI ACTION BINDINGS
+     * =====================================================
+     *
+     * Only the two page-level buttons are controlled here:
+     *
+     * - Reset
+     * - Finalize & Close Day
+     *
+     * Existing row buttons remain owned by the existing
+     * inline UI controllers.
+     */
+
+    class DailyClosingUI {
+
+        constructor(
+            actionManager
+        ) {
+
+            this.actionManager =
+                actionManager;
+
+        }
+
+
+        bind() {
+
+            const resetButton =
+                document.querySelector(
+                    '#resetDailyClosingButton'
+                );
+
+
+            if (resetButton) {
+
+                resetButton.addEventListener(
+                    'click',
+                    async () => {
+
+                        try {
+
+                            resetButton.disabled =
+                                true;
+
+                            await this.actionManager
+                                .reset();
+
+                        } catch (error) {
+
+                            console.error(
+                                error
+                            );
+
+                            window.alert(
+                                error.message ||
+                                'Unable to reset the daily closing.'
+                            );
+
+
+                            resetButton.disabled =
+                                false;
+
+                        }
+
+                    }
+                );
+
+            }
+
+
+            const finalizeButton =
+                document.querySelector(
+                    '#finalizeDailyClosingButton'
+                );
+
+
+            if (finalizeButton) {
+
+                finalizeButton.addEventListener(
+                    'click',
+                    async () => {
+
+                        const confirmed =
+                            window.confirm(
+                                'Finalize and close this day?\n\n' +
+                                'After finalization, the daily record will be closed.'
+                            );
+
+
+                        if (!confirmed) {
+                            return;
+                        }
+
+
+                        try {
+
+                            finalizeButton.disabled =
+                                true;
+
+
+                            const response =
+                                await this.actionManager
+                                    .finalize();
+
+
+                            window.alert(
+                                response.message ||
+                                'Daily closing finalized successfully.'
+                            );
+
+
+                            window.location.reload();
+
+                        } catch (error) {
+
+                            console.error(
+                                error
+                            );
+
+
+                            window.alert(
+                                error.message ||
+                                'Unable to finalize the daily closing.'
+                            );
+
+
+                            finalizeButton.disabled =
+                                false;
+
+                        }
+
+                    }
+                );
+
             }
 
         }
@@ -2718,184 +2241,317 @@
 
     /*
      * =====================================================
-     * BIND RESET / FINALIZE
+     * DATA MANAGER
      * =====================================================
      *
-     * These are the only two action buttons handled here.
+     * Main coordinator.
      *
-     * The old DailyClosingActionController will be removed
-     * from the PHP file before this script is activated,
-     * preventing duplicate click handlers.
-     * =====================================================
+     * This class does not contain business calculations.
+     * It simply coordinates:
+     *
+     * API
+     * CustomerManager
+     * FormDataCollector
+     * DraftManager
+     * ActionManager
+     * UI
      */
 
-    function bindActionButtons() {
+    class DailyClosingDataManager {
 
-        const resetButton =
-            getElement(
-                '#resetDailyClosingButton'
-            );
+        constructor() {
 
-
-        if (
-            resetButton &&
-            resetButton.dataset.dataControllerBound !== '1'
-        ) {
-
-            resetButton.dataset.dataControllerBound =
-                '1';
+            this.api =
+                new ApiClient(
+                    CONFIG.backendUrl
+                );
 
 
-            resetButton.addEventListener(
-                'click',
-                handleReset
-            );
+            this.customerManager =
+                new CustomerManager(
+                    this.api
+                );
+
+
+            this.collector =
+                new FormDataCollector();
+
+
+            this.draftManager =
+                new DraftManager(
+                    this.api,
+                    this.collector,
+                    this.customerManager
+                );
+
+
+            this.actionManager =
+                new DailyClosingActionManager(
+                    this.api,
+                    this.customerManager,
+                    this.draftManager
+                );
+
+
+            this.ui =
+                new DailyClosingUI(
+                    this.actionManager
+                );
+
+
+            this.initialized =
+                false;
 
         }
 
 
-        const finalizeButton =
-            getElement(
-                '#finalizeDailyClosingButton'
-            );
+        async initialize() {
+
+            if (this.initialized) {
+                return;
+            }
 
 
-        if (
-            finalizeButton &&
-            finalizeButton.dataset.dataControllerBound !== '1'
-        ) {
-
-            finalizeButton.dataset.dataControllerBound =
-                '1';
+            this.initialized =
+                true;
 
 
-            finalizeButton.addEventListener(
-                'click',
-                handleFinalize
-            );
+            try {
+
+                /*
+                 * 1. Load daily context and customers.
+                 */
+
+                await this.actionManager
+                    .initialize();
+
+
+                /*
+                 * 2. Bind customer autocomplete.
+                 */
+
+                this.customerManager
+                    .bind();
+
+
+                /*
+                 * 3. Bind page-level buttons.
+                 */
+
+                this.ui
+                    .bind();
+
+
+                /*
+                 * 4. Watch all editable fields for changes.
+                 */
+
+                this.bindAutosaveEvents();
+
+
+                /*
+                 * 5. Restore existing draft.
+                 */
+
+                const draft =
+                    await this.draftManager
+                        .load();
+
+
+                if (draft) {
+
+                    await this.draftManager
+                        .restore(
+                            draft
+                        );
+
+                }
+
+
+                /*
+                 * 6. Watch dynamically-created rows.
+                 *
+                 * We do not create the rows here.
+                 * Existing UI controllers remain responsible
+                 * for doing that.
+                 */
+
+                this.observeDynamicRows();
+
+
+                /*
+                 * 7. Final calculation refresh.
+                 */
+
+                this.triggerCalculation();
+
+
+                console.info(
+                    'Marcid Blue Daily Closing Data Manager initialized.'
+                );
+
+            } catch (error) {
+
+                console.error(
+                    'Daily Closing initialization failed:',
+                    error
+                );
+
+
+                window.alert(
+                    error.message ||
+                    'Unable to initialize Daily Closing.'
+                );
+
+            }
 
         }
 
-    }
 
+        bindAutosaveEvents() {
 
-    /*
-     * =====================================================
-     * MUTATION OBSERVER
-     * =====================================================
-     *
-     * Existing UI controllers dynamically add rows.
-     *
-     * We watch for those rows so customer data listeners
-     * are automatically attached.
-     * =====================================================
-     */
+            document.addEventListener(
+                'input',
+                event => {
 
-    function observeDynamicRows() {
+                    if (
+                        this.isTrackedField(
+                            event.target
+                        )
+                    ) {
 
-        const observer =
-            new MutationObserver(
-                () => {
+                        this.scheduleAutosave();
 
-                    bindDynamicRows();
+                    }
 
                 }
             );
 
 
-        observer.observe(
-            document.body,
-            {
+            document.addEventListener(
+                'change',
+                event => {
 
-                childList: true,
+                    if (
+                        this.isTrackedField(
+                            event.target
+                        )
+                    ) {
 
-                subtree: true
+                        this.scheduleAutosave();
 
-            }
-        );
+                    }
 
-    }
+                }
+            );
+
+        }
 
 
-    /*
-     * =====================================================
-     * INITIALIZATION
-     * =====================================================
-     */
-
-    async function initialize() {
-
-        if (
-            state.initialized
+        isTrackedField(
+            element
         ) {
-            return;
+
+            if (!element) {
+                return false;
+            }
+
+
+            return element.matches(
+                '#walk_in_money, ' +
+
+                '#driver_money_received, ' +
+
+                '#expenseRows input, ' +
+                '#expenseRows select, ' +
+
+                '#deliveryPaymentRows input, ' +
+                '#deliveryPaymentRows select, ' +
+
+                '#driverExpenseRows input, ' +
+                '#driverExpenseRows select, ' +
+
+                '#driverDeliveryPaymentRows input, ' +
+                '#driverDeliveryPaymentRows select'
+            );
+
         }
 
 
-        state.initialized =
-            true;
+        scheduleAutosave() {
+
+            this.draftManager
+                .schedule();
+
+        }
 
 
-        bindActionButtons();
+        observeDynamicRows() {
 
-        bindAutosaveEvents();
+            const observer =
+                new MutationObserver(
+                    () => {
 
-        observeDynamicRows();
+                        this.customerManager
+                            .populateDatalists();
 
-
-        try {
-
-            /*
-             * Load the current daily record and customer list.
-             */
-
-            await loadContext();
+                    }
+                );
 
 
-            /*
-             * Then restore the autosaved draft.
-             */
+            observer.observe(
+                document.body,
+                {
 
-            await loadDraft();
+                    childList:
+                        true,
 
+                    subtree:
+                        true
 
-            /*
-             * Make sure dynamically created rows are bound.
-             */
-
-            bindDynamicRows();
-
-
-            /*
-             * Final calculation after all data has been
-             * restored.
-             */
-
-            if (
-                window.marcidBlueDailyClosing &&
-                typeof window
-                    .marcidBlueDailyClosing
-                    .calculateEverything ===
-                    'function'
-            ) {
-
-                window
-                    .marcidBlueDailyClosing
-                    .calculateEverything();
-
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Daily closing data initialization failed:',
-                error
+                }
             );
 
+        }
 
-            window.alert(
-                error.message ||
-                'Unable to load the daily closing data.'
+
+        triggerCalculation() {
+
+            /*
+             * daily-closing-calculation.js owns calculations.
+             *
+             * We simply trigger normal DOM events so its
+             * existing listeners can recalculate.
+             */
+
+            const fields =
+                document.querySelectorAll(
+                    '#walk_in_money, ' +
+                    '#driver_money_received, ' +
+                    '#expenseRows input, ' +
+                    '#expenseRows select, ' +
+                    '#deliveryPaymentRows input, ' +
+                    '#deliveryPaymentRows select, ' +
+                    '#driverExpenseRows input, ' +
+                    '#driverExpenseRows select, ' +
+                    '#driverDeliveryPaymentRows input, ' +
+                    '#driverDeliveryPaymentRows select'
+                );
+
+
+            fields.forEach(
+                field => {
+
+                    field.dispatchEvent(
+                        new Event(
+                            'input',
+                            {
+                                bubbles: true
+                            }
+                        )
+                    );
+
+                }
             );
 
         }
@@ -2905,45 +2561,56 @@
 
     /*
      * =====================================================
-     * PUBLIC API
+     * APPLICATION STARTUP
      * =====================================================
      */
 
-    window.marcidBlueDailyClosingData = {
-
-        getState() {
-
-            return {
-                ...state,
-                customers:
-                    [...state.customers]
-            };
-
-        },
-
-        collectDraft,
-
-        saveDraft,
-
-        loadContext,
-
-        loadDraft,
-
-        scheduleAutosave,
-
-        saveCustomerIfNeeded,
-
-        handleReset,
-
-        handleFinalize
-
-    };
+    const manager =
+        new DailyClosingDataManager();
 
 
     /*
-     * =====================================================
-     * START
-     * =====================================================
+     * Public reference.
+     *
+     * Useful for debugging and for the other controllers
+     * when they need to request an autosave.
+     */
+
+    window.marcidBlueDailyClosingDataManager =
+        manager;
+
+
+    window.marcidBlueDailyClosingData =
+        {
+
+            scheduleAutosave:
+                () => {
+
+                    manager.scheduleAutosave();
+
+                },
+
+            getDailyId:
+                () => {
+
+                    return manager.actionManager
+                        .dailyId;
+
+                },
+
+            getCustomers:
+                () => {
+
+                    return manager.customerManager
+                        .customers;
+
+                }
+
+        };
+
+
+    /*
+     * Start after the DOM is ready.
      */
 
     if (
@@ -2953,13 +2620,21 @@
 
         document.addEventListener(
             'DOMContentLoaded',
-            initialize
+            () => {
+
+                manager.initialize();
+
+            },
+            {
+                once: true
+            }
         );
 
     } else {
 
-        initialize();
+        manager.initialize();
 
     }
+
 
 })();

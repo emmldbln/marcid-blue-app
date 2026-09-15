@@ -849,24 +849,51 @@ function saveCustomer(
 
     if ($existing) {
 
+        /*
+        * Existing customer:
+        *
+        * Update the saved gallon price.
+        *
+        * This preserves the original Marcid Blue behavior
+        * where the Price/Gal field can be edited.
+        */
+
+        $update =
+            $pdo->prepare(
+                "UPDATE customers
+                SET gallon_price = ?
+                WHERE customer_id = ?"
+            );
+
+
+        $update->execute(
+            [
+                $price,
+                (int) $existing['customer_id']
+            ]
+        );
+
+
         return [
 
-            'customer_id' =>
-                (int) $existing['customer_id'],
+            'customer' => [
 
-            'customer_name' =>
-                $existing['customer_name'],
+                'customer_id' =>
+                    (int) $existing['customer_id'],
 
-            'gallon_price' =>
-                money(
-                    $existing['gallon_price']
-                ),
+                'customer_name' =>
+                    $existing['customer_name'],
+
+                'gallon_price' =>
+                    $price
+
+            ],
 
             'created' =>
                 false,
 
             'message' =>
-                'Existing customer loaded.'
+                'Customer price updated successfully.'
 
         ];
 
@@ -898,14 +925,18 @@ function saveCustomer(
 
     return [
 
-        'customer_id' =>
-            (int) $pdo->lastInsertId(),
+        'customer' => [
 
-        'customer_name' =>
-            $name,
+            'customer_id' =>
+                (int) $pdo->lastInsertId(),
 
-        'gallon_price' =>
-            $price,
+            'customer_name' =>
+                $name,
+
+            'gallon_price' =>
+                $price
+
+        ],
 
         'created' =>
             true,
