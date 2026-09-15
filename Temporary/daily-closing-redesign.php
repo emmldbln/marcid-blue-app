@@ -720,23 +720,22 @@ $walkInOtherSales = 0.00;
         border-radius: var(--radius-md);
     }
 
-    .driver-delivery-entry {
+   .driver-delivery-entry {
         display: grid;
 
         grid-template-columns:
-            minmax(0, 1fr)
-           40px
-           40px
-           72px
-           44px
-           100px
-           78px
-           30px;
+            minmax(105px, 1.8fr)  /* Customer */
+            minmax(32px, 0.45fr)  /* Slim */
+            minmax(32px, 0.45fr)  /* Round */
+            minmax(58px, 0.8fr)   /* Total */
+            minmax(40px, 0.5fr)   /* Per/Gal */
+            minmax(82px, 1fr)     /* Payment */
+            minmax(72px, 0.8fr)   /* Method */
+            30px;                 /* Remove */
 
-        gap: 9px;
+        gap: 8px;
 
         align-items: end;
-
         min-width: 0;
 
         padding: 14px 12px 12px;
@@ -793,13 +792,17 @@ $walkInOtherSales = 0.00;
     }
 
     .driver-delivery-entry .form-input {
+        width: 100%;
+        min-width: 0;
         font-size: 13px;
+        box-sizing: border-box;
     }
 
     .driver-delivery-entry input::placeholder {
         font-size: 12px;
         color: var(--text-muted);
         opacity: 1;
+        white-space: nowrap;
     }
 
 
@@ -810,9 +813,13 @@ $walkInOtherSales = 0.00;
      */
 
     .driver-delivery-entry .driver-delivery-customer {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
         font-size: 13px;
         padding: 0 7px;
         text-align: center;
+        box-sizing: border-box;
     }
 
 
@@ -824,8 +831,8 @@ $walkInOtherSales = 0.00;
 
     .driver-delivery-entry .driver-delivery-slim,
     .driver-delivery-entry .driver-delivery-round {
-        width: 44px;
-        max-width: 44px;
+        width: 100%;
+        max-width: none;
         padding: 0 4px;
         text-align: center;
     }
@@ -838,10 +845,11 @@ $walkInOtherSales = 0.00;
      */
 
     .driver-delivery-entry .driver-delivery-payment {
-        width: px;
-        max-width: 84px;
+        width: 100%;
+        max-width: none;
         padding: 0 6px;
         text-align: center;
+        box-sizing: border-box;
     }
 
 
@@ -852,8 +860,8 @@ $walkInOtherSales = 0.00;
      */
 
     .driver-delivery-entry .driver-delivery-price {
-        width: 48px;
-        max-width: 48px;
+        width: 100%;
+        max-width: none;
         padding: 0 5px;
         font-size: 13px;
         text-align: center;
@@ -894,8 +902,8 @@ $walkInOtherSales = 0.00;
      */
 
     .driver-delivery-balance {
-        width: 78px !important;
-        max-width: 78px !important;
+        width: 100% !important;
+        max-width: none !important;
 
         padding: 0 4px;
 
@@ -1122,16 +1130,6 @@ $walkInOtherSales = 0.00;
             gap: 10px;
         }
 
-        /*
-         * Approved Driver UI becomes one column
-         * at the same breakpoint as the approved test.
-         */
-
-        .driver-delivery-payment-rows {
-            grid-template-columns: 1fr;
-            row-gap: 0;
-        }
-
         .driver-delivery-entry:nth-child(even) {
             padding-left: 12px;
             border-left: 2px solid var(--border);
@@ -1142,6 +1140,26 @@ $walkInOtherSales = 0.00;
         }
 
     }
+
+    @media (max-width: 1100px) and (min-width: 901px) {
+
+    .driver-delivery-entry .form-label {
+        font-size: 11px;
+    }
+
+    .driver-delivery-entry .form-input {
+        font-size: 12px;
+    }
+
+    .driver-delivery-entry input::placeholder {
+        font-size: 11px;
+    }
+
+    .driver-delivery-entry .driver-delivery-customer {
+        font-size: 12px;
+    }
+
+}
 
 
     /*
