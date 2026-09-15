@@ -989,25 +989,31 @@ $walkInOtherSales = 0.00;
     }
 
 
-    /*
-     * =========================================================
-     * DRIVER DELIVERY STATUS OUTLINE
-     * =========================================================
-     */
+   /* =========================================================
+   DRIVER DELIVERY STATUS OUTLINE
+   ========================================================= */
 
-    .driver-delivery-entry.status-paid {
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-paid
+    ) {
         border: 2px solid var(--success);
     }
 
-    .driver-delivery-entry.status-due {
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-due
+    ) {
         border: 2px solid var(--warning);
     }
 
-    .driver-delivery-entry.status-unpaid {
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-unpaid
+    ) {
         border: 2px solid var(--danger);
     }
 
-    .driver-delivery-entry.status-overpaid {
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-overpaid
+    ) {
         border: 2px solid var(--primary-dark);
     }
 
@@ -1388,55 +1394,88 @@ $walkInOtherSales = 0.00;
    DRIVER DELIVERY PAYMENT OUTSIDE GLOW
    ========================================================= */
 
-        .driver-delivery-entry {
-            position: relative;
-            z-index: 0;
-        }
+    .driver-delivery-entry {
+        position: relative;
+        z-index: 0;
+    }
 
-        .driver-delivery-entry::before {
-            content: "";
-            position: absolute;
-            inset: -6px;
-            border-radius: 14px;
-            pointer-events: none;
-            opacity: 0;
-            z-index: -1;
-            transition:
-                opacity 0.2s ease,
-                box-shadow 0.2s ease;
-        }
+    .driver-delivery-entry::before {
+        content: "";
+        position: absolute;
+        inset: -6px;
 
-        /* Paid */
-        .driver-delivery-entry.status-paid::before {
-            opacity: 1;
-            box-shadow:
-                0 0 8px rgba(34, 197, 94, 0.45),
-                0 0 18px rgba(34, 197, 94, 0.28);
-        }
+        border-radius: 14px;
 
-        /* Due */
-        .driver-delivery-entry.status-due::before {
-            opacity: 1;
-            box-shadow:
-                0 0 8px rgba(245, 158, 11, 0.45),
-                0 0 18px rgba(245, 158, 11, 0.28);
-        }
+        pointer-events: none;
 
-        /* Unpaid */
-        .driver-delivery-entry.status-unpaid::before {
-            opacity: 1;
-            box-shadow:
-                0 0 8px rgba(239, 68, 68, 0.45),
-                0 0 18px rgba(239, 68, 68, 0.28);
-        }
+        opacity: 0;
 
-        /* Overpaid */
-        .driver-delivery-entry.status-overpaid::before {
-            opacity: 1;
-            box-shadow:
-                0 0 8px rgba(59, 130, 246, 0.45),
-                0 0 18px rgba(59, 130, 246, 0.28);
-        }
+        z-index: -1;
+
+        transition:
+            opacity 0.2s ease,
+            box-shadow 0.2s ease;
+    }
+
+
+    /* =========================================================
+    PAID
+    ========================================================= */
+
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-paid
+    )::before {
+        opacity: 1;
+
+        box-shadow:
+            0 0 8px rgba(34, 197, 94, 0.45),
+            0 0 18px rgba(34, 197, 94, 0.28);
+    }
+
+
+    /* =========================================================
+    DUE
+    ========================================================= */
+
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-due
+    )::before {
+        opacity: 1;
+
+        box-shadow:
+            0 0 8px rgba(245, 158, 11, 0.45),
+            0 0 18px rgba(245, 158, 11, 0.28);
+    }
+
+
+    /* =========================================================
+    UNPAID
+    ========================================================= */
+
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-unpaid
+    )::before {
+        opacity: 1;
+
+        box-shadow:
+            0 0 8px rgba(239, 68, 68, 0.45),
+            0 0 18px rgba(239, 68, 68, 0.28);
+    }
+
+
+    /* =========================================================
+    OVERPAID
+    ========================================================= */
+
+    .driver-delivery-entry:has(
+        .driver-delivery-balance-overpaid
+    )::before {
+        opacity: 1;
+
+        box-shadow:
+            0 0 8px rgba(59, 130, 246, 0.45),
+            0 0 18px rgba(59, 130, 246, 0.28);
+    }
 
     </style>
 

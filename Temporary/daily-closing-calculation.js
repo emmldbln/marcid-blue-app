@@ -689,6 +689,24 @@
 
             }
 
+            /*
+            * Price per gallon is required before
+            * calculating the payment status.
+            *
+            * Until the price is entered, the row
+            * remains neutral.
+            */
+            if (price <= MONEY_TOLERANCE) {
+
+                balanceElement.textContent = '—';
+
+                balanceElement.className =
+                    'driver-delivery-balance ' +
+                    'driver-delivery-balance-neutral';
+
+                return;
+            }
+
 
             /*
              * No payment.
