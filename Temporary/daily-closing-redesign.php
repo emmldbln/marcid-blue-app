@@ -4972,6 +4972,7 @@ document.addEventListener(
 
 <script src="daily-closing-calculation.js"></script>
 <script src="daily-closing-scripts/daily-closing-data.js"></script>
+<script src="daily-closing-scripts/daily-closing-customer-bank.js"></script>
 
 </body>
 

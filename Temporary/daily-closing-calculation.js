@@ -1,75 +1,25 @@
-/*
- * =========================================================
- * MARCID BLUE - DAILY CLOSING CALCULATIONS
- * =========================================================
- *
- * PURPOSE:
- * - Handle calculations for the Temporary Daily Closing page.
- * - Keep calculation logic separate from the PHP/UI file.
- *
- * THIS FILE DOES NOT:
- * - Save anything to MySQL
- * - Autosave anything
- * - Load customers from the database
- * - Load customer prices from the database
- * - Reset the page
- * - Finalize or close the day
- * - Create UI rows
- *
- * UI row creation/removal remains inside:
- * Temporary/daily-closing.php
- *
- * =========================================================
- */
-
 (function () {
 
     'use strict';
 
-
-    /*
-     * =========================================================
-     * INITIALIZATION
-     * =========================================================
-     */
-
     function initializeDailyClosingCalculations() {
 
-        /*
-         * Prevent this calculation module from being
-         * initialized more than once.
-         */
         if (window.marcidBlueDailyClosingCalculationsInitialized) {
             return;
         }
 
         window.marcidBlueDailyClosingCalculationsInitialized = true;
 
-
-        /*
-         * =====================================================
-         * CONSTANTS
-         * =====================================================
-         */
-
         const WALK_IN_PRICE = 30.00;
-
-        /*
-         * Small tolerance used when comparing money values.
-         */
         const MONEY_TOLERANCE = 0.005;
 
 
-        /*
-         * =====================================================
-         * GENERAL HELPERS
-         * =====================================================
-         */
+        // =========================================================
+        // GENERAL HELPERS
+        // =========================================================
 
         function getElement(id) {
-
             return document.getElementById(id);
-
         }
 
 
@@ -82,7 +32,6 @@
             }
 
             return number;
-
         }
 
 
@@ -93,7 +42,6 @@
             }
 
             return getNumber(element.value);
-
         }
 
 
@@ -102,7 +50,6 @@
             return Math.round(
                 (getNumber(value) + Number.EPSILON) * 100
             ) / 100;
-
         }
 
 
@@ -115,7 +62,6 @@
                     maximumFractionDigits: 2
                 }
             );
-
         }
 
 
@@ -128,7 +74,6 @@
             }
 
             element.textContent = value;
-
         }
 
 
@@ -141,7 +86,6 @@
             }
 
             element.value = value;
-
         }
 
 
@@ -150,15 +94,12 @@
             return Array.from(
                 document.querySelectorAll(selector)
             );
-
         }
 
 
-        /*
-         * =========================================================
-         * SHOP EXPENSES
-         * =========================================================
-         */
+        // =========================================================
+        // SHOP EXPENSES
+        // =========================================================
 
         function getShopExpenses() {
 
@@ -170,27 +111,22 @@
                     row.querySelector('.expense-amount');
 
                 total += getInputNumber(amountInput);
-
             });
 
             return roundMoney(total);
-
         }
 
 
-        /*
-         * =========================================================
-         * SHOP DELIVERY PAYMENTS
-         * =========================================================
-         *
-         * These are actual payments already received for
-         * shop delivery transactions.
-         *
-         * They are subtracted from the money entered in the
-         * Shop / Walk-in section when determining the amount
-         * attributable to walk-in sales.
-         * =========================================================
-         */
+        // =========================================================
+        // SHOP DELIVERY PAYMENTS
+        // =========================================================
+        //
+        // These are actual payments received for shop deliveries.
+        // Unpaid rows therefore contribute ₱0.
+        //
+        // Partial payments contribute only the amount actually
+        // entered in the payment field.
+        // =========================================================
 
         function getShopDeliveryPayments() {
 
@@ -202,35 +138,73 @@
                     row.querySelector('.delivery-payment');
 
                 total += getInputNumber(paymentInput);
-
             });
 
             return roundMoney(total);
-
         }
 
 
-        /*
-         * =========================================================
-         * SHOP DELIVERY ROW CALCULATION
-         * =========================================================
-         *
-         * Expected:
-         *
-         *     (Slim + Round) × Price
-         *
-         * Balance:
-         *
-         *     Expected - Payment
-         *
-         * Status:
-         *
-         *     No payment       = Unpaid
-         *     Equal            = Paid
-         *     Expected > paid  = Due
-         *     Paid > expected  = Overpaid
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER DELIVERY PAYMENTS
+        // =========================================================
+        //
+        // These are actual payments received for driver deliveries.
+        // =========================================================
+
+        function getDriverDeliveryPayments() {
+
+            let total = 0;
+
+            getRows('.driver-delivery-payment').forEach(
+                function (input) {
+
+                    total += getInputNumber(input);
+                }
+            );
+
+            return roundMoney(total);
+        }
+
+
+        // =========================================================
+        // TOTAL ACTUAL DELIVERY SALES
+        // =========================================================
+        //
+        // Total Sales of Delivery represents money actually paid
+        // by customers for delivery transactions.
+        //
+        // It does NOT use expected delivery sales.
+        //
+        // Unpaid:
+        //     Payment = ₱0
+        //
+        // Partial:
+        //     Only the actual payment is counted.
+        //
+        // Fully paid:
+        //     The full payment is counted.
+        //
+        // Overpaid:
+        //     The actual payment entered is counted.
+        // =========================================================
+
+        function getTotalDeliverySalesReceived() {
+
+            const shopPayments =
+                getShopDeliveryPayments();
+
+            const driverPayments =
+                getDriverDeliveryPayments();
+
+            return roundMoney(
+                shopPayments + driverPayments
+            );
+        }
+
+
+        // =========================================================
+        // SHOP DELIVERY ROW CALCULATION
+        // =========================================================
 
         function updateShopDeliveryBalance(row) {
 
@@ -278,14 +252,10 @@
             const expected =
                 roundMoney(gallons * price);
 
-
             const difference =
                 roundMoney(expected - payment);
 
 
-            /*
-             * No quantity entered.
-             */
             if (gallons <= 0) {
 
                 balanceElement.textContent = '—';
@@ -294,13 +264,9 @@
                     'delivery-balance delivery-balance-neutral';
 
                 return;
-
             }
 
 
-            /*
-             * No payment.
-             */
             if (payment <= MONEY_TOLERANCE) {
 
                 balanceElement.textContent =
@@ -310,13 +276,9 @@
                     'delivery-balance delivery-balance-unpaid';
 
                 return;
-
             }
 
 
-            /*
-             * Payment matches expected amount.
-             */
             if (Math.abs(difference) <= MONEY_TOLERANCE) {
 
                 balanceElement.textContent =
@@ -326,13 +288,9 @@
                     'delivery-balance delivery-balance-paid';
 
                 return;
-
             }
 
 
-            /*
-             * Customer still owes money.
-             */
             if (difference > 0) {
 
                 balanceElement.textContent =
@@ -342,19 +300,14 @@
                     'delivery-balance delivery-balance-due';
 
                 return;
-
             }
 
 
-            /*
-             * Customer paid more than expected.
-             */
             balanceElement.textContent =
                 'Over ' + formatMoney(Math.abs(difference));
 
             balanceElement.className =
                 'delivery-balance delivery-balance-overpaid';
-
         }
 
 
@@ -363,44 +316,12 @@
             getRows('.delivery-payment-row').forEach(
                 updateShopDeliveryBalance
             );
-
         }
 
 
-        /*
-         * =========================================================
-         * SHOP / WALK-IN CALCULATION
-         * =========================================================
-         *
-         * Business rule:
-         *
-         * total balance =
-         *
-         *     money received
-         *     + station expenses
-         *     - shop delivery payments
-         *
-         * The resulting amount is divided into:
-         *
-         *     Whole walk-in gallons × ₱30
-         *
-         * and:
-         *
-         *     Remaining amount below ₱30 = Other Sales
-         *
-         * Example:
-         *
-         *     ₱5,510 total balance
-         *
-         *     5,510 / 30
-         *
-         *     183 gallons = ₱5,490
-         *
-         *     remaining ₱20 = Other Sales
-         *
-         * This prevents decimal gallon quantities.
-         * =========================================================
-         */
+        // =========================================================
+        // SHOP / WALK-IN CALCULATION
+        // =========================================================
 
         function calculateShop() {
 
@@ -421,10 +342,6 @@
                 getShopDeliveryPayments();
 
 
-            /*
-             * Calculate the amount that belongs to the
-             * Shop / Walk-in calculation.
-             */
             const totalBalance =
                 roundMoney(
                     moneyReceived
@@ -433,9 +350,6 @@
                 );
 
 
-            /*
-             * Prevent negative values.
-             */
             if (totalBalance < -MONEY_TOLERANCE) {
 
                 setText(
@@ -468,13 +382,9 @@
                     deliveryPayments: deliveryPayments,
                     moneyReceived: moneyReceived
                 };
-
             }
 
 
-            /*
-             * Do not allow floating-point noise.
-             */
             const safeBalance =
                 Math.max(
                     0,
@@ -482,78 +392,42 @@
                 );
 
 
-            /*
-             * Walk-in quantity must ALWAYS be a whole number.
-             *
-             * Example:
-             *
-             * ₱5510 / ₱30 = 183.666...
-             *
-             * Therefore:
-             *
-             * 183 gallons
-             */
             const customers =
                 Math.floor(
                     safeBalance / WALK_IN_PRICE
                 );
 
 
-            /*
-             * Calculate actual walk-in sales.
-             */
             const walkInSales =
                 roundMoney(
                     customers * WALK_IN_PRICE
                 );
 
 
-            /*
-             * Whatever remains below ₱30 is treated as
-             * Other / Additional Sales.
-             *
-             * This handles things such as:
-             *
-             * - Bottle filling
-             * - Small additional charges
-             * - Other random sales
-             */
             const otherSales =
                 roundMoney(
                     safeBalance - walkInSales
                 );
 
 
-            /*
-             * Update Walk-in quantity field.
-             */
             setValue(
                 'walk_in_customers',
                 customers
             );
 
 
-            /*
-             * Update Shop calculated sales.
-             */
             setText(
                 'shopComputedSales',
                 formatMoney(walkInSales)
             );
 
 
-            /*
-             * Update Other Sales.
-             */
             setText(
                 'shopOtherSales',
                 formatMoney(otherSales)
             );
 
 
-            /*
-             * Update top summary card.
-             */
             setText(
                 'dashboardShopCustomers',
                 customers.toLocaleString('en-PH')
@@ -570,15 +444,12 @@
                 deliveryPayments: deliveryPayments,
                 moneyReceived: moneyReceived
             };
-
         }
 
 
-        /*
-         * =========================================================
-         * DRIVER EXPENSES
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER EXPENSES
+        // =========================================================
 
         function getDriverExpenses() {
 
@@ -593,20 +464,16 @@
                         );
 
                     total += getInputNumber(amountInput);
-
                 }
             );
 
             return roundMoney(total);
-
         }
 
 
-        /*
-         * =========================================================
-         * DRIVER DELIVERY CALCULATION
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER DELIVERY CALCULATION
+        // =========================================================
 
         function updateDriverDeliveryBalance(row) {
 
@@ -667,16 +534,12 @@
                     gallons * price
                 );
 
-
             const difference =
                 roundMoney(
                     expected - payment
                 );
 
 
-            /*
-             * No quantity.
-             */
             if (gallons <= 0) {
 
                 balanceElement.textContent = '—';
@@ -686,16 +549,9 @@
                     'driver-delivery-balance-neutral';
 
                 return;
-
             }
 
-            /*
-            * Price per gallon is required before
-            * calculating the payment status.
-            *
-            * Until the price is entered, the row
-            * remains neutral.
-            */
+
             if (price <= MONEY_TOLERANCE) {
 
                 balanceElement.textContent = '—';
@@ -708,9 +564,6 @@
             }
 
 
-            /*
-             * No payment.
-             */
             if (payment <= MONEY_TOLERANCE) {
 
                 balanceElement.textContent =
@@ -721,13 +574,9 @@
                     'driver-delivery-balance-unpaid';
 
                 return;
-
             }
 
 
-            /*
-             * Fully paid.
-             */
             if (Math.abs(difference) <= MONEY_TOLERANCE) {
 
                 balanceElement.textContent =
@@ -738,13 +587,9 @@
                     'driver-delivery-balance-paid';
 
                 return;
-
             }
 
 
-            /*
-             * Customer still owes money.
-             */
             if (difference > 0) {
 
                 balanceElement.textContent =
@@ -755,29 +600,22 @@
                     'driver-delivery-balance-due';
 
                 return;
-
             }
 
 
-            /*
-             * Customer overpaid.
-             */
             balanceElement.textContent =
                 'Over ' + formatMoney(Math.abs(difference));
 
             balanceElement.className =
                 'driver-delivery-balance ' +
                 'driver-delivery-balance-overpaid';
-
         }
 
 
         function calculateDriverDeliveries() {
 
             let totalQuantity = 0;
-
             let totalExpectedMoney = 0;
-
             let deliveryRows = 0;
 
 
@@ -815,24 +653,15 @@
                         );
 
 
-                    /*
-                     * Only count a row as a delivery when
-                     * it contains an actual quantity.
-                     */
                     if (gallons > 0) {
-
                         deliveryRows++;
-
                     }
 
 
                     totalQuantity += gallons;
-
                     totalExpectedMoney += expected;
 
-
                     updateDriverDeliveryBalance(row);
-
                 }
             );
 
@@ -849,63 +678,12 @@
                 totalExpectedMoney: totalExpectedMoney,
                 deliveryRows: deliveryRows
             };
-
         }
 
 
-        /*
-         * =========================================================
-         * DRIVER PAYMENT TOTAL
-         * =========================================================
-         */
-
-        function getDriverDeliveryPayments() {
-
-            let total = 0;
-
-
-            getRows(
-                '.driver-delivery-payment'
-            ).forEach(
-                function (input) {
-
-                    total += getInputNumber(input);
-
-                }
-            );
-
-
-            return roundMoney(total);
-
-        }
-
-
-        /*
-         * =========================================================
-         * DRIVER REMITTANCE
-         * =========================================================
-         *
-         * Reference logic:
-         *
-         * Effective received =
-         *
-         *     Driver Money Received
-         *     + Driver Expenses
-         *     + Shop Delivery Payments
-         *
-         * Expected =
-         *
-         *     Shop Delivery Payments
-         *     + Driver Delivery Payments
-         *
-         * Difference =
-         *
-         *     Effective Received - Expected
-         *
-         * This preserves the existing Marcid Blue remittance
-         * accounting logic.
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER REMITTANCE
+        // =========================================================
 
         function updateDriverRemittanceStatus() {
 
@@ -960,9 +738,6 @@
             }
 
 
-            /*
-             * No driver activity.
-             */
             if (
                 Math.abs(effectiveReceived)
                     <= MONEY_TOLERANCE
@@ -978,13 +753,9 @@
                     'summary-value driver-remittance-status';
 
                 return;
-
             }
 
 
-            /*
-             * Exactly balanced.
-             */
             if (
                 Math.abs(difference)
                     <= MONEY_TOLERANCE
@@ -999,13 +770,9 @@
                     'driver-remittance-balanced';
 
                 return;
-
             }
 
 
-            /*
-             * Driver is short.
-             */
             if (difference < 0) {
 
                 statusElement.textContent =
@@ -1020,13 +787,9 @@
                     'driver-remittance-short';
 
                 return;
-
             }
 
 
-            /*
-             * Driver has more money than expected.
-             */
             statusElement.textContent =
                 'Over of ' +
                 formatMoney(difference);
@@ -1035,15 +798,12 @@
                 'summary-value ' +
                 'driver-remittance-status ' +
                 'driver-remittance-over';
-
         }
 
 
-        /*
-         * =========================================================
-         * DRIVER SUMMARY
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER SUMMARY
+        // =========================================================
 
         function calculateDriver() {
 
@@ -1051,9 +811,6 @@
                 calculateDriverDeliveries();
 
 
-            /*
-             * Total quantity.
-             */
             setText(
                 'driver_total_delivery_quantity',
                 deliveryTotals.totalQuantity
@@ -1062,18 +819,20 @@
 
 
             /*
-             * Total expected delivery sales.
+             * Total Sales of Delivery now represents actual
+             * payments received, not expected delivery value.
              */
             setText(
                 'driverTotalDeliverySales',
                 formatMoney(
-                    deliveryTotals.totalExpectedMoney
+                    getTotalDeliverySalesReceived()
                 )
             );
 
 
             /*
-             * Total expected money.
+             * Keep Total Expected Money as the full expected
+             * value of driver deliveries.
              */
             setText(
                 'driverTotalExpectedMoney',
@@ -1083,38 +842,25 @@
             );
 
 
-            /*
-             * Driver remittance.
-             */
             updateDriverRemittanceStatus();
 
 
             return deliveryTotals;
-
         }
 
 
-        /*
-         * =========================================================
-         * TOTAL DELIVERY CARD
-         * =========================================================
-         *
-         * Counts delivery rows containing at least one gallon.
-         *
-         * Shop delivery rows
-         * +
-         * Driver delivery rows
-         * =========================================================
-         */
+        // =========================================================
+        // TOTAL DELIVERY GALLONS CARD
+        // =========================================================
+        //
+        // This card counts gallons, not transactions.
+        // =========================================================
 
         function updateTotalDeliveriesCard() {
 
             let totalDeliveries = 0;
 
 
-            /*
-             * Shop deliveries.
-             */
             getRows(
                 '.delivery-payment-row'
             ).forEach(
@@ -1134,18 +880,11 @@
                             )
                         );
 
-
-                    if ((slim + round) > 0) {
-                        totalDeliveries++;
-                    }
-
+                    totalDeliveries += slim + round;
                 }
             );
 
 
-            /*
-             * Driver deliveries.
-             */
             getRows(
                 '.driver-delivery-row'
             ).forEach(
@@ -1165,13 +904,13 @@
                             )
                         );
 
-
-                    if ((slim + round) > 0) {
-                        totalDeliveries++;
-                    }
-
+                    totalDeliveries += slim + round;
                 }
             );
+
+
+            totalDeliveries =
+                roundMoney(totalDeliveries);
 
 
             setText(
@@ -1181,50 +920,50 @@
 
 
             return totalDeliveries;
-
         }
 
 
-        /*
-         * =========================================================
-         * NET PROFIT / TOTAL MONEY RECEIVED
-         * =========================================================
-         *
-         * The card currently describes this figure as:
-         *
-         * "Total money received from Shop and Driver"
-         *
-         * Therefore the displayed value follows the money
-         * actually entered as received:
-         *
-         *     Shop Money Received
-         *     +
-         *     Driver Money Received
-         *
-         * Expenses are not subtracted here because the card
-         * represents received money, not the final accounting
-         * profit calculation.
-         * =========================================================
-         */
+        // =========================================================
+        // NET PROFIT FOR TODAY
+        // =========================================================
+        //
+        // Net Profit for Today is based on actual sales received:
+        //
+        // Walk-in Sales
+        // + Other / Additional Sales
+        // + Actual Delivery Payments
+        //
+        // Unpaid delivery amounts are NOT included.
+        // Partial payments contribute only the amount received.
+        // =========================================================
 
         function updateNetProfit() {
 
-            const shopMoneyReceived =
-                getInputNumber(
-                    getElement('walk_in_money')
-                );
+            const shopResult =
+                calculateShop();
 
 
-            const driverMoneyReceived =
-                getInputNumber(
-                    getElement('driver_money_received')
-                );
+            const walkInSales =
+                shopResult.valid
+                    ? shopResult.walkInSales
+                    : 0;
+
+
+            const otherSales =
+                shopResult.valid
+                    ? shopResult.otherSales
+                    : 0;
+
+
+            const deliverySalesReceived =
+                getTotalDeliverySalesReceived();
 
 
             const totalReceived =
                 roundMoney(
-                    shopMoneyReceived
-                    + driverMoneyReceived
+                    walkInSales
+                    + otherSales
+                    + deliverySalesReceived
                 );
 
 
@@ -1238,53 +977,34 @@
 
                 netProfitElement.textContent =
                     formatMoney(totalReceived);
-
             }
 
 
             return totalReceived;
-
         }
 
 
-        /*
-         * =========================================================
-         * CALCULATE EVERYTHING
-         * =========================================================
-         */
+        // =========================================================
+        // CALCULATE EVERYTHING
+        // =========================================================
 
         function calculateEverything() {
 
-            /*
-             * Shop calculation.
-             */
             const shopResult =
                 calculateShop();
 
 
-            /*
-             * Update every shop delivery balance.
-             */
             refreshShopDeliveryBalances();
 
 
-            /*
-             * Driver calculation.
-             */
             const driverResult =
                 calculateDriver();
 
 
-            /*
-             * Total delivery count.
-             */
             const totalDeliveries =
                 updateTotalDeliveriesCard();
 
 
-            /*
-             * Top money-received card.
-             */
             const totalReceived =
                 updateNetProfit();
 
@@ -1295,15 +1015,12 @@
                 totalDeliveries: totalDeliveries,
                 totalReceived: totalReceived
             };
-
         }
 
 
-        /*
-         * =========================================================
-         * SHOP COMPUTE BUTTON
-         * =========================================================
-         */
+        // =========================================================
+        // SHOP COMPUTE BUTTON
+        // =========================================================
 
         const shopComputeButton =
             getElement('shopComputeButton');
@@ -1316,18 +1033,14 @@
                 function () {
 
                     calculateEverything();
-
                 }
             );
-
         }
 
 
-        /*
-         * =========================================================
-         * DRIVER BALANCE BUTTON
-         * =========================================================
-         */
+        // =========================================================
+        // DRIVER BALANCE BUTTON
+        // =========================================================
 
         const driverBalanceButton =
             getElement('driverBalanceButton');
@@ -1344,24 +1057,14 @@
                     updateTotalDeliveriesCard();
 
                     updateNetProfit();
-
                 }
             );
-
         }
 
 
-        /*
-         * =========================================================
-         * LIVE CALCULATIONS
-         * =========================================================
-         *
-         * Calculations are refreshed while the user edits
-         * the relevant fields.
-         *
-         * This does NOT save anything.
-         * =========================================================
-         */
+        // =========================================================
+        // LIVE CALCULATIONS
+        // =========================================================
 
         document.addEventListener(
             'input',
@@ -1376,9 +1079,6 @@
                 }
 
 
-                /*
-                 * Shop-related fields.
-                 */
                 if (
                     target.id === 'walk_in_money'
                     ||
@@ -1410,13 +1110,9 @@
                     updateTotalDeliveriesCard();
 
                     updateNetProfit();
-
                 }
 
 
-                /*
-                 * Driver-related fields.
-                 */
                 if (
                     target.id === 'driver_money_received'
                     ||
@@ -1446,28 +1142,14 @@
                     updateTotalDeliveriesCard();
 
                     updateNetProfit();
-
                 }
-
             }
         );
 
 
-        /*
-         * =========================================================
-         * CHANGE EVENTS
-         * =========================================================
-         *
-         * Handles select elements such as:
-         *
-         * - Expense category
-         * - Payment method
-         *
-         * It also refreshes delivery calculations when a
-         * quantity/price/payment field is changed through a
-         * non-keyboard interaction.
-         * =========================================================
-         */
+        // =========================================================
+        // CHANGE EVENTS
+        // =========================================================
 
         document.addEventListener(
             'change',
@@ -1493,27 +1175,14 @@
                 ) {
 
                     calculateEverything();
-
                 }
-
             }
         );
 
 
-        /*
-         * =========================================================
-         * MUTATION OBSERVER
-         * =========================================================
-         *
-         * The PHP page contains buttons that add/remove rows.
-         *
-         * The UI itself remains responsible for creating/removing
-         * rows.
-         *
-         * This observer only notices that the rows changed and
-         * refreshes calculations.
-         * =========================================================
-         */
+        // =========================================================
+        // MUTATION OBSERVER
+        // =========================================================
 
         let calculationRefreshTimer = null;
 
@@ -1521,6 +1190,7 @@
         function scheduleCalculationRefresh() {
 
             if (calculationRefreshTimer !== null) {
+
                 clearTimeout(
                     calculationRefreshTimer
                 );
@@ -1538,7 +1208,6 @@
                     },
                     0
                 );
-
         }
 
 
@@ -1547,7 +1216,6 @@
                 function () {
 
                     scheduleCalculationRefresh();
-
                 }
             );
 
@@ -1571,7 +1239,6 @@
                     subtree: true
                 }
             );
-
         }
 
 
@@ -1584,7 +1251,6 @@
                     subtree: true
                 }
             );
-
         }
 
 
@@ -1597,29 +1263,19 @@
                     subtree: true
                 }
             );
-
         }
 
 
-        /*
-         * =========================================================
-         * INITIAL CALCULATION
-         * =========================================================
-         */
+        // =========================================================
+        // INITIAL CALCULATION
+        // =========================================================
 
         calculateEverything();
 
 
-        /*
-         * =========================================================
-         * PUBLIC API
-         * =========================================================
-         *
-         * Makes the calculation functions available for
-         * debugging/testing from the browser console without
-         * requiring any other script.
-         * =========================================================
-         */
+        // =========================================================
+        // PUBLIC API
+        // =========================================================
 
         window.marcidBlueDailyClosing = {
 
@@ -1645,18 +1301,18 @@
                 updateTotalDeliveriesCard,
 
             updateNetProfit:
-                updateNetProfit
+                updateNetProfit,
+
+            getTotalDeliverySalesReceived:
+                getTotalDeliverySalesReceived
 
         };
-
     }
 
 
-    /*
-     * =========================================================
-     * START
-     * =========================================================
-     */
+    // =============================================================
+    // START
+    // =============================================================
 
     if (document.readyState === 'loading') {
 
@@ -1668,7 +1324,6 @@
     } else {
 
         initializeDailyClosingCalculations();
-
     }
 
 })();
