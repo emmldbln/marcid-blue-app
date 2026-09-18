@@ -14,6 +14,8 @@
 
     const AUTOSAVE_DELAY = 700;
 
+    const CURRENT_DEBT_REFRESH_DELAY = 350;
+
     let dailyId = 0;
 
     let autosaveTimer = null;
@@ -23,6 +25,9 @@
     let isSaving = false;
 
     let saveQueued = false;
+
+    let currentDebtRefreshTimer = null;
+    let currentDebtRequestId = 0;
 
 
     /*
@@ -722,6 +727,370 @@
 
 
     /*
+    * ---------------------------------------------------------
+    * CURRENT DEBT
+    * ---------------------------------------------------------
+    */
+
+    function scheduleCurrentDebtRefresh() {
+
+        clearTimeout(
+            currentDebtRefreshTimer
+        );
+
+
+        currentDebtRefreshTimer =
+            setTimeout(
+                refreshCurrentDebt,
+                CURRENT_DEBT_REFRESH_DELAY
+            );
+
+    }
+
+
+    async function refreshCurrentDebt() {
+
+        if (dailyId <= 0) {
+            return;
+        }
+
+
+        const requestId =
+            ++currentDebtRequestId;
+
+
+        const draft =
+            collectDraft();
+
+
+        const params =
+            new URLSearchParams();
+
+
+        params.set(
+            'action',
+            'get_current_debt'
+        );
+
+
+        params.set(
+            'daily_id',
+            String(dailyId)
+        );
+
+
+        params.set(
+            'draft',
+            JSON.stringify(draft)
+        );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    BACKEND_URL +
+                    '?' +
+                    params.toString(),
+                    {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            Accept:
+                                'application/json'
+                        }
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    'Current debt request failed: HTTP ' +
+                    response.status
+                );
+
+            }
+
+
+            const result =
+                await response.json();
+
+
+            if (
+                requestId !==
+                currentDebtRequestId
+            ) {
+                return;
+            }
+
+
+            if (!result.success) {
+
+                console.error(
+                    'Marcid Blue: current debt request failed.',
+                    result.message
+                );
+
+                return;
+            }
+
+
+            renderCurrentDebt(
+                result
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                'Marcid Blue: unable to load current debt.',
+                error
+            );
+
+        }
+
+    }
+
+
+    function renderCurrentDebt(
+        result
+    ) {
+
+        const tabAmount =
+            getElement(
+                'currentDebtTabAmount'
+            );
+
+        const totalElement =
+            getElement(
+                'currentDebtTotal'
+            );
+
+        const list =
+            getElement(
+                'currentDebtList'
+            );
+
+
+        if (!totalElement || !list) {
+            return;
+        }
+
+
+        const totalDebt =
+            Number(
+                result.total_debt
+            ) || 0;
+
+
+        const customers =
+            Array.isArray(
+                result.customers
+            )
+                ? result.customers
+                : [];
+
+
+        const formattedTotal =
+            formatDebtMoney(
+                totalDebt
+            );
+
+
+        totalElement.textContent =
+            formattedTotal;
+
+
+        list.innerHTML = '';
+
+
+        if (customers.length === 0) {
+
+            const empty =
+                document.createElement(
+                    'div'
+                );
+
+            empty.className =
+                'current-debt-empty';
+
+            empty.textContent =
+                'No customers currently have an outstanding balance.';
+
+            list.appendChild(
+                empty
+            );
+
+            return;
+        }
+
+
+        customers.forEach(
+            customer => {
+
+                const item =
+                    document.createElement(
+                        'div'
+                    );
+
+                item.className =
+                    'current-debt-item';
+
+
+                const header =
+                    document.createElement(
+                        'div'
+                    );
+
+                header.className =
+                    'current-debt-item-header';
+
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+                name.className =
+                    'current-debt-customer';
+
+                name.textContent =
+                    customer.customer_name;
+
+
+                const amount =
+                    document.createElement(
+                        'div'
+                    );
+
+                amount.className =
+                    'current-debt-amount';
+
+                amount.textContent =
+                    formatDebtMoney(
+                        customer.current_balance
+                    );
+
+
+                header.appendChild(
+                    name
+                );
+
+                header.appendChild(
+                    amount
+                );
+
+
+                const details =
+                    document.createElement(
+                        'div'
+                    );
+
+                details.className =
+                    'current-debt-item-details';
+
+
+                const historical =
+                    Number(
+                        customer.historical_balance
+                    ) || 0;
+
+                const todayDue =
+                    Number(
+                        customer.today_due
+                    ) || 0;
+
+                const todayPayment =
+                    Number(
+                        customer.today_payment
+                    ) || 0;
+
+
+                const detailParts = [];
+
+
+                if (historical > 0) {
+
+                    detailParts.push(
+                        'Previous: ' +
+                        formatDebtMoney(
+                            historical
+                        )
+                    );
+
+                }
+
+
+                if (todayDue > 0) {
+
+                    detailParts.push(
+                        'Today: +' +
+                        formatDebtMoney(
+                            todayDue
+                        )
+                    );
+
+                }
+
+
+                if (todayPayment > 0) {
+
+                    detailParts.push(
+                        'Paid today: −' +
+                        formatDebtMoney(
+                            todayPayment
+                        )
+                    );
+
+                }
+
+
+                details.textContent =
+                    detailParts.length > 0
+                        ? detailParts.join(' · ')
+                        : 'Outstanding customer balance';
+
+
+                item.appendChild(
+                    header
+                );
+
+                item.appendChild(
+                    details
+                );
+
+                list.appendChild(
+                    item
+                );
+
+            }
+        );
+
+    }
+
+
+    function formatDebtMoney(
+        value
+    ) {
+
+        const amount =
+            Number(value) || 0;
+
+
+        return '₱' +
+            amount.toLocaleString(
+                'en-PH',
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            );
+
+    }
+
+    /*
      * ---------------------------------------------------------
      * LOAD DRAFT
      * ---------------------------------------------------------
@@ -847,6 +1216,8 @@
                 () => {
 
                     recalculate();
+
+                     scheduleCurrentDebtRefresh();
 
                     console.info(
                         'Marcid Blue: daily draft restored.'
@@ -1260,6 +1631,125 @@
 
 
     /*
+    * ---------------------------------------------------------
+    * CURRENT DEBT PANEL UI
+    * ---------------------------------------------------------
+    */
+
+    function bindCurrentDebtPanel() {
+
+        const tab =
+            getElement(
+                'currentDebtTab'
+            );
+
+        const drawer =
+            getElement(
+                'currentDebtDrawer'
+            );
+
+        const closeButton =
+            getElement(
+                'currentDebtClose'
+            );
+
+        const overlay =
+            getElement(
+                'currentDebtOverlay'
+            );
+
+
+        if (
+            !tab ||
+            !drawer ||
+            !closeButton ||
+            !overlay
+        ) {
+            return;
+        }
+
+
+        function openPanel() {
+
+            drawer.classList.add(
+                'open'
+            );
+
+            overlay.classList.add(
+                'open'
+            );
+
+            tab.classList.add(
+                'hidden'
+            );
+
+            drawer.setAttribute(
+                'aria-hidden',
+                'false'
+            );
+
+            refreshCurrentDebt();
+
+        }
+
+
+        function closePanel() {
+
+            drawer.classList.remove(
+                'open'
+            );
+
+            overlay.classList.remove(
+                'open'
+            );
+
+            tab.classList.remove(
+                'hidden'
+            );
+
+            drawer.setAttribute(
+                'aria-hidden',
+                'true'
+            );
+
+        }
+
+
+        tab.addEventListener(
+            'click',
+            openPanel
+        );
+
+
+        closeButton.addEventListener(
+            'click',
+            closePanel
+        );
+
+
+        overlay.addEventListener(
+            'click',
+            closePanel
+        );
+
+
+        document.addEventListener(
+            'keydown',
+            event => {
+
+                if (
+                    event.key ===
+                    'Escape'
+                ) {
+                    closePanel();
+                }
+
+            }
+        );
+
+    }
+
+    /*
      * ---------------------------------------------------------
      * EVENT BINDING
      * ---------------------------------------------------------
@@ -1282,6 +1772,7 @@
                 }
 
                 scheduleAutosave();
+                scheduleCurrentDebtRefresh();
 
             }
         );
@@ -1302,7 +1793,7 @@
                 }
 
                 scheduleAutosave();
-
+                scheduleCurrentDebtRefresh();
             }
         );
 
@@ -1370,6 +1861,7 @@
 
 
         bindAutosaveEvents();
+        bindCurrentDebtPanel();
 
 
         /*
@@ -1386,6 +1878,8 @@
 
 
         await loadDraft();
+
+        await refreshCurrentDebt();
 
     }
 

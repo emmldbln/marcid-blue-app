@@ -47,6 +47,498 @@ function getCustomers(
     ]);
 }
 
+function getCurrentDebt(
+    PDO $pdo,
+    int $dailyId,
+    array $draft
+): void {
+
+    $dailyRecord = getOpenDailyRecord(
+        $pdo,
+        $dailyId
+    );
+
+    if (!$dailyRecord) {
+        respond([
+            'success' => false,
+            'message' => 'No open daily record is available.'
+        ], 404);
+    }
+
+    $businessDate =
+        $dailyRecord['business_date'];
+
+
+    /*
+     * Historical customer balances.
+     *
+     * Only transactions before today's business date
+     * are included here. Today's draft is added separately.
+     */
+    $stmt = $pdo->prepare(
+        "SELECT
+            c.customer_id,
+            c.customer_name,
+
+            COALESCE(
+                (
+                    SELECT SUM(d.amount_due)
+                    FROM deliveries d
+                    WHERE d.customer_id = c.customer_id
+                      AND d.delivery_date < ?
+                ),
+                0
+            ) AS historical_due,
+
+            COALESCE(
+                (
+                    SELECT SUM(p.amount)
+                    FROM payments p
+                    WHERE p.customer_id = c.customer_id
+                      AND p.payment_date < ?
+                ),
+                0
+            ) AS historical_paid
+
+         FROM customers c
+
+         WHERE TRIM(c.customer_name) <> ''
+
+         ORDER BY c.customer_name ASC"
+    );
+
+    $stmt->execute([
+        $businessDate,
+        $businessDate
+    ]);
+
+
+    $customers =
+        $stmt->fetchAll(
+            PDO::FETCH_ASSOC
+        );
+
+
+    $balances = [];
+
+
+    foreach ($customers as $customer) {
+
+        $customerId =
+            (int) $customer['customer_id'];
+
+        $historicalDue =
+            round(
+                (float) $customer['historical_due'],
+                2
+            );
+
+        $historicalPaid =
+            round(
+                (float) $customer['historical_paid'],
+                2
+            );
+
+        $historicalBalance =
+            round(
+                $historicalDue -
+                $historicalPaid,
+                2
+            );
+
+        $balances[$customerId] = [
+            'customer_id' =>
+                $customerId,
+
+            'customer_name' =>
+                $customer['customer_name'],
+
+            'historical_balance' =>
+                $historicalBalance,
+
+            'today_due' =>
+                0.00,
+
+            'today_payment' =>
+                0.00,
+
+            'current_balance' =>
+                $historicalBalance,
+
+            'credit' =>
+                0.00
+        ];
+    }
+
+
+    /*
+     * Today's draft deliveries.
+     */
+    $draftShopDeliveries =
+        $draft['shop']['deliveries']
+        ?? [];
+
+    $draftDriverDeliveries =
+        $draft['driver']['deliveries']
+        ?? [];
+
+
+    $todayDeliveries = array_merge(
+        is_array($draftShopDeliveries)
+            ? $draftShopDeliveries
+            : [],
+        is_array($draftDriverDeliveries)
+            ? $draftDriverDeliveries
+            : []
+    );
+
+
+    foreach ($todayDeliveries as $delivery) {
+
+        $customerName =
+            trim(
+                (string) (
+                    $delivery['customer']
+                    ?? ''
+                )
+            );
+
+        if ($customerName === '') {
+            continue;
+        }
+
+        $slim =
+            max(
+                0,
+                (float) (
+                    $delivery['slim']
+                    ?? 0
+                )
+            );
+
+        $round =
+            max(
+                0,
+                (float) (
+                    $delivery['round']
+                    ?? 0
+                )
+            );
+
+        $price =
+            max(
+                0,
+                (float) (
+                    $delivery['price']
+                    ?? 0
+                )
+            );
+
+        $todayDue =
+            round(
+                ($slim + $round) * $price,
+                2
+            );
+
+
+        if ($todayDue <= 0) {
+            continue;
+        }
+
+
+        $customerKey = null;
+
+        foreach ($balances as $id => $balance) {
+
+            if (
+                mb_strtolower(
+                    trim($balance['customer_name'])
+                )
+                ===
+                mb_strtolower(
+                    $customerName
+                )
+            ) {
+                $customerKey = $id;
+                break;
+            }
+        }
+
+
+        /*
+         * A customer can be typed before the master
+         * customer record exists.
+         */
+        if ($customerKey === null) {
+
+            $customerKey =
+                'new:' .
+                mb_strtolower(
+                    $customerName
+                );
+
+            if (!isset($balances[$customerKey])) {
+
+                $balances[$customerKey] = [
+                    'customer_id' =>
+                        0,
+
+                    'customer_name' =>
+                        $customerName,
+
+                    'historical_balance' =>
+                        0.00,
+
+                    'today_due' =>
+                        0.00,
+
+                    'today_payment' =>
+                        0.00,
+
+                    'current_balance' =>
+                        0.00,
+
+                    'credit' =>
+                        0.00
+                ];
+            }
+        }
+
+
+        $balances[$customerKey]['today_due'] =
+            round(
+                $balances[$customerKey]['today_due']
+                + $todayDue,
+                2
+            );
+    }
+
+
+    /*
+     * Today's actual payments.
+     *
+     * The payment is money received today,
+     * regardless of which debt it eventually settles.
+     */
+    $todayPayment = function (
+        array $deliveryRows
+    ) use (
+        &$balances
+    ): void {
+
+        foreach ($deliveryRows as $delivery) {
+
+            $customerName =
+                trim(
+                    (string) (
+                        $delivery['customer']
+                        ?? ''
+                    )
+                );
+
+            if ($customerName === '') {
+                continue;
+            }
+
+            $payment =
+                max(
+                    0,
+                    (float) (
+                        $delivery['payment']
+                        ?? 0
+                    )
+                );
+
+            if ($payment <= 0) {
+                continue;
+            }
+
+
+            $customerKey = null;
+
+            foreach ($balances as $id => $balance) {
+
+                if (
+                    mb_strtolower(
+                        trim($balance['customer_name'])
+                    )
+                    ===
+                    mb_strtolower(
+                        $customerName
+                    )
+                ) {
+                    $customerKey = $id;
+                    break;
+                }
+            }
+
+
+            if ($customerKey === null) {
+
+                $customerKey =
+                    'new:' .
+                    mb_strtolower(
+                        $customerName
+                    );
+
+                if (!isset($balances[$customerKey])) {
+
+                    $balances[$customerKey] = [
+                        'customer_id' => 0,
+                        'customer_name' => $customerName,
+                        'historical_balance' => 0.00,
+                        'today_due' => 0.00,
+                        'today_payment' => 0.00,
+                        'current_balance' => 0.00,
+                        'credit' => 0.00
+                    ];
+                }
+            }
+
+
+            $balances[$customerKey]['today_payment'] =
+                round(
+                    $balances[$customerKey]['today_payment']
+                    + $payment,
+                    2
+                );
+        }
+    };
+
+
+    $todayPayment(
+        is_array($draftShopDeliveries)
+            ? $draftShopDeliveries
+            : []
+    );
+
+    $todayPayment(
+        is_array($draftDriverDeliveries)
+            ? $draftDriverDeliveries
+            : []
+    );
+
+
+    /*
+     * Final customer-level balance:
+     *
+     * historical debt
+     * + today's delivery
+     * - today's payment
+     *
+     * Positive = debt
+     * Negative = customer credit
+     */
+    $result = [];
+
+    $totalDebt = 0.00;
+    $totalCredit = 0.00;
+
+
+    foreach ($balances as $balance) {
+
+        $grossBalance =
+            round(
+                $balance['historical_balance']
+                + $balance['today_due']
+                - $balance['today_payment'],
+                2
+            );
+
+
+        $currentDebt =
+            max(
+                0,
+                $grossBalance
+            );
+
+        $credit =
+            max(
+                0,
+                -$grossBalance
+            );
+
+
+        if (
+            $currentDebt <= 0 &&
+            $credit <= 0
+        ) {
+            continue;
+        }
+
+
+        $balance['current_balance'] =
+            $currentDebt;
+
+        $balance['credit'] =
+            $credit;
+
+
+        $totalDebt =
+            round(
+                $totalDebt +
+                $currentDebt,
+                2
+            );
+
+        $totalCredit =
+            round(
+                $totalCredit +
+                $credit,
+                2
+            );
+
+
+        $result[] = $balance;
+    }
+
+
+    usort(
+        $result,
+        function (
+            array $a,
+            array $b
+        ): int {
+
+            if (
+                $a['current_balance'] ===
+                $b['current_balance']
+            ) {
+                return strcasecmp(
+                    $a['customer_name'],
+                    $b['customer_name']
+                );
+            }
+
+            return
+                $a['current_balance'] <
+                $b['current_balance']
+                    ? 1
+                    : -1;
+        }
+    );
+
+
+    respond([
+        'success' => true,
+
+        'daily_id' =>
+            (int) $dailyRecord['daily_id'],
+
+        'business_date' =>
+            $businessDate,
+
+        'total_debt' =>
+            round($totalDebt, 2),
+
+        'total_credit' =>
+            round($totalCredit, 2),
+
+        'customers' =>
+            $result
+    ]);
+}
+
 function getOpenDailyRecord(
     PDO $pdo,
     int $dailyId = 0
@@ -246,6 +738,60 @@ try {
             getCustomers($pdo);
         }
 
+        if ($action === 'get_current_debt') {
+
+        $dailyId =
+            filter_input(
+                INPUT_GET,
+                'daily_id',
+                FILTER_VALIDATE_INT
+            );
+
+        $dailyId =
+            $dailyId
+                ? (int) $dailyId
+                : 0;
+
+
+        if ($dailyId <= 0) {
+            respond([
+                'success' => false,
+                'message' =>
+                    'Invalid daily record.'
+            ], 400);
+        }
+
+
+        $draftRaw =
+            (string) (
+                $_GET['draft'] ?? ''
+            );
+
+
+        $draft = [];
+
+
+        if ($draftRaw !== '') {
+
+            $decoded =
+                json_decode(
+                    $draftRaw,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                $draft = $decoded;
+                }
+            }
+
+
+            getCurrentDebt(
+                $pdo,
+                $dailyId,
+                $draft
+                );
+            }
+
         $dailyId =
             filter_input(
                 INPUT_GET,
@@ -335,6 +881,8 @@ try {
                 $draft
         ]);
     }
+
+    
 
     if ($method === 'POST') {
         $action =

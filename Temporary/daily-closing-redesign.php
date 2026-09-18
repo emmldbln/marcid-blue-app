@@ -1495,12 +1495,408 @@ $walkInOtherSales = 0.00;
             0 0 18px rgba(59, 130, 246, 0.28);
     }
 
+    /* =========================================================
+    CURRENT DEBT PANEL
+    ========================================================= */
+
+    .current-debt-tab {
+        position: fixed;
+        top: 50%;
+        right: 0;
+        z-index: 9990;
+
+        transform: translateY(-50%);
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        width: 42px;
+        min-height: 170px;
+
+        padding: 14px 8px;
+
+        border: 1px solid #b91c1c;
+        border-right: 0;
+        border-radius: 12px 0 0 12px;
+
+        background: #dc2626;
+        color: #ffffff;
+
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+
+        cursor: pointer;
+
+        transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    .current-debt-tab:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+    }
+
+    .current-debt-tab:active {
+        background: #991b1b;
+    }
+
+    .current-debt-tab-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+
+        white-space: nowrap;
+    }
+
+    .current-debt-tab-label {
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+    }
+
+    .current-debt-tab:hover {
+        background: var(--background);
+        border-color: var(--primary);
+    }
+
+    .current-debt-tab-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+
+        white-space: nowrap;
+    }
+
+    .current-debt-tab-label {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+    }
+    
+    .current-debt-tab.is-hidden {
+        display: none;
+    }
+
+
+    /* =========================================================
+    CURRENT DEBT DRAWER
+    ========================================================= */
+
+    .current-debt-drawer {
+        position: fixed;
+        top: 0;
+        right: -430px;
+        z-index: 9989;
+
+        width: min(430px, 92vw);
+        height: 100vh;
+
+        display: flex;
+        flex-direction: column;
+
+        box-sizing: border-box;
+
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+
+        box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12);
+
+        transition: right 0.25s ease;
+    }
+
+    .current-debt-drawer.open {
+        right: 0;
+    }
+
+    .current-debt-drawer-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+
+        padding: 22px 20px;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .current-debt-drawer-title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .current-debt-drawer-subtitle {
+        margin-top: 4px;
+
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .current-debt-close {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        padding: 0;
+
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+
+        background: var(--surface);
+        color: var(--text-muted);
+
+        font-size: 20px;
+        line-height: 1;
+
+        cursor: pointer;
+    }
+
+    .current-debt-close:hover {
+        color: var(--danger);
+        border-color: var(--danger);
+        background: var(--danger-light);
+    }
+
+    .current-debt-drawer-summary {
+        padding: 18px 20px;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .current-debt-drawer-summary-label {
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .current-debt-drawer-summary-value {
+        margin-top: 4px;
+
+        color: var(--danger);
+        font-size: 24px;
+        font-weight: 800;
+    }
+
+    .current-debt-list {
+        flex: 1;
+
+        overflow-y: auto;
+
+        padding: 12px 20px 24px;
+    }
+
+    .current-debt-empty {
+        padding: 40px 10px;
+
+        text-align: center;
+
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .current-debt-item {
+        padding: 14px 0;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .current-debt-item:last-child {
+        border-bottom: 0;
+    }
+
+    .current-debt-item-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .current-debt-customer {
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .current-debt-amount {
+        color: var(--danger);
+        font-size: 14px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .current-debt-item-details {
+        margin-top: 5px;
+
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .current-debt-credit {
+        color: var(--success);
+    }
+
+    .current-debt-loading {
+        padding: 30px 10px;
+
+        text-align: center;
+
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+
+    /* =========================================================
+    CURRENT DEBT OVERLAY
+    ========================================================= */
+
+    .current-debt-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9988;
+
+        display: none;
+
+        background: rgba(0, 0, 0, 0.18);
+    }
+
+    .current-debt-overlay.open {
+        display: block;
+    }
+
+
+    @media (max-width: 650px) {
+
+        .current-debt-tab {
+            width: 38px;
+            min-height: 145px;
+        }
+
+        .current-debt-drawer {
+            width: 92vw;
+            right: -92vw;
+        }
+
+        .current-debt-drawer.open {
+            right: 0;
+        }
+
+    }
+
     </style>
 
 </head>
 
 
 <body>
+
+<!-- =========================================================
+     CURRENT DEBT
+     ========================================================= -->
+
+<div
+    class="current-debt-overlay"
+    id="currentDebtOverlay"
+></div>
+
+
+<button
+    type="button"
+    class="current-debt-tab"
+    id="currentDebtTab"
+    aria-label="Open Current Debt"
+    title="Open Current Debt"
+>
+    <span class="current-debt-tab-content">
+
+        <span class="current-debt-tab-label">
+            CURRENT DEBT
+        </span>
+
+    </span>
+</button>
+
+
+<aside
+    class="current-debt-drawer"
+    id="currentDebtDrawer"
+    aria-hidden="true"
+>
+
+    <div class="current-debt-drawer-header">
+
+        <div>
+
+            <div class="current-debt-drawer-title">
+                Current Debt
+            </div>
+
+            <div class="current-debt-drawer-subtitle">
+                Unsettled customer balances across previous
+                and today's transactions.
+            </div>
+
+        </div>
+
+
+        <button
+            type="button"
+            class="current-debt-close"
+            id="currentDebtClose"
+            aria-label="Close Current Debt"
+        >
+            ×
+        </button>
+
+    </div>
+
+
+    <div class="current-debt-drawer-summary">
+
+        <div class="current-debt-drawer-summary-label">
+            Total Outstanding Debt
+        </div>
+
+        <div
+            class="current-debt-drawer-summary-value"
+            id="currentDebtTotal"
+        >
+            ₱0.00
+        </div>
+
+    </div>
+
+
+    <div
+        class="current-debt-list"
+        id="currentDebtList"
+    >
+
+        <div class="current-debt-loading">
+            Loading current debt...
+        </div>
+
+    </div>
+
+</aside>
 
 <div class="app">
 

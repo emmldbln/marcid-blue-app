@@ -982,6 +982,221 @@
 
             return totalReceived;
         }
+        
+        // =========================================================
+        // CURRENT DRAFT DEBT
+        // =========================================================
+
+        function getCurrentDraftDebt() {
+
+            const balances = new Map();
+
+
+            function normalizeName(value) {
+
+                return String(value ?? '')
+                    .trim()
+                    .toLowerCase();
+
+            }
+
+
+            function addCustomer(
+                customerName,
+                due,
+                payment
+            ) {
+
+                const name =
+                    String(customerName ?? '')
+                        .trim();
+
+                if (name === '') {
+                    return;
+                }
+
+
+                const key =
+                    normalizeName(name);
+
+
+                if (!balances.has(key)) {
+
+                    balances.set(
+                        key,
+                        {
+                            customer_name: name,
+                            today_due: 0,
+                            today_payment: 0
+                        }
+                    );
+
+                }
+
+
+                const balance =
+                    balances.get(key);
+
+
+                balance.today_due =
+                    roundMoney(
+                        balance.today_due +
+                        getNumber(due)
+                    );
+
+
+                balance.today_payment =
+                    roundMoney(
+                        balance.today_payment +
+                        getNumber(payment)
+                    );
+
+            }
+
+
+            getRows(
+                '.delivery-payment-row'
+            ).forEach(function (row) {
+
+                const customer =
+                    row.querySelector(
+                        '.delivery-customer'
+                    );
+
+                const slim =
+                    getInputNumber(
+                        row.querySelector(
+                            '.delivery-slim'
+                        )
+                    );
+
+                const round =
+                    getInputNumber(
+                        row.querySelector(
+                            '.delivery-round'
+                        )
+                    );
+
+                const price =
+                    getInputNumber(
+                        row.querySelector(
+                            '.delivery-price-input'
+                        )
+                    );
+
+                const payment =
+                    getInputNumber(
+                        row.querySelector(
+                            '.delivery-payment'
+                        )
+                    );
+
+
+                addCustomer(
+                    customer?.value,
+                    roundMoney(
+                        (slim + round) *
+                        price
+                    ),
+                    payment
+                );
+
+            });
+
+
+            getRows(
+                '.driver-delivery-entry'
+            ).forEach(function (row) {
+
+                const customer =
+                    row.querySelector(
+                        '.driver-delivery-customer'
+                    );
+
+                const slim =
+                    getInputNumber(
+                        row.querySelector(
+                            '.driver-delivery-slim'
+                        )
+                    );
+
+                const round =
+                    getInputNumber(
+                        row.querySelector(
+                            '.driver-delivery-round'
+                        )
+                    );
+
+                const price =
+                    getInputNumber(
+                        row.querySelector(
+                            '.driver-delivery-price'
+                        )
+                    );
+
+                const payment =
+                    getInputNumber(
+                        row.querySelector(
+                            '.driver-delivery-payment'
+                        )
+                    );
+
+
+                addCustomer(
+                    customer?.value,
+                    roundMoney(
+                        (slim + round) *
+                        price
+                    ),
+                    payment
+                );
+
+            });
+
+
+            const customers = [];
+
+
+            balances.forEach(function (balance) {
+
+                const gross =
+                    roundMoney(
+                        balance.today_due -
+                        balance.today_payment
+                    );
+
+
+                customers.push({
+                    customer_name:
+                        balance.customer_name,
+
+                    today_due:
+                        balance.today_due,
+
+                    today_payment:
+                        balance.today_payment,
+
+                    today_balance:
+                        Math.max(
+                            0,
+                            gross
+                        ),
+
+                    today_credit:
+                        Math.max(
+                            0,
+                            -gross
+                        )
+                });
+
+            });
+
+
+            return {
+                customers
+            };
+        }
+
 
 
         // =========================================================
@@ -1013,7 +1228,8 @@
                 shop: shopResult,
                 driver: driverResult,
                 totalDeliveries: totalDeliveries,
-                totalReceived: totalReceived
+                totalReceived: totalReceived,
+                debt: getCurrentDraftDebt()
             };
         }
 
