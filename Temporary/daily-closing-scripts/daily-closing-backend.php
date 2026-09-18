@@ -26,13 +26,32 @@ function respond(
     exit;
 }
 
+function getCustomers(
+    PDO $pdo
+): void {
+    $stmt = $pdo->query(
+        "SELECT
+            customer_id,
+            customer_name,
+            gallon_price
+         FROM customers
+         WHERE TRIM(customer_name) <> ''
+         ORDER BY customer_name ASC"
+    );
+
+    respond([
+        'success' => true,
+        'customers' => $stmt->fetchAll(
+            PDO::FETCH_ASSOC
+        )
+    ]);
+}
+
 function getOpenDailyRecord(
     PDO $pdo,
     int $dailyId = 0
 ): ?array {
-
     if ($dailyId > 0) {
-
         $stmt = $pdo->prepare(
             "SELECT
                 daily_id,
@@ -47,9 +66,7 @@ function getOpenDailyRecord(
         $stmt->execute([
             $dailyId
         ]);
-
     } else {
-
         $stmt = $pdo->query(
             "SELECT
                 daily_id,
@@ -73,7 +90,6 @@ function getOpenDailyRecord(
 function ensureDraftTable(
     PDO $pdo
 ): void {
-
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS daily_closing_drafts (
             draft_id INT NOT NULL AUTO_INCREMENT,
@@ -95,36 +111,9 @@ function ensureDraftTable(
     );
 }
 
-function getCustomers(
-    PDO $pdo
-): void {
-
-    $stmt = $pdo->query(
-        "SELECT
-            customer_id,
-            customer_name,
-            gallon_price
-         FROM customers
-         WHERE TRIM(customer_name) <> ''
-           AND gallon_price > 0
-         ORDER BY customer_name ASC"
-    );
-
-    $customers =
-        $stmt->fetchAll(
-            PDO::FETCH_ASSOC
-        );
-
-    respond([
-        'success' => true,
-        'customers' => $customers
-    ]);
-}
-
 function saveCustomerPrice(
     PDO $pdo
 ): void {
-
     $customerName =
         trim(
             (string) (
@@ -140,7 +129,6 @@ function saveCustomerPrice(
         );
 
     if ($customerName === '') {
-
         respond([
             'success' => false,
             'message' =>
@@ -153,7 +141,6 @@ function saveCustomerPrice(
         !is_numeric($priceRaw) ||
         (float) $priceRaw <= 0
     ) {
-
         respond([
             'success' => false,
             'message' =>
@@ -161,7 +148,7 @@ function saveCustomerPrice(
         ], 400);
     }
 
-    $pricePerGallon =
+    $price =
         round(
             (float) $priceRaw,
             2
@@ -188,10 +175,6 @@ function saveCustomerPrice(
         );
 
     if ($customer) {
-
-        $customerId =
-            (int) $customer['customer_id'];
-
         $stmt =
             $pdo->prepare(
                 "UPDATE customers
@@ -200,65 +183,58 @@ function saveCustomerPrice(
             );
 
         $stmt->execute([
-            $pricePerGallon,
-            $customerId
+            $price,
+            (int) $customer['customer_id']
         ]);
 
         respond([
             'success' => true,
             'action' => 'updated',
             'customer_id' =>
-                $customerId,
+                (int) $customer['customer_id'],
             'customer_name' =>
                 $customer['customer_name'],
             'gallon_price' =>
-                $pricePerGallon
+                $price
         ]);
     }
 
     $stmt =
         $pdo->prepare(
-            "INSERT INTO customers
-                (
-                    customer_name,
-                    gallon_price
-                )
-             VALUES
-                (?, ?)"
+            "INSERT INTO customers (
+                customer_name,
+                gallon_price
+             )
+             VALUES (?, ?)"
         );
 
     $stmt->execute([
         $customerName,
-        $pricePerGallon
+        $price
     ]);
-
-    $customerId =
-        (int) $pdo->lastInsertId();
 
     respond([
         'success' => true,
         'action' => 'created',
         'customer_id' =>
-            $customerId,
+            (int) $pdo->lastInsertId(),
         'customer_name' =>
             $customerName,
         'gallon_price' =>
-            $pricePerGallon
+            $price
     ]);
 }
 
 try {
-
     $method =
         strtoupper(
             $_SERVER['REQUEST_METHOD'] ?? 'GET'
         );
 
     /*
-     * Customer master operations.
+     * Customer list does not require a daily_id.
      */
     if ($method === 'GET') {
-
         $action =
             trim(
                 (string) (
@@ -270,9 +246,6 @@ try {
             getCustomers($pdo);
         }
 
-        /*
-         * Daily draft loading.
-         */
         $dailyId =
             filter_input(
                 INPUT_GET,
@@ -292,7 +265,6 @@ try {
             );
 
         if (!$dailyRecord) {
-
             respond([
                 'success' => false,
                 'message' =>
@@ -322,7 +294,6 @@ try {
             );
 
         if (!$draftRow) {
-
             respond([
                 'success' => true,
                 'has_draft' => false,
@@ -342,7 +313,6 @@ try {
             );
 
         if (!is_array($draft)) {
-
             respond([
                 'success' => false,
                 'message' =>
@@ -366,11 +336,7 @@ try {
         ]);
     }
 
-    /*
-     * Daily draft and customer price writes.
-     */
     if ($method === 'POST') {
-
         $action =
             trim(
                 (string) (
@@ -379,22 +345,16 @@ try {
             );
 
         /*
-         * Customer price is independent
-         * of the daily record.
+         * Customer master price is independent
+         * from the daily closing draft.
          */
         if (
             $action ===
             'save_customer_price'
         ) {
-
-            saveCustomerPrice(
-                $pdo
-            );
+            saveCustomerPrice($pdo);
         }
 
-        /*
-         * Daily record operations.
-         */
         $dailyId =
             filter_input(
                 INPUT_POST,
@@ -408,7 +368,6 @@ try {
                 : 0;
 
         if ($dailyId <= 0) {
-
             respond([
                 'success' => false,
                 'message' =>
@@ -423,7 +382,6 @@ try {
             );
 
         if (!$dailyRecord) {
-
             respond([
                 'success' => false,
                 'message' =>
@@ -434,14 +392,12 @@ try {
         ensureDraftTable($pdo);
 
         if ($action === 'save') {
-
             $draftRaw =
                 (string) (
                     $_POST['draft'] ?? ''
                 );
 
             if ($draftRaw === '') {
-
                 respond([
                     'success' => false,
                     'message' =>
@@ -456,7 +412,6 @@ try {
                 );
 
             if (!is_array($draft)) {
-
                 respond([
                     'success' => false,
                     'message' =>
@@ -472,7 +427,6 @@ try {
                 );
 
             if ($encodedDraft === false) {
-
                 respond([
                     'success' => false,
                     'message' =>
@@ -482,13 +436,11 @@ try {
 
             $stmt =
                 $pdo->prepare(
-                    "INSERT INTO daily_closing_drafts
-                        (
-                            daily_id,
-                            draft_data
-                        )
-                     VALUES
-                        (?, ?)
+                    "INSERT INTO daily_closing_drafts (
+                        daily_id,
+                        draft_data
+                     )
+                     VALUES (?, ?)
                      ON DUPLICATE KEY UPDATE
                         draft_data =
                             VALUES(draft_data),
@@ -507,14 +459,11 @@ try {
                 'daily_id' =>
                     $dailyId,
                 'business_date' =>
-                    $dailyRecord['business_date'],
-                'message' =>
-                    'Draft saved.'
+                    $dailyRecord['business_date']
             ]);
         }
 
         if ($action === 'reset') {
-
             $stmt =
                 $pdo->prepare(
                     "DELETE FROM daily_closing_drafts
@@ -529,9 +478,7 @@ try {
                 'success' => true,
                 'action' => 'reset',
                 'daily_id' =>
-                    $dailyId,
-                'message' =>
-                    'Draft reset.'
+                    $dailyId
             ]);
         }
 
@@ -549,7 +496,6 @@ try {
     ], 405);
 
 } catch (Throwable $e) {
-
     respond([
         'success' => false,
         'message' =>

@@ -1,347 +1,536 @@
 (function () {
     'use strict';
 
-    const BACKEND_URL = 'daily-closing-backend.php';
+    /*
+     * The page is:
+     * Temporary/daily-closing-redesign.php
+     *
+     * Therefore all fetch URLs are resolved from
+     * the Temporary directory.
+     */
+    const BACKEND_URL =
+        'daily-closing-scripts/daily-closing-backend.php';
+
     const SAVE_DELAY = 15000;
 
-    const CUSTOMER_SELECTOR = [
-        '.delivery-customer',
-        '.driver-delivery-customer'
-    ].join(',');
+    const CUSTOMER_SELECTOR =
+        '.delivery-customer, .driver-delivery-customer';
 
-    const PRICE_SELECTORS = {
-        '.delivery-customer': '.delivery-price-input',
-        '.driver-delivery-customer': '.driver-delivery-price'
-    };
+    const customerTimers = new WeakMap();
 
     let customers = [];
-    let activeDropdown = null;
-    let saveTimers = new WeakMap();
-    let rowStates = new WeakMap();
+    let dropdown = null;
+    let activeInput = null;
 
-    function getCustomerFields() {
-        return document.querySelectorAll(CUSTOMER_SELECTOR);
+
+    /*
+     * ---------------------------------------------------------
+     * GENERAL HELPERS
+     * ---------------------------------------------------------
+     */
+
+    function normalize(value) {
+        return String(value ?? '')
+            .trim()
+            .toLowerCase();
     }
 
-    function getPriceField(customerInput) {
-        const selector = Object.keys(PRICE_SELECTORS).find(
-            key => customerInput.matches(key)
-        );
 
-        if (!selector) {
-            return null;
-        }
+    function isValidPrice(value) {
+        const price = Number(value);
 
-        const row = customerInput.closest(
+        return Number.isFinite(price) &&
+            price > 0;
+    }
+
+
+    function getRow(input) {
+        return input.closest(
             '.delivery-payment-row, .driver-delivery-row'
         );
+    }
+
+
+    function getPriceInput(input) {
+        const row = getRow(input);
 
         if (!row) {
             return null;
         }
 
-        return row.querySelector(PRICE_SELECTORS[selector]);
-    }
-
-    function getRow(customerInput) {
-        return customerInput.closest(
-            '.delivery-payment-row, .driver-delivery-row'
-        );
-    }
-
-    function normalize(value) {
-        return String(value || '')
-            .trim()
-            .toLowerCase();
-    }
-
-    function isValidPrice(value) {
-        const number = Number(value);
-
-        return Number.isFinite(number) && number > 0;
-    }
-
-    function clearSaveTimer(customerInput) {
-        const timer = saveTimers.get(customerInput);
-
-        if (timer) {
-            clearTimeout(timer);
-            saveTimers.delete(customerInput);
-        }
-    }
-
-    function saveState(customerInput, customerName, price) {
-        rowStates.set(customerInput, {
-            customerName,
-            price
-        });
-    }
-
-    function getState(customerInput) {
-        return rowStates.get(customerInput) || {
-            customerName: '',
-            price: ''
-        };
-    }
-
-    async function fetchCustomers() {
-        try {
-            const response = await fetch(
-                `${BACKEND_URL}?action=get_customers`,
-                {
-                    method: 'GET',
-                    credentials: 'same-origin',
-                    cache: 'no-store'
-                }
+        if (
+            input.classList.contains(
+                'delivery-customer'
+            )
+        ) {
+            return row.querySelector(
+                '.delivery-price-input'
             );
+        }
+
+        if (
+            input.classList.contains(
+                'driver-delivery-customer'
+            )
+        ) {
+            return row.querySelector(
+                '.driver-delivery-price'
+            );
+        }
+
+        return null;
+    }
+
+
+    function clearTimer(input) {
+        const timer =
+            customerTimers.get(input);
+
+        if (!timer) {
+            return;
+        }
+
+        clearTimeout(timer);
+
+        customerTimers.delete(input);
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * CUSTOMER LOADING
+     * ---------------------------------------------------------
+     */
+
+    async function loadCustomers() {
+        try {
+            const url =
+                new URL(
+                    BACKEND_URL,
+                    window.location.href
+                );
+
+            url.searchParams.set(
+                'action',
+                'get_customers'
+            );
+
+            url.searchParams.set(
+                '_',
+                Date.now().toString()
+            );
+
+            const response =
+                await fetch(
+                    url.toString(),
+                    {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            Accept:
+                                'application/json'
+                        }
+                    }
+                );
 
             if (!response.ok) {
                 throw new Error(
-                    `Customer request failed: ${response.status}`
+                    `Customer request failed: HTTP ${response.status}`
                 );
             }
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
-            if (!data.success || !Array.isArray(data.customers)) {
+            if (
+                !data.success ||
+                !Array.isArray(
+                    data.customers
+                )
+            ) {
                 throw new Error(
-                    data.message || 'Unable to load customers.'
+                    data.message ||
+                    'Invalid customer response.'
                 );
             }
 
-            customers = data.customers
-                .map(customer => ({
-                    id: Number(customer.customer_id),
-                    name: String(customer.customer_name || '').trim(),
-                    price: Number(customer.gallon_price)
-                }))
-                .filter(customer => customer.name !== '');
+            customers =
+                data.customers
+                    .map(
+                        customer => ({
+                            id:
+                                Number(
+                                    customer.customer_id
+                                ),
 
-        } catch (error) {
-            console.error(
-                'Marcid Blue customer bank:',
-                error
+                            name:
+                                String(
+                                    customer.customer_name ??
+                                    ''
+                                ).trim(),
+
+                            price:
+                                Number(
+                                    customer.gallon_price
+                                )
+                        })
+                    )
+                    .filter(
+                        customer =>
+                            customer.name !== ''
+                    );
+
+            console.info(
+                `Marcid Blue Customer Bank: ${customers.length} customers loaded.`
             );
 
+        } catch (error) {
             customers = [];
+
+            console.error(
+                'Marcid Blue Customer Bank: unable to load customers.',
+                error
+            );
         }
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * DROPDOWN
+     * ---------------------------------------------------------
+     */
+
     function createDropdown() {
-        const dropdown = document.createElement('div');
+        if (dropdown) {
+            return dropdown;
+        }
 
-        dropdown.className = 'marcid-customer-dropdown';
+        dropdown =
+            document.createElement('div');
 
-        Object.assign(dropdown.style, {
-            position: 'fixed',
-            zIndex: '99999',
-            display: 'none',
-            maxHeight: '260px',
-            overflowY: 'auto',
-            background: '#ffffff',
-            border: '1px solid #d9dee7',
-            borderRadius: '8px',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-            padding: '4px 0',
-            boxSizing: 'border-box'
-        });
+        dropdown.id =
+            'marcidBlueCustomerDropdown';
 
-        document.body.appendChild(dropdown);
+        dropdown.setAttribute(
+            'role',
+            'listbox'
+        );
+
+        Object.assign(
+            dropdown.style,
+            {
+                position: 'fixed',
+                zIndex: '999999',
+                display: 'none',
+                boxSizing: 'border-box',
+                maxHeight: '280px',
+                overflowY: 'auto',
+                background: '#ffffff',
+                border: '1px solid #d9dee7',
+                borderRadius: '8px',
+                boxShadow:
+                    '0 8px 24px rgba(0,0,0,.12)',
+                padding: '4px 0'
+            }
+        );
+
+        document.body.appendChild(
+            dropdown
+        );
 
         return dropdown;
     }
 
-    function positionDropdown(dropdown, input) {
-        const rect = input.getBoundingClientRect();
 
-        dropdown.style.left = `${rect.left}px`;
-        dropdown.style.top = `${rect.bottom + 4}px`;
-        dropdown.style.width = `${Math.max(rect.width, 220)}px`;
-    }
-
-    function closeDropdown() {
-        if (!activeDropdown) {
+    function positionDropdown(input) {
+        if (!dropdown) {
             return;
         }
 
-        activeDropdown.style.display = 'none';
-        activeDropdown = null;
+        const rect =
+            input.getBoundingClientRect();
+
+        dropdown.style.left =
+            `${rect.left}px`;
+
+        dropdown.style.top =
+            `${rect.bottom + 4}px`;
+
+        dropdown.style.width =
+            `${Math.max(
+                rect.width,
+                240
+            )}px`;
     }
 
-    function createCustomerOption(customer, customerInput) {
-        const option = document.createElement('button');
 
-        option.type = 'button';
-        option.className = 'marcid-customer-option';
-
-        Object.assign(option.style, {
-            display: 'block',
-            width: '100%',
-            border: '0',
-            background: 'transparent',
-            padding: '10px 12px',
-            textAlign: 'left',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            fontSize: '14px',
-            color: '#1f2937'
-        });
-
-        const priceText = isValidPrice(customer.price)
-            ? `₱${customer.price.toFixed(2)} / gal`
-            : 'No price';
-
-        option.innerHTML = `
-            <div style="font-weight: 600;">
-                ${escapeHtml(customer.name)}
-            </div>
-            <div style="
-                margin-top: 2px;
-                font-size: 12px;
-                color: #6b7280;
-            ">
-                ${priceText}
-            </div>
-        `;
-
-        option.addEventListener('mouseenter', function () {
-            this.style.background = '#f5f7fa';
-        });
-
-        option.addEventListener('mouseleave', function () {
-            this.style.background = 'transparent';
-        });
-
-        option.addEventListener('mousedown', function (event) {
-            event.preventDefault();
-
-            selectCustomer(
-                customerInput,
-                customer
-            );
-        });
-
-        return option;
-    }
-
-    function createEmptyOption(message) {
-        const option = document.createElement('div');
-
-        option.textContent = message;
-
-        Object.assign(option.style, {
-            padding: '10px 12px',
-            fontSize: '13px',
-            color: '#6b7280'
-        });
-
-        return option;
-    }
-
-    function renderDropdown(customerInput) {
-        if (!activeDropdown) {
-            activeDropdown = createDropdown();
+    function closeDropdown() {
+        if (!dropdown) {
+            return;
         }
 
-        const dropdown = activeDropdown;
-        const searchValue = normalize(customerInput.value);
+        dropdown.style.display =
+            'none';
 
-        dropdown.innerHTML = '';
+        activeInput = null;
+    }
 
-        const filteredCustomers = customers.filter(customer => {
-            if (!searchValue) {
-                return true;
-            }
 
-            return normalize(customer.name)
-                .includes(searchValue);
-        });
+    function openDropdown(input) {
+        const menu =
+            createDropdown();
 
-        if (filteredCustomers.length === 0) {
-            dropdown.appendChild(
-                createEmptyOption(
-                    searchValue
-                        ? 'No matching customer'
-                        : 'No customers found'
-                )
+        activeInput = input;
+
+        renderDropdown(input);
+
+        positionDropdown(input);
+
+        menu.style.display =
+            'block';
+    }
+
+
+    function renderDropdown(input) {
+        const menu =
+            createDropdown();
+
+        const search =
+            normalize(input.value);
+
+        menu.innerHTML = '';
+
+        const filtered =
+            customers.filter(
+                customer => {
+                    if (!search) {
+                        return true;
+                    }
+
+                    return normalize(
+                        customer.name
+                    ).includes(search);
+                }
             );
-        } else {
-            filteredCustomers.forEach(customer => {
-                dropdown.appendChild(
-                    createCustomerOption(
-                        customer,
-                        customerInput
-                    )
+
+        if (filtered.length === 0) {
+            const empty =
+                document.createElement('div');
+
+            empty.textContent =
+                customers.length === 0
+                    ? 'Unable to load customers'
+                    : 'No matching customer';
+
+            Object.assign(
+                empty.style,
+                {
+                    padding: '11px 13px',
+                    fontSize: '13px',
+                    color: '#6b7280'
+                }
+            );
+
+            menu.appendChild(empty);
+
+            return;
+        }
+
+        filtered.forEach(
+            customer => {
+                const option =
+                    document.createElement(
+                        'button'
+                    );
+
+                option.type =
+                    'button';
+
+                option.setAttribute(
+                    'role',
+                    'option'
                 );
-            });
-        }
 
-        positionDropdown(
-            dropdown,
-            customerInput
+                Object.assign(
+                    option.style,
+                    {
+                        display: 'block',
+                        width: '100%',
+                        border: '0',
+                        background:
+                            'transparent',
+                        padding:
+                            '10px 13px',
+                        textAlign:
+                            'left',
+                        cursor:
+                            'pointer',
+                        fontFamily:
+                            'inherit'
+                    }
+                );
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+                name.textContent =
+                    customer.name;
+
+                Object.assign(
+                    name.style,
+                    {
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#1f2937'
+                    }
+                );
+
+                const price =
+                    document.createElement(
+                        'div'
+                    );
+
+                price.textContent =
+                    isValidPrice(
+                        customer.price
+                    )
+                        ? `₱${Number(
+                              customer.price
+                          ).toFixed(2)} / gal`
+                        : 'No price';
+
+                Object.assign(
+                    price.style,
+                    {
+                        marginTop: '2px',
+                        fontSize: '12px',
+                        color: '#6b7280'
+                    }
+                );
+
+                option.appendChild(name);
+                option.appendChild(price);
+
+                option.addEventListener(
+                    'mouseenter',
+                    function () {
+                        this.style.background =
+                            '#f5f7fa';
+                    }
+                );
+
+                option.addEventListener(
+                    'mouseleave',
+                    function () {
+                        this.style.background =
+                            'transparent';
+                    }
+                );
+
+                option.addEventListener(
+                    'mousedown',
+                    function (event) {
+                        event.preventDefault();
+
+                        selectCustomer(
+                            input,
+                            customer
+                        );
+                    }
+                );
+
+                menu.appendChild(option);
+            }
         );
-
-        dropdown.style.display = 'block';
     }
 
-    function selectCustomer(customerInput, customer) {
-        clearSaveTimer(customerInput);
 
-        customerInput.value = customer.name;
+    /*
+     * ---------------------------------------------------------
+     * CUSTOMER SELECTION
+     * ---------------------------------------------------------
+     */
 
-        const priceInput = getPriceField(
-            customerInput
-        );
+    function selectCustomer(
+        input,
+        customer
+    ) {
+        clearTimer(input);
+
+        input.value =
+            customer.name;
+
+        const priceInput =
+            getPriceInput(input);
 
         if (
             priceInput &&
-            isValidPrice(customer.price)
+            isValidPrice(
+                customer.price
+            )
         ) {
-            priceInput.value = customer.price;
+            priceInput.value =
+                Number(
+                    customer.price
+                ).toString();
+
+            triggerChange(
+                priceInput
+            );
         }
 
-        saveState(
-            customerInput,
-            customer.name,
-            priceInput ? priceInput.value : ''
-        );
+        triggerChange(input);
 
         closeDropdown();
-
-        triggerInput(customerInput);
-
-        if (priceInput) {
-            triggerInput(priceInput);
-        }
     }
 
-    function triggerInput(element) {
-        element.dispatchEvent(
-            new Event('input', {
-                bubbles: true
-            })
+
+    function triggerChange(input) {
+        input.dispatchEvent(
+            new Event(
+                'input',
+                {
+                    bubbles: true
+                }
+            )
         );
 
-        element.dispatchEvent(
-            new Event('change', {
-                bubbles: true
-            })
+        input.dispatchEvent(
+            new Event(
+                'change',
+                {
+                    bubbles: true
+                }
+            )
         );
     }
 
-    function scheduleCustomerSave(customerInput) {
-        clearSaveTimer(customerInput);
 
-        const priceInput = getPriceField(
-            customerInput
-        );
+    /*
+     * ---------------------------------------------------------
+     * CUSTOMER PRICE AUTOSAVE
+     * ---------------------------------------------------------
+     */
+
+    function scheduleSave(input) {
+        clearTimer(input);
+
+        const priceInput =
+            getPriceInput(input);
 
         if (!priceInput) {
             return;
         }
 
-        const customerName = customerInput.value.trim();
-        const price = priceInput.value.trim();
+        const customerName =
+            input.value.trim();
+
+        const price =
+            priceInput.value.trim();
 
         if (
             customerName === '' ||
@@ -350,44 +539,54 @@
             return;
         }
 
-        const timer = setTimeout(
-            function () {
-                saveCustomerPrice(
-                    customerInput,
-                    customerName,
-                    price
-                );
-            },
-            SAVE_DELAY
-        );
+        const expectedName =
+            customerName;
 
-        saveTimers.set(
-            customerInput,
+        const expectedPrice =
+            price;
+
+        const timer =
+            setTimeout(
+                function () {
+                    saveCustomerPrice(
+                        input,
+                        expectedName,
+                        expectedPrice
+                    );
+                },
+                SAVE_DELAY
+            );
+
+        customerTimers.set(
+            input,
             timer
         );
     }
 
-    async function saveCustomerPrice(
-        customerInput,
-        customerName,
-        price
-    ) {
-        saveTimers.delete(customerInput);
 
-        const currentName =
-            customerInput.value.trim();
+    async function saveCustomerPrice(
+        input,
+        expectedName,
+        expectedPrice
+    ) {
+        customerTimers.delete(input);
 
         const priceInput =
-            getPriceField(customerInput);
+            getPriceInput(input);
+
+        if (!priceInput) {
+            return;
+        }
+
+        const currentName =
+            input.value.trim();
 
         const currentPrice =
-            priceInput
-                ? priceInput.value.trim()
-                : '';
+            priceInput.value.trim();
 
         if (
-            currentName !== customerName ||
-            currentPrice !== String(price)
+            currentName !== expectedName ||
+            currentPrice !== expectedPrice
         ) {
             return;
         }
@@ -399,7 +598,8 @@
             return;
         }
 
-        const body = new URLSearchParams();
+        const body =
+            new URLSearchParams();
 
         body.set(
             'action',
@@ -417,31 +617,38 @@
         );
 
         try {
-            const response = await fetch(
-                BACKEND_URL,
-                {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type':
-                            'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: body.toString()
-                }
-            );
+            const response =
+                await fetch(
+                    BACKEND_URL,
+                    {
+                        method: 'POST',
+                        credentials:
+                            'same-origin',
+                        headers: {
+                            'Content-Type':
+                                'application/x-www-form-urlencoded; charset=UTF-8',
+
+                            Accept:
+                                'application/json'
+                        },
+                        body:
+                            body.toString()
+                    }
+                );
 
             if (!response.ok) {
                 throw new Error(
-                    `Customer save failed: ${response.status}`
+                    `Customer save failed: HTTP ${response.status}`
                 );
             }
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
             if (!data.success) {
                 throw new Error(
                     data.message ||
-                    'Customer price could not be saved.'
+                    'Customer price save failed.'
                 );
             }
 
@@ -450,42 +657,44 @@
                 Number(currentPrice)
             );
 
-            saveState(
-                customerInput,
-                currentName,
-                currentPrice
+            console.info(
+                'Marcid Blue Customer Bank: customer price updated.'
             );
 
         } catch (error) {
             console.error(
-                'Marcid Blue customer price save:',
+                'Marcid Blue Customer Bank: price save failed.',
                 error
             );
         }
     }
 
+
     function updateLocalCustomer(
-        customerName,
+        name,
         price
     ) {
-        const normalizedName =
-            normalize(customerName);
+        const normalized =
+            normalize(name);
 
         const existing =
             customers.find(
                 customer =>
-                    normalize(customer.name) ===
-                    normalizedName
+                    normalize(
+                        customer.name
+                    ) === normalized
             );
 
         if (existing) {
-            existing.price = price;
+            existing.price =
+                price;
+
             return;
         }
 
         customers.push({
             id: 0,
-            name: customerName,
+            name,
             price
         });
 
@@ -497,81 +706,39 @@
         );
     }
 
-    function handleCustomerFocus(event) {
-        const input = event.currentTarget;
 
-        renderDropdown(input);
+    /*
+     * ---------------------------------------------------------
+     * INPUT HANDLERS
+     * ---------------------------------------------------------
+     */
+
+    function handleCustomerFocus(
+        event
+    ) {
+        openDropdown(
+            event.currentTarget
+        );
     }
 
-    function handleCustomerInput(event) {
-        const input = event.currentTarget;
 
-        clearSaveTimer(input);
+    function handleCustomerInput(
+        event
+    ) {
+        const input =
+            event.currentTarget;
 
-        const typedName =
-            input.value.trim();
-
-        const existingCustomer =
-            customers.find(
-                customer =>
-                    normalize(customer.name) ===
-                    normalize(typedName)
-            );
-
-        if (existingCustomer) {
-            const priceInput =
-                getPriceField(input);
-
-            if (
-                priceInput &&
-                isValidPrice(
-                    existingCustomer.price
-                )
-            ) {
-                priceInput.value =
-                    existingCustomer.price;
-
-                triggerInput(priceInput);
-            }
-
-            saveState(
-                input,
-                existingCustomer.name,
-                priceInput
-                    ? priceInput.value
-                    : ''
-            );
-
-        } else {
-            const previous =
-                getState(input);
-
-            if (
-                previous.customerName !==
-                typedName
-            ) {
-                const priceInput =
-                    getPriceField(input);
-
-                if (
-                    priceInput &&
-                    previous.customerName !==
-                    typedName
-                ) {
-                    /*
-                     * Keep the manually entered price
-                     * when creating a new customer.
-                     */
-                }
-            }
-        }
+        clearTimer(input);
 
         renderDropdown(input);
 
-        scheduleCustomerSave(input);
+        scheduleSave(input);
     }
 
-    function handlePriceInput(event) {
+
+    function handlePriceInput(
+        event
+    ) {
         const priceInput =
             event.currentTarget;
 
@@ -593,50 +760,40 @@
             return;
         }
 
-        clearSaveTimer(customerInput);
-
-        scheduleCustomerSave(
+        scheduleSave(
             customerInput
         );
     }
 
-    function handleCustomerKeydown(event) {
-        if (event.key === 'Escape') {
-            closeDropdown();
-            return;
-        }
 
+    function handleCustomerKeydown(
+        event
+    ) {
         if (
-            event.key === 'ArrowDown' &&
-            activeDropdown &&
-            activeDropdown.style.display !== 'none'
+            event.key === 'Escape'
         ) {
-            const firstOption =
-                activeDropdown.querySelector(
-                    '.marcid-customer-option'
-                );
-
-            if (firstOption) {
-                event.preventDefault();
-                firstOption.focus();
-            }
+            closeDropdown();
         }
     }
 
-    function handleDocumentPointerDown(event) {
-        if (!activeDropdown) {
+
+    function handleDocumentPointerDown(
+        event
+    ) {
+        if (!dropdown) {
             return;
         }
 
         if (
-            event.target.closest(
-                '.marcid-customer-dropdown'
+            dropdown.contains(
+                event.target
             )
         ) {
             return;
         }
 
         if (
+            event.target.matches &&
             event.target.matches(
                 CUSTOMER_SELECTOR
             )
@@ -647,34 +804,26 @@
         closeDropdown();
     }
 
-    function handleWindowResize() {
-        if (!activeDropdown) {
-            return;
-        }
 
-        const input =
-            document.activeElement;
+    /*
+     * ---------------------------------------------------------
+     * DYNAMIC ROW SUPPORT
+     * ---------------------------------------------------------
+     */
 
+    function attachCustomerInput(
+        input
+    ) {
         if (
-            input &&
-            input.matches(CUSTOMER_SELECTOR)
-        ) {
-            positionDropdown(
-                activeDropdown,
-                input
-            );
-        }
-    }
-
-    function attachCustomerInput(input) {
-        if (
-            input.dataset.customerBankAttached ===
+            input.dataset
+                .marcidCustomerBankAttached ===
             'true'
         ) {
             return;
         }
 
-        input.dataset.customerBankAttached =
+        input.dataset
+            .marcidCustomerBankAttached =
             'true';
 
         input.addEventListener(
@@ -698,14 +847,16 @@
         );
 
         const priceInput =
-            getPriceField(input);
+            getPriceInput(input);
 
         if (
             priceInput &&
-            priceInput.dataset.customerBankAttached !==
+            priceInput.dataset
+                .marcidCustomerPriceAttached !==
                 'true'
         ) {
-            priceInput.dataset.customerBankAttached =
+            priceInput.dataset
+                .marcidCustomerPriceAttached =
                 'true';
 
             priceInput.addEventListener(
@@ -720,11 +871,17 @@
         }
     }
 
+
     function scanCustomerInputs() {
-        getCustomerFields().forEach(
-            attachCustomerInput
-        );
+        document
+            .querySelectorAll(
+                CUSTOMER_SELECTOR
+            )
+            .forEach(
+                attachCustomerInput
+            );
     }
+
 
     function observeDynamicRows() {
         const observer =
@@ -743,57 +900,65 @@
         );
     }
 
-    function cancelRemovedRowTimers() {
-        /*
-         * WeakMap references disappear naturally when
-         * rows are removed from the DOM.
-         */
+
+    /*
+     * ---------------------------------------------------------
+     * POSITIONING
+     * ---------------------------------------------------------
+     */
+
+    function repositionDropdown() {
+        if (
+            !dropdown ||
+            !activeInput ||
+            dropdown.style.display ===
+                'none'
+        ) {
+            return;
+        }
+
+        positionDropdown(
+            activeInput
+        );
     }
 
-    function escapeHtml(value) {
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
+
+    /*
+     * ---------------------------------------------------------
+     * INITIALIZATION
+     * ---------------------------------------------------------
+     */
 
     async function initialize() {
-        await fetchCustomers();
+        createDropdown();
+
+        await loadCustomers();
 
         scanCustomerInputs();
+
         observeDynamicRows();
 
         document.addEventListener(
-            'pointerdown',
+            'mousedown',
             handleDocumentPointerDown
         );
 
         window.addEventListener(
             'resize',
-            handleWindowResize
+            repositionDropdown
         );
 
         window.addEventListener(
             'scroll',
-            handleWindowResize,
+            repositionDropdown,
             true
         );
 
-        window.marcidBlueCustomerBank = {
-            refreshCustomers: fetchCustomers,
-            openDropdown: function (input) {
-                if (
-                    input instanceof HTMLInputElement &&
-                    input.matches(CUSTOMER_SELECTOR)
-                ) {
-                    renderDropdown(input);
-                }
-            },
-            closeDropdown
-        };
+        console.info(
+            'Marcid Blue Customer Bank: initialized.'
+        );
     }
+
 
     if (
         document.readyState ===
