@@ -45,6 +45,8 @@ requireAdmin();
 
 $businessDate = date('Y-m-d');
 
+$currentPage = 'daily-closing';
+
 $walkInCustomers = 0;
 
 $walkInPrice = 30.00;
@@ -77,11 +79,18 @@ $walkInOtherSales = 0.00;
 
     <style>
 
+    
     /*
      * =========================================================
      * PAGE HEADER + DAILY CLOSING ACTIONS
      * =========================================================
      */
+
+    .topbar {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+    }
 
     .page-header {
         display: flex !important;
@@ -1867,95 +1876,7 @@ $walkInOtherSales = 0.00;
 
 <div class="app">
 
-
-    <!-- =====================================================
-         SIDEBAR
-         ===================================================== -->
-
-    <aside class="sidebar">
-
-        <div class="sidebar-brand">
-
-            <img
-                src="../assets/images/mb-logo.png"
-                alt="Marcid Blue Logo"
-            >
-
-        </div>
-
-
-        <nav class="sidebar-nav">
-
-            <div class="nav-section-title">
-                Main
-            </div>
-
-
-            <a
-                href="../pages/home.php"
-                class="nav-item"
-            >
-                🏠
-                <span>Home</span>
-            </a>
-
-
-            <a
-                href="#"
-                class="nav-item"
-            >
-                👥
-                <span>Customers</span>
-            </a>
-
-
-            <a
-                href="#"
-                class="nav-item"
-            >
-                📅
-                <span>Daily Records</span>
-            </a>
-
-
-            <a
-                href="#"
-                class="nav-item active"
-            >
-                🧾
-                <span>Daily Closing</span>
-            </a>
-
-
-            <div
-                class="nav-section-title"
-                style="margin-top:25px"
-            >
-                System
-            </div>
-
-
-            <a
-                href="#"
-                class="nav-item"
-            >
-                ⚙️
-                <span>Settings</span>
-            </a>
-
-
-            <a
-                href="#"
-                class="nav-item"
-            >
-                🚪
-                <span>Logout</span>
-            </a>
-
-        </nav>
-
-    </aside>
-
+    <?php require_once '../includes/sidebar.php'; ?>
 
     <!-- =====================================================
          MAIN CONTENT
@@ -1969,11 +1890,6 @@ $walkInOtherSales = 0.00;
              ================================================= -->
 
         <header class="topbar">
-
-            <div class="topbar-title">
-                Daily Closing
-            </div>
-
 
             <div class="topbar-user">
 

@@ -4,6 +4,8 @@ require_once '../auth/auth.php';
 
 requireAdmin();
 
+$currentPage = 'home';
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,51 +17,7 @@ requireAdmin();
 </head>
 
 <body>
-<div class="app">
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <div class="brand-icon">
-                <img src="../assets/images/mb-logo.png" alt="Marcid Blue Logo">
-            </div>
-        </div>
-
-        <nav class="sidebar-nav">
-            <div class="nav-section-title">Main</div>
-
-            <a href="home.php" class="nav-item active">
-                🏠
-                <span>Home</span>
-            </a>
-
-            <a href="#" class="nav-item">
-                👥
-                <span>Customers</span>
-            </a>
-
-            <a href="daily-records.php" class="nav-item">
-                📅
-                <span>Daily Records</span>
-            </a>
-
-            <a href="daily-closing.php" class="nav-item">
-                🧾
-                <span>Daily Closing</span>
-            </a>
-
-            <div class="nav-section-title" style="margin-top: 25px;">System</div>
-
-            <a href="#" class="nav-item">
-                ⚙️
-                <span>Settings</span>
-            </a>
-
-            <a href="#" class="nav-item">
-                🚪
-                <span>Logout</span>
-            </a>
-        </nav>
-    </aside>
-
+<div class="main"
     <main class="main">
         <header class="topbar">
             <div class="topbar-title">Dashboard</div>
