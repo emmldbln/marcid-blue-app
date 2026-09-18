@@ -858,11 +858,6 @@
         result
     ) {
 
-        const tabAmount =
-            getElement(
-                'currentDebtTabAmount'
-            );
-
         const totalElement =
             getElement(
                 'currentDebtTotal'
@@ -1680,7 +1675,7 @@
             );
 
             tab.classList.add(
-                'hidden'
+                'is-hidden'
             );
 
             drawer.setAttribute(
@@ -1704,7 +1699,7 @@
             );
 
             tab.classList.remove(
-                'hidden'
+                'is-hidden'
             );
 
             drawer.setAttribute(

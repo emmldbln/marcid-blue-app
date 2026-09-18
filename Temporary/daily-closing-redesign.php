@@ -1543,6 +1543,10 @@ $walkInOtherSales = 0.00;
         background: #991b1b;
     }
 
+    .current-debt-tab.is-hidden {
+        display: none;
+    }
+
     .current-debt-tab-content {
         display: flex;
         align-items: center;
@@ -1559,33 +1563,6 @@ $walkInOtherSales = 0.00;
         font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.04em;
-    }
-
-    .current-debt-tab:hover {
-        background: var(--background);
-        border-color: var(--primary);
-    }
-
-    .current-debt-tab-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-
-        white-space: nowrap;
-    }
-
-    .current-debt-tab-label {
-        color: var(--text);
-        font-size: 12px;
-        font-weight: 700;
-    }
-    
-    .current-debt-tab.is-hidden {
-        display: none;
     }
 
 
