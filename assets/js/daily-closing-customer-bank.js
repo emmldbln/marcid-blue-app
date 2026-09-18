@@ -9,7 +9,7 @@
      * the Temporary directory.
      */
     const BACKEND_URL =
-        'daily-closing-scripts/daily-closing-backend.php';
+        'backend/daily-closing-backend.php';
 
     const SAVE_DELAY = 15000;
 

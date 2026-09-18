@@ -2,40 +2,30 @@
 
 /*
  * =========================================================
- * TEMPORARY DAILY CLOSING UI
+ * MARCID BLUE DAILY CLOSING
+ * =========================================================
  *
- * UI REBUILD ONLY
+ * Main Daily Closing UI.
  *
- * The page intentionally does NOT use:
+ * Responsibilities:
  *
- * deliveries-panel.js
- * deliveries-panel-layout.js
- * delivery-ui-fixes.js
- * daily-remittance-status-fix.js
- * daily-closing-reset.js
- * daily-closing-input-fix.js
- *
- * The final visual structure is reproduced directly here.
- *
- * Calculations remain centralized in:
- *
- *     daily-closing-calculation.js
- *
- * This page handles:
- *
- * - Page UI
- * - Row creation/removal
+ * - Daily Closing page UI
+ * - Shop and driver row management
  * - Expense field behavior
- * - Driver delivery row management
+ * - Driver delivery management
  * - Net profit visibility
  *
- * This page does NOT:
+ * Daily calculations are centralized in:
  *
- * - Save to MySQL
- * - Autosave
- * - Finalize the day
- * - Reset the day
- * - Load customer prices
+ *     assets/js/daily-closing-calculation.js
+ *
+ * Data persistence and Daily Closing state are handled by:
+ *
+ *     assets/js/daily-closing-data.js
+ *
+ * Customer pricing is handled by:
+ *
+ *     assets/js/daily-closing-customer-bank.js
  *
  * =========================================================
  */
@@ -49,7 +39,7 @@ requireAdmin();
 
 /*
  * =========================================================
- * TEMPORARY DISPLAY VALUES
+ * DISPLAY VALUES
  * =========================================================
  */
 
@@ -5343,9 +5333,9 @@ document.addEventListener(
      - Dashboard totals
      ========================================================= -->
 
-<script src="daily-closing-calculation.js"></script>
-<script src="daily-closing-scripts/daily-closing-data.js"></script>
-<script src="daily-closing-scripts/daily-closing-customer-bank.js"></script>
+<script src="../assets/js/daily-closing-calculation.js"></script>
+<script src="../assets/js/daily-closing-data.js"></script>
+<script src="../assets/js/daily-closing-customer-bank.js"></script>
 
 </body>
 

@@ -10,7 +10,7 @@
      * Temporary/daily-closing-scripts/daily-closing-backend.php
      */
     const BACKEND_URL =
-        'daily-closing-scripts/daily-closing-backend.php';
+          'backend/daily-closing-backend.php';
 
     const AUTOSAVE_DELAY = 700;
 

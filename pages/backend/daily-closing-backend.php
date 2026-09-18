@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 date_default_timezone_set('Asia/Manila');
 
-require_once '../../auth/auth.php';
-require_once '../../config/database.php';
+require_once __DIR__ . '/../../auth/auth.php';
+require_once __DIR__ . '/../../config/database.php';
 
 requireAdmin();
 
