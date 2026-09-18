@@ -17,7 +17,8 @@ $currentPage = 'home';
 </head>
 
 <body>
-<div class="main"
+<div class="app">
+    <?php require_once '../includes/sidebar.php'; ?>
     <main class="main">
         <header class="topbar">
             <div class="topbar-title">Dashboard</div>
