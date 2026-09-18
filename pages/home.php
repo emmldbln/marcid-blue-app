@@ -36,7 +36,7 @@ requireAdmin();
                 <span>Customers</span>
             </a>
 
-            <a href="#" class="nav-item">
+            <a href="daily-records.php" class="nav-item">
                 📅
                 <span>Daily Records</span>
             </a>
@@ -115,7 +115,7 @@ requireAdmin();
                     <a href="daily-closing.php" class="btn btn-primary">
                         Open Daily Closing
                     </a>
-                    <a href="#" class="btn btn-outline">
+                    <a href="daily-records.php" class="btn btn-outline">
                         View Records
                     </a>
                 </div>
