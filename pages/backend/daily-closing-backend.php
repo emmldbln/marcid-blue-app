@@ -717,6 +717,251 @@ function saveCustomerPrice(
     ]);
 }
 
+function finalizeDailyClosing(
+    PDO $pdo,
+    int $dailyId
+): void {
+
+    /*
+     * Only an Open daily record can be finalized.
+     */
+    $stmt = $pdo->prepare(
+        "SELECT
+            daily_id,
+            business_date,
+            status
+         FROM daily_records
+         WHERE daily_id = ?
+         LIMIT 1"
+    );
+
+    $stmt->execute([
+        $dailyId
+    ]);
+
+    $dailyRecord =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
+    if (!$dailyRecord) {
+        respond([
+            'success' => false,
+            'message' =>
+                'Daily record not found.'
+        ], 404);
+    }
+
+
+    if ($dailyRecord['status'] !== 'Open') {
+        respond([
+            'success' => false,
+            'message' =>
+                'This daily record is no longer open.'
+        ], 409);
+    }
+
+
+    /*
+     * The frontend will provide the final result
+     * after running the existing Daily Closing calculations.
+     */
+    $closingResult =
+        trim(
+            (string) (
+                $_POST['closing_result'] ?? ''
+            )
+        );
+
+
+    $allowedResults = [
+        'Pending',
+        'Balanced',
+        'Short',
+        'Over'
+    ];
+
+
+    if (
+        !in_array(
+            $closingResult,
+            $allowedResults,
+            true
+        )
+    ) {
+        respond([
+            'success' => false,
+            'message' =>
+                'Invalid closing result.'
+        ], 400);
+    }
+
+
+    /*
+     * Actual station cash is optional for now.
+     *
+     * The existing Daily Closing calculation will determine
+     * what value should be sent here when we connect the
+     * Finalize & Close Day button.
+     */
+    $actualStationCashRaw =
+        trim(
+            (string) (
+                $_POST['actual_station_cash']
+                ?? ''
+            )
+        );
+
+
+    $actualStationCash = null;
+
+
+    if ($actualStationCashRaw !== '') {
+
+        if (
+            !is_numeric(
+                $actualStationCashRaw
+            )
+        ) {
+            respond([
+                'success' => false,
+                'message' =>
+                    'Invalid actual station cash.'
+            ], 400);
+        }
+
+
+        $actualStationCash =
+            round(
+                (float) $actualStationCashRaw,
+                2
+            );
+
+
+        if ($actualStationCash < 0) {
+            respond([
+                'success' => false,
+                'message' =>
+                    'Actual station cash cannot be negative.'
+            ], 400);
+        }
+    }
+
+
+    /*
+     * Use the authenticated admin account.
+     */
+    $savedBy =
+        isset($_SESSION['user_id'])
+            ? (int) $_SESSION['user_id']
+            : 0;
+
+
+    if ($savedBy <= 0) {
+        respond([
+            'success' => false,
+            'message' =>
+                'Unable to identify the current admin user.'
+        ], 401);
+    }
+
+
+    try {
+
+        $pdo->beginTransaction();
+
+
+        /*
+         * Finalize the daily record.
+         *
+         * Open → Saved
+         *
+         * The closing result is stored independently
+         * from the daily record status.
+         */
+        $stmt =
+            $pdo->prepare(
+                "UPDATE daily_records
+                 SET
+                    status = 'Saved',
+                    closing_result = ?,
+                    actual_station_cash = ?,
+                    saved_at = NOW(),
+                    saved_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE daily_id = ?
+                   AND status = 'Open'"
+            );
+
+
+        $stmt->execute([
+            $closingResult,
+            $actualStationCash,
+            $savedBy,
+            $dailyId
+        ]);
+
+
+        if ($stmt->rowCount() !== 1) {
+
+            throw new RuntimeException(
+                'The daily record could not be finalized.'
+            );
+        }
+
+
+        /*
+         * The draft is no longer needed because the day
+         * has now been permanently saved.
+         */
+        $stmt =
+            $pdo->prepare(
+                "DELETE FROM daily_closing_drafts
+                 WHERE daily_id = ?"
+            );
+
+
+        $stmt->execute([
+            $dailyId
+        ]);
+
+
+        $pdo->commit();
+
+
+        respond([
+            'success' => true,
+            'action' => 'finalize',
+            'daily_id' =>
+                $dailyId,
+            'business_date' =>
+                $dailyRecord['business_date'],
+            'status' =>
+                'Saved',
+            'closing_result' =>
+                $closingResult,
+            'actual_station_cash' =>
+                $actualStationCash,
+            'saved_at' =>
+                date('Y-m-d H:i:s'),
+            'saved_by' =>
+                $savedBy
+        ]);
+
+    } catch (Throwable $e) {
+
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+
+        throw $e;
+    }
+}
+
+
+
+
 try {
     $method =
         strtoupper(
@@ -1010,6 +1255,15 @@ try {
                     $dailyRecord['business_date']
             ]);
         }
+
+        if ($action === 'finalize') {
+
+            finalizeDailyClosing(
+                $pdo,
+                $dailyId
+            );
+        }
+    
 
         if ($action === 'reset') {
             $stmt =

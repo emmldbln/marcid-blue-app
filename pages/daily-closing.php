@@ -2762,7 +2762,7 @@ $walkInOtherSales = 0.00;
                         <div class="driver-summary-field">
 
                             <div class="summary-label">
-                                Total Expected Money of Delivery
+                                Expected Delivery Money Today
                             </div>
 
 

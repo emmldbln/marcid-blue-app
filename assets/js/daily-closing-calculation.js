@@ -811,6 +811,17 @@
                 calculateDriverDeliveries();
 
 
+            const shopDeliveryPayments =
+                getShopDeliveryPayments();
+
+
+            const expectedDeliveryMoneyToday =
+                roundMoney(
+                    deliveryTotals.totalExpectedMoney
+                    + shopDeliveryPayments
+                );
+
+
             setText(
                 'driver_total_delivery_quantity',
                 deliveryTotals.totalQuantity
@@ -819,9 +830,9 @@
 
 
             /*
-             * Total Sales of Delivery now represents actual
-             * payments received, not expected delivery value.
-             */
+            * Total Sales of Delivery represents actual
+            * payments received from Shop + Driver deliveries.
+            */
             setText(
                 'driverTotalDeliverySales',
                 formatMoney(
@@ -831,13 +842,18 @@
 
 
             /*
-             * Keep Total Expected Money as the full expected
-             * value of driver deliveries.
-             */
+            * Expected Delivery Money Today consists of:
+            *
+            * Driver Expected Delivery Money
+            * + Shop Delivery Payments
+            *
+            * Shop unpaid deliveries contribute ₱0 because
+            * getShopDeliveryPayments() only reads actual payments.
+            */
             setText(
                 'driverTotalExpectedMoney',
                 formatMoney(
-                    deliveryTotals.totalExpectedMoney
+                    expectedDeliveryMoneyToday
                 )
             );
 
@@ -845,9 +861,14 @@
             updateDriverRemittanceStatus();
 
 
-            return deliveryTotals;
+            return {
+                ...deliveryTotals,
+                shopDeliveryPayments:
+                    shopDeliveryPayments,
+                expectedDeliveryMoneyToday:
+                    expectedDeliveryMoneyToday
+            };
         }
-
 
         // =========================================================
         // TOTAL DELIVERY GALLONS CARD
