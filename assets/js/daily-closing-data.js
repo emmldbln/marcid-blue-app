@@ -1167,11 +1167,9 @@
 
             isRestoring = true;
 
-
             console.info(
                 'Marcid Blue: loading daily draft...'
             );
-
 
             const response =
                 await fetch(
@@ -1183,11 +1181,108 @@
                         credentials: 'same-origin',
                         cache: 'no-store',
                         headers: {
-                            'Accept':
-                                'application/json'
+                            'Accept': 'application/json'
                         }
                     }
                 );
+
+
+            /*
+            * If there is no Open record, the backend returns 404.
+            *
+            * This can happen after the day has already been
+            * finalized and its status is Saved.
+            *
+            * We must NOT reopen the saved record.
+            * We only need its daily ID so Current Debt can load.
+            */
+            if (response.status === 404) {
+
+                console.info(
+                    'Marcid Blue: no open daily record. ' +
+                    'Checking today\'s existing daily record...'
+                );
+
+
+                const contextResponse =
+                    await fetch(
+                        BACKEND_URL +
+                        '?action=get_daily_context&_=' +
+                        Date.now(),
+                        {
+                            method: 'GET',
+                            credentials: 'same-origin',
+                            cache: 'no-store',
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        }
+                    );
+
+
+                if (!contextResponse.ok) {
+
+                    throw new Error(
+                        'Daily context request returned HTTP ' +
+                        contextResponse.status
+                    );
+
+                }
+
+
+                const contextResult =
+                    await contextResponse.json();
+
+
+                console.info(
+                    'Marcid Blue: daily context response:',
+                    contextResult
+                );
+
+
+                if (!contextResult.success) {
+
+                    console.warn(
+                        'Marcid Blue: daily context unavailable:',
+                        contextResult.message
+                    );
+
+                    return;
+
+                }
+
+
+                dailyId =
+                    Number(
+                        contextResult.daily_id
+                    ) || 0;
+
+
+                console.info(
+                    'Marcid Blue: existing daily ID =',
+                    dailyId
+                );
+
+
+                console.info(
+                    'Marcid Blue: existing daily status =',
+                    contextResult.status
+                );
+
+
+                /*
+                * The record is already Saved.
+                *
+                * Do not restore a draft.
+                * Do not create a draft.
+                * Do not reopen the daily record.
+                *
+                * We only keep the daily ID so Current Debt
+                * can be loaded.
+                */
+                return;
+
+            }
 
 
             if (!response.ok) {
@@ -1274,15 +1369,15 @@
 
 
             /*
-             * The row controllers may need one browser frame
-             * to finish creating/updating the rows.
-             */
+            * The row controllers may need one browser frame
+            * to finish creating/updating the rows.
+            */
             requestAnimationFrame(
                 () => {
 
                     recalculate();
 
-                     scheduleCurrentDebtRefresh();
+                    scheduleCurrentDebtRefresh();
 
                     console.info(
                         'Marcid Blue: daily draft restored.'
