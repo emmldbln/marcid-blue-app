@@ -5097,7 +5097,7 @@ class DriverDeliveryPaymentController
 
 
         if (method) {
-            method.value = '';
+            method.value = 'Cash';
         }
 
 
