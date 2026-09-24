@@ -128,9 +128,24 @@
                         selectors[key]
                     );
 
+                let value = data[key];
+
+                // Payment methods default to Cash
+                // when the saved draft has no method.
+                if (
+                    key === 'method' &&
+                    (
+                        value === null ||
+                        value === undefined ||
+                        String(value).trim() === ''
+                    )
+                ) {
+                    value = 'Cash';
+                }
+
                 setInputValue(
                     element,
-                    data[key]
+                    value
                 );
 
             }
