@@ -869,74 +869,84 @@
     }
 
 
-            function renderCurrentDebt(
-            result
-        ) {
+    function renderCurrentDebt(
+        result
+    ) {
 
-            const totalElement =
-                getElement(
-                    'currentDebtTotal'
+        const totalElement =
+            getElement(
+                'currentDebtTotal'
+            );
+
+        const list =
+            getElement(
+                'currentDebtList'
+            );
+
+
+        if (!totalElement || !list) {
+            return;
+        }
+
+
+        /*
+        * =========================================================
+        * CURRENT DEBT
+        * =========================================================
+        */
+
+        const totalDebt =
+            Number(
+                result.total_debt
+            ) || 0;
+
+
+        const groupedDebts =
+            result.grouped_debts &&
+            typeof result.grouped_debts === 'object'
+                ? result.grouped_debts
+                : {};
+
+
+        totalElement.textContent =
+            formatDebtMoney(
+                totalDebt
+            );
+
+
+        list.innerHTML = '';
+
+
+        const debtDates =
+            Object.keys(
+                groupedDebts
+            );
+
+
+        /*
+        * =========================================================
+        * DEBT LIST
+        * =========================================================
+        */
+
+        if (debtDates.length === 0) {
+
+            const empty =
+                document.createElement(
+                    'div'
                 );
 
-            const list =
-                getElement(
-                    'currentDebtList'
-                );
+            empty.className =
+                'current-debt-empty';
 
+            empty.textContent =
+                'No customers currently have an outstanding balance.';
 
-            if (!totalElement || !list) {
-                return;
-            }
+            list.appendChild(
+                empty
+            );
 
-
-            const totalDebt =
-                Number(
-                    result.total_debt
-                ) || 0;
-
-
-            const groupedDebts =
-                result.grouped_debts &&
-                typeof result.grouped_debts === 'object'
-                    ? result.grouped_debts
-                    : {};
-
-
-            totalElement.textContent =
-                formatDebtMoney(
-                    totalDebt
-                );
-
-
-            list.innerHTML = '';
-
-
-            const debtDates =
-                Object.keys(
-                    groupedDebts
-                );
-
-
-            if (debtDates.length === 0) {
-
-                const empty =
-                    document.createElement(
-                        'div'
-                    );
-
-                empty.className =
-                    'current-debt-empty';
-
-                empty.textContent =
-                    'No customers currently have an outstanding balance.';
-
-                list.appendChild(
-                    empty
-                );
-
-                return;
-            }
-
+        } else {
 
             debtDates.forEach(
                 date => {
@@ -955,8 +965,11 @@
 
 
                     /*
-                    * Debt date heading
+                    * -------------------------------------------------
+                    * DATE HEADING
+                    * -------------------------------------------------
                     */
+
                     const dateHeading =
                         document.createElement(
                             'div'
@@ -980,9 +993,9 @@
 
                         dateHeading.textContent =
                             parsedDate.toLocaleDateString(
-                                'en-PH',
+                                'en-US',
                                 {
-                                    month: 'long',
+                                    month: 'short',
                                     day: 'numeric',
                                     year: 'numeric'
                                 }
@@ -1002,8 +1015,11 @@
 
 
                     /*
-                    * Individual outstanding debts
+                    * -------------------------------------------------
+                    * DEBT ITEMS
+                    * -------------------------------------------------
                     */
+
                     debts.forEach(
                         debt => {
 
@@ -1016,25 +1032,17 @@
                                 'current-debt-item';
 
 
-                            const header =
+                            const customer =
                                 document.createElement(
                                     'div'
                                 );
 
-                            header.className =
-                                'current-debt-item-header';
-
-
-                            const name =
-                                document.createElement(
-                                    'div'
-                                );
-
-                            name.className =
+                            customer.className =
                                 'current-debt-customer';
 
-                            name.textContent =
-                                debt.customer_name;
+                            customer.textContent =
+                                debt.customer_name ||
+                                'Unknown Customer';
 
 
                             const amount =
@@ -1047,79 +1055,18 @@
 
                             amount.textContent =
                                 formatDebtMoney(
-                                    debt.remaining_amount
+                                    Number(
+                                        debt.remaining_amount
+                                    ) || 0
                                 );
 
 
-                            header.appendChild(
-                                name
+                            item.appendChild(
+                                customer
                             );
 
-                            header.appendChild(
+                            item.appendChild(
                                 amount
-                            );
-
-
-                            const details =
-                                document.createElement(
-                                    'div'
-                                );
-
-                            details.className =
-                                'current-debt-item-details';
-
-
-                            const originalAmount =
-                                Number(
-                                    debt.original_amount
-                                ) || 0;
-
-
-                            const totalPaid =
-                                Number(
-                                    debt.total_paid
-                                ) || 0;
-
-
-                            const detailParts = [];
-
-
-                            if (originalAmount > 0) {
-
-                                detailParts.push(
-                                    'Original: ' +
-                                    formatDebtMoney(
-                                        originalAmount
-                                    )
-                                );
-
-                            }
-
-
-                            if (totalPaid > 0) {
-
-                                detailParts.push(
-                                    'Paid: −' +
-                                    formatDebtMoney(
-                                        totalPaid
-                                    )
-                                );
-
-                            }
-
-
-                            details.textContent =
-                                detailParts.length > 0
-                                    ? detailParts.join(' · ')
-                                    : 'Outstanding debt';
-
-
-                            item.appendChild(
-                                header
-                            );
-
-                            item.appendChild(
-                                details
                             );
 
 
@@ -1134,6 +1081,203 @@
             );
 
         }
+
+
+        /*
+        * =========================================================
+        * CUSTOMER CREDIT
+        * =========================================================
+        *
+        * Uses the EXISTING Current Debt UI classes.
+        *
+        * No new credit-specific CSS is required.
+        *
+        * Credit is displayed only.
+        * It is NOT automatically applied to future deliveries.
+        */
+
+        const totalCredit =
+            Number(
+                result.total_credit
+            ) || 0;
+
+
+        const credits =
+            Array.isArray(
+                result.credits
+            )
+                ? result.credits
+                : [];
+
+
+        /*
+        * Only show Customer Credit when there is
+        * actually available credit.
+        */
+
+        if (
+            totalCredit > 0 ||
+            credits.length > 0
+        ) {
+
+            /*
+            * -------------------------------------------------
+            * SECTION SPACING
+            * -------------------------------------------------
+            *
+            * Use the existing debt date-heading class so
+            * the credit heading follows the same typography.
+            */
+
+            const creditHeading =
+                document.createElement(
+                    'div'
+                );
+
+            creditHeading.className =
+                'current-debt-date-heading';
+
+
+            /*
+            * Add a little separation from the debt list
+            * without creating a new visual component.
+            */
+
+            creditHeading.style.marginTop =
+                '20px';
+
+
+            creditHeading.textContent =
+                'Customer Credit';
+
+
+            list.appendChild(
+                creditHeading
+            );
+
+
+            /*
+            * -------------------------------------------------
+            * AVAILABLE CREDIT TOTAL
+            * -------------------------------------------------
+            *
+            * Use the same row structure as the debt rows.
+            */
+
+            const creditTotalItem =
+                document.createElement(
+                    'div'
+                );
+
+            creditTotalItem.className =
+                'current-debt-item';
+
+
+            const creditTotalCustomer =
+                document.createElement(
+                    'div'
+                );
+
+            creditTotalCustomer.className =
+                'current-debt-customer';
+
+            creditTotalCustomer.textContent =
+                'Available Credit';
+
+
+            const creditTotalAmount =
+                document.createElement(
+                    'div'
+                );
+
+            creditTotalAmount.className =
+                'current-debt-amount';
+
+            creditTotalAmount.textContent =
+                formatDebtMoney(
+                    totalCredit
+                );
+
+
+            creditTotalItem.appendChild(
+                creditTotalCustomer
+            );
+
+            creditTotalItem.appendChild(
+                creditTotalAmount
+            );
+
+
+            list.appendChild(
+                creditTotalItem
+            );
+
+
+            /*
+            * -------------------------------------------------
+            * CUSTOMER CREDIT ITEMS
+            * -------------------------------------------------
+            */
+
+            credits.forEach(
+                credit => {
+
+                    const item =
+                        document.createElement(
+                            'div'
+                        );
+
+                    item.className =
+                        'current-debt-item';
+
+
+                    const customer =
+                        document.createElement(
+                            'div'
+                        );
+
+                    customer.className =
+                        'current-debt-customer';
+
+                    customer.textContent =
+                        credit.customer_name ||
+                        'Unknown Customer';
+
+
+                    const amount =
+                        document.createElement(
+                            'div'
+                        );
+
+                    amount.className =
+                        'current-debt-amount';
+
+                    amount.textContent =
+                        formatDebtMoney(
+                            Number(
+                                credit.total_credit
+                            ) || 0
+                        );
+
+
+                    item.appendChild(
+                        customer
+                    );
+
+                    item.appendChild(
+                        amount
+                    );
+
+
+                    list.appendChild(
+                        item
+                    );
+
+                }
+            );
+
+        }
+    }
 
 
     function formatDebtMoney(

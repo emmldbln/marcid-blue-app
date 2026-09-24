@@ -354,12 +354,12 @@
 
                 setText(
                     'shopComputedSales',
-                    'Invalid'
+                    '---'
                 );
 
                 setText(
                     'shopOtherSales',
-                    'Invalid'
+                    '---'
                 );
 
                 setValue(

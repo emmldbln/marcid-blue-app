@@ -40,8 +40,10 @@ function respond(
  * =============================================================
  */
 
-function getCustomers(PDO $pdo): void
-{
+function getCustomers(
+    PDO $pdo
+): void {
+
     $stmt = $pdo->query(
         "SELECT
             customer_id,
@@ -54,28 +56,122 @@ function getCustomers(PDO $pdo): void
 
     respond([
         'success' => true,
-        'customers' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        'customers' => $stmt->fetchAll(
+            PDO::FETCH_ASSOC
+        )
     ]);
 }
 
 
 /*
  * =============================================================
- * CURRENT DEBT
+ * ENSURE DRAFT TABLE
+ * =============================================================
+ */
+
+function ensureDraftTable(
+    PDO $pdo
+): void {
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS daily_closing_drafts (
+            draft_id INT NOT NULL AUTO_INCREMENT,
+            daily_id INT NOT NULL,
+            draft_data LONGTEXT NOT NULL,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (draft_id),
+
+            UNIQUE KEY uq_daily_closing_draft_daily_id (
+                daily_id
+            ),
+
+            KEY idx_daily_closing_draft_daily_id (
+                daily_id
+            ),
+
+            CONSTRAINT fk_daily_closing_draft_daily
+                FOREIGN KEY (daily_id)
+                REFERENCES daily_records (daily_id)
+                ON DELETE CASCADE
+
+        ) ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4
+        COLLATE=utf8mb4_0900_ai_ci"
+    );
+}
+
+
+/*
+ * =============================================================
+ * ENSURE CUSTOMER CREDIT TABLE
  * =============================================================
  *
- * Current Debt is based on permanent deliveries and payments.
+ * Customer credits are created when:
  *
- * A delivery remains in Current Debt only when:
+ *     current delivery
+ *          +
+ *     previous outstanding debt
  *
- *     amount_due - total_payments > 0
+ * have both been fully paid and money is still remaining.
  *
- * Payments are matched directly through delivery_id.
+ * Credits are NOT automatically applied to future deliveries yet.
  *
- * This means a payment made today toward an older delivery
- * permanently reduces that older delivery's debt.
- *
- * Today's unsaved deliveries are also included from the draft.
+ * They remain available until we implement that separate feature.
+ */
+
+function ensureCreditTable(
+    PDO $pdo
+): void {
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS customer_credits (
+            credit_id INT NOT NULL AUTO_INCREMENT,
+            customer_id INT NOT NULL,
+            credit_date DATE NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
+            collection_location VARCHAR(50) NOT NULL DEFAULT 'Station',
+            daily_id INT NULL,
+            notes VARCHAR(255) NULL,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (credit_id),
+
+            KEY idx_customer_credits_customer_id (
+                customer_id
+            ),
+
+            KEY idx_customer_credits_credit_date (
+                credit_date
+            ),
+
+            KEY idx_customer_credits_daily_id (
+                daily_id
+            ),
+
+            CONSTRAINT fk_customer_credits_customer
+                FOREIGN KEY (customer_id)
+                REFERENCES customers (customer_id)
+                ON DELETE CASCADE,
+
+            CONSTRAINT fk_customer_credits_daily
+                FOREIGN KEY (daily_id)
+                REFERENCES daily_records (daily_id)
+                ON DELETE SET NULL
+
+        ) ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4
+        COLLATE=utf8mb4_0900_ai_ci"
+    );
+}
+
+
+/*
+ * =============================================================
+ * CURRENT DEBT
  * =============================================================
  */
 
@@ -86,14 +182,16 @@ function getCurrentDebt(
 ): void {
 
     /*
-     * ---------------------------------------------------------
-     * Get the business date.
-     * ---------------------------------------------------------
+     * =========================================================
+     * GET BUSINESS DATE
+     * =========================================================
      */
 
     $dailyRecord = null;
 
+
     if ($dailyId > 0) {
+
         $stmt = $pdo->prepare(
             "SELECT
                 daily_id,
@@ -108,15 +206,20 @@ function getCurrentDebt(
             $dailyId
         ]);
 
-        $dailyRecord = $stmt->fetch(PDO::FETCH_ASSOC);
+        $dailyRecord =
+            $stmt->fetch(
+                PDO::FETCH_ASSOC
+            );
     }
 
+
     /*
-     * If the supplied Daily ID does not exist,
+     * If the supplied Daily ID cannot be found,
      * use the most recent Daily Record.
      */
 
     if (!$dailyRecord) {
+
         $stmt = $pdo->query(
             "SELECT
                 daily_id,
@@ -127,36 +230,31 @@ function getCurrentDebt(
              LIMIT 1"
         );
 
-        $dailyRecord = $stmt->fetch(PDO::FETCH_ASSOC);
+        $dailyRecord =
+            $stmt->fetch(
+                PDO::FETCH_ASSOC
+            );
     }
 
+
     if (!$dailyRecord) {
+
         respond([
             'success' => false,
-            'message' => 'No daily record is available.'
+            'message' =>
+                'No daily record is available.'
         ], 404);
     }
 
-    $businessDate = $dailyRecord['business_date'];
+
+    $businessDate =
+        $dailyRecord['business_date'];
 
 
     /*
-     * ---------------------------------------------------------
-     * Permanent historical debt
-     * ---------------------------------------------------------
-     *
-     * Every delivery before today's business date is checked.
-     *
-     * Payments are summed directly by delivery_id.
-     *
-     * No payment_date or daily_id restriction is used here.
-     *
-     * Therefore:
-     *
-     * - payment today reduces old debt
-     * - payment tomorrow reduces old debt
-     * - Saved/Reopened status does not hide debt
-     * - fully paid deliveries disappear automatically
+     * =========================================================
+     * PERMANENT HISTORICAL DEBT
+     * =========================================================
      */
 
     $stmt = $pdo->prepare(
@@ -168,11 +266,7 @@ function getCurrentDebt(
             d.amount_due,
 
             COALESCE(
-                (
-                    SELECT SUM(p.amount)
-                    FROM payments p
-                    WHERE p.delivery_id = d.delivery_id
-                ),
+                SUM(p.amount),
                 0
             ) AS total_paid
 
@@ -181,7 +275,17 @@ function getCurrentDebt(
          INNER JOIN customers c
             ON c.customer_id = d.customer_id
 
+         LEFT JOIN payments p
+            ON p.delivery_id = d.delivery_id
+
          WHERE d.delivery_date < ?
+
+         GROUP BY
+            d.delivery_id,
+            d.customer_id,
+            c.customer_name,
+            d.delivery_date,
+            d.amount_due
 
          ORDER BY
             d.delivery_date ASC,
@@ -192,42 +296,52 @@ function getCurrentDebt(
         $businessDate
     ]);
 
-    $deliveryRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $deliveryRows =
+        $stmt->fetchAll(
+            PDO::FETCH_ASSOC
+        );
 
 
     /*
-     * ---------------------------------------------------------
-     * Build active debt list
-     * ---------------------------------------------------------
+     * =========================================================
+     * BUILD ACTIVE DEBT
+     * =========================================================
      */
 
     $debts = [];
+
     $totalDebt = 0.00;
+
 
     foreach ($deliveryRows as $delivery) {
 
-        $originalAmount = round(
-            (float) $delivery['amount_due'],
-            2
-        );
+        $originalAmount =
+            round(
+                (float) $delivery['amount_due'],
+                2
+            );
 
-        $totalPaid = round(
-            (float) $delivery['total_paid'],
-            2
-        );
+        $totalPaid =
+            round(
+                (float) $delivery['total_paid'],
+                2
+            );
 
-        $remaining = round(
-            $originalAmount - $totalPaid,
-            2
-        );
+        $remaining =
+            round(
+                $originalAmount - $totalPaid,
+                2
+            );
+
 
         /*
-         * Ignore invalid delivery amounts.
+         * Ignore invalid deliveries.
          */
 
         if ($originalAmount <= 0) {
             continue;
         }
+
 
         /*
          * Fully paid deliveries are no longer Current Debt.
@@ -237,22 +351,43 @@ function getCurrentDebt(
             continue;
         }
 
+
         $debts[] = [
-            'delivery_id' => (int) $delivery['delivery_id'],
-            'customer_id' => (int) $delivery['customer_id'],
-            'customer_name' => $delivery['customer_name'],
-            'date_incurred' => $delivery['delivery_date'],
-            'original_amount' => $originalAmount,
-            'total_paid' => $totalPaid,
-            'remaining_amount' => $remaining,
-            'status' => 'Outstanding',
-            'is_draft' => false
+
+            'delivery_id' =>
+                (int) $delivery['delivery_id'],
+
+            'customer_id' =>
+                (int) $delivery['customer_id'],
+
+            'customer_name' =>
+                $delivery['customer_name'],
+
+            'date_incurred' =>
+                $delivery['delivery_date'],
+
+            'original_amount' =>
+                $originalAmount,
+
+            'total_paid' =>
+                $totalPaid,
+
+            'remaining_amount' =>
+                $remaining,
+
+            'status' =>
+                'Outstanding',
+
+            'is_draft' =>
+                false
         ];
 
-        $totalDebt = round(
-            $totalDebt + $remaining,
-            2
-        );
+
+        $totalDebt =
+            round(
+                $totalDebt + $remaining,
+                2
+            );
     }
 
 
@@ -260,108 +395,249 @@ function getCurrentDebt(
      * =========================================================
      * TODAY'S DRAFT DELIVERIES
      * =========================================================
+     *
+     * These have not yet been finalized.
+     *
+     * They remain temporary and are included in Current Debt
+     * while today's Daily Closing is being edited.
      */
 
     $draftShopDeliveries =
-        isset($draft['shop']['deliveries']) &&
-        is_array($draft['shop']['deliveries'])
-            ? $draft['shop']['deliveries']
-            : [];
+        $draft['shop']['deliveries']
+        ?? [];
+
 
     $draftDriverDeliveries =
-        isset($draft['driver']['deliveries']) &&
-        is_array($draft['driver']['deliveries'])
-            ? $draft['driver']['deliveries']
-            : [];
+        $draft['driver']['deliveries']
+        ?? [];
 
-    $todayDraftDeliveries = array_merge(
-        $draftShopDeliveries,
-        $draftDriverDeliveries
-    );
+
+    $todayDraftDeliveries =
+        array_merge(
+            is_array($draftShopDeliveries)
+                ? $draftShopDeliveries
+                : [],
+
+            is_array($draftDriverDeliveries)
+                ? $draftDriverDeliveries
+                : []
+        );
 
 
     foreach ($todayDraftDeliveries as $delivery) {
 
-        if (!is_array($delivery)) {
-            continue;
-        }
+        $customerName =
+            trim(
+                (string) (
+                    $delivery['customer']
+                    ?? ''
+                )
+            );
 
-        $customerName = trim(
-            (string) (
-                $delivery['customer'] ?? ''
-            )
-        );
 
         if ($customerName === '') {
             continue;
         }
 
-        $slim = max(
-            0,
-            (float) (
-                $delivery['slim'] ?? 0
-            )
-        );
 
-        $round = max(
-            0,
-            (float) (
-                $delivery['round'] ?? 0
-            )
-        );
+        $slim =
+            max(
+                0,
+                (float) (
+                    $delivery['slim']
+                    ?? 0
+                )
+            );
 
-        $price = max(
-            0,
-            (float) (
-                $delivery['price'] ?? 0
-            )
-        );
 
-        $amountDue = round(
-            ($slim + $round) * $price,
-            2
-        );
+        $round =
+            max(
+                0,
+                (float) (
+                    $delivery['round']
+                    ?? 0
+                )
+            );
+
+
+        $price =
+            max(
+                0,
+                (float) (
+                    $delivery['price']
+                    ?? 0
+                )
+            );
+
+
+        $amountDue =
+            round(
+                ($slim + $round) * $price,
+                2
+            );
+
 
         if ($amountDue <= 0) {
             continue;
         }
 
-        $payment = max(
-            0,
-            (float) (
-                $delivery['payment'] ?? 0
-            )
-        );
 
-        $remaining = round(
-            $amountDue - $payment,
-            2
-        );
+        $payment =
+            max(
+                0,
+                (float) (
+                    $delivery['payment']
+                    ?? 0
+                )
+            );
+
 
         /*
-         * A fully paid draft delivery is not debt.
+         * IMPORTANT:
+         *
+         * Current Debt display only considers the payment
+         * entered against today's draft delivery.
+         *
+         * It does NOT perform previous-debt allocation.
+         *
+         * Allocation happens only during Finalize.
+         */
+
+        $remaining =
+            round(
+                $amountDue - $payment,
+                2
+            );
+
+
+        /*
+         * Fully paid draft deliveries are not debt.
          */
 
         if ($remaining <= 0) {
             continue;
         }
 
+
         $debts[] = [
-            'delivery_id' => 0,
-            'customer_id' => 0,
-            'customer_name' => $customerName,
-            'date_incurred' => $businessDate,
-            'original_amount' => $amountDue,
-            'total_paid' => $payment,
-            'remaining_amount' => $remaining,
-            'status' => 'Outstanding',
-            'is_draft' => true
+
+            'delivery_id' =>
+                0,
+
+            'customer_id' =>
+                0,
+
+            'customer_name' =>
+                $customerName,
+
+            'date_incurred' =>
+                $businessDate,
+
+            'original_amount' =>
+                $amountDue,
+
+            'total_paid' =>
+                $payment,
+
+            'remaining_amount' =>
+                $remaining,
+
+            'status' =>
+                'Outstanding',
+
+            'is_draft' =>
+                true
         ];
 
-        $totalDebt = round(
-            $totalDebt + $remaining,
-            2
+
+        $totalDebt =
+            round(
+                $totalDebt + $remaining,
+                2
+            );
+    }
+
+
+    /*
+     * =========================================================
+     * CUSTOMER CREDITS
+     * =========================================================
+     *
+     * Credits are currently only accumulated.
+     *
+     * They are NOT automatically used against future deliveries.
+     */
+
+    $stmt = $pdo->query(
+        "SELECT
+            cc.customer_id,
+            c.customer_name,
+            SUM(cc.amount) AS total_credit
+
+         FROM customer_credits cc
+
+         INNER JOIN customers c
+            ON c.customer_id = cc.customer_id
+
+         WHERE cc.amount > 0
+
+         GROUP BY
+            cc.customer_id,
+            c.customer_name
+
+         ORDER BY
+            c.customer_name ASC"
+    );
+
+
+    $creditRows =
+        $stmt->fetchAll(
+            PDO::FETCH_ASSOC
         );
+
+
+    $credits = [];
+
+    $totalCredit = 0.00;
+
+
+    foreach ($creditRows as $credit) {
+
+        $customerCredit =
+            round(
+                (float) $credit['total_credit'],
+                2
+            );
+
+
+        if ($customerCredit <= 0) {
+            continue;
+        }
+
+
+        $creditItem = [
+
+            'customer_id' =>
+                (int) $credit['customer_id'],
+
+            'customer_name' =>
+                $credit['customer_name'],
+
+            'total_credit' =>
+                $customerCredit
+        ];
+
+
+        $credits[] =
+            $creditItem;
+
+
+        $totalCredit =
+            round(
+                $totalCredit +
+                $customerCredit,
+                2
+            );
     }
 
 
@@ -373,19 +649,22 @@ function getCurrentDebt(
 
     usort(
         $debts,
-        static function (
+        function (
             array $a,
             array $b
         ): int {
 
-            $dateCompare = strcmp(
-                $a['date_incurred'],
-                $b['date_incurred']
-            );
+            $dateCompare =
+                strcmp(
+                    $a['date_incurred'],
+                    $b['date_incurred']
+                );
+
 
             if ($dateCompare !== 0) {
                 return $dateCompare;
             }
+
 
             return strcasecmp(
                 $a['customer_name'],
@@ -403,15 +682,20 @@ function getCurrentDebt(
 
     $groupedDebts = [];
 
+
     foreach ($debts as $debt) {
 
-        $date = $debt['date_incurred'];
+        $date =
+            $debt['date_incurred'];
+
 
         if (!isset($groupedDebts[$date])) {
             $groupedDebts[$date] = [];
         }
 
-        $groupedDebts[$date][] = $debt;
+
+        $groupedDebts[$date][] =
+            $debt;
     }
 
 
@@ -422,13 +706,36 @@ function getCurrentDebt(
      */
 
     respond([
-        'success' => true,
-        'daily_id' => (int) $dailyRecord['daily_id'],
-        'business_date' => $businessDate,
-        'total_debt' => round($totalDebt, 2),
-        'total_credit' => 0.00,
-        'debts' => $debts,
-        'grouped_debts' => $groupedDebts
+
+        'success' =>
+            true,
+
+        'daily_id' =>
+            (int) $dailyRecord['daily_id'],
+
+        'business_date' =>
+            $businessDate,
+
+        'total_debt' =>
+            round(
+                $totalDebt,
+                2
+            ),
+
+        'total_credit' =>
+            round(
+                $totalCredit,
+                2
+            ),
+
+        'credits' =>
+            $credits,
+
+        'debts' =>
+            $debts,
+
+        'grouped_debts' =>
+            $groupedDebts
     ]);
 }
 
@@ -475,48 +782,14 @@ function getOpenDailyRecord(
         );
     }
 
-    $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $record =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
 
     return $record ?: null;
-}
-
-
-/*
- * =============================================================
- * ENSURE DRAFT TABLE
- * =============================================================
- */
-
-function ensureDraftTable(PDO $pdo): void
-{
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS daily_closing_drafts (
-            draft_id INT NOT NULL AUTO_INCREMENT,
-            daily_id INT NOT NULL,
-            draft_data LONGTEXT NOT NULL,
-            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
-                ON UPDATE CURRENT_TIMESTAMP,
-
-            PRIMARY KEY (draft_id),
-
-            UNIQUE KEY uq_daily_closing_draft_daily_id (
-                daily_id
-            ),
-
-            KEY idx_daily_closing_draft_daily_id (
-                daily_id
-            ),
-
-            CONSTRAINT fk_daily_closing_draft_daily
-                FOREIGN KEY (daily_id)
-                REFERENCES daily_records (daily_id)
-                ON DELETE CASCADE
-
-        ) ENGINE=InnoDB
-        DEFAULT CHARSET=utf8mb4
-        COLLATE=utf8mb4_0900_ai_ci"
-    );
 }
 
 
@@ -526,109 +799,134 @@ function ensureDraftTable(PDO $pdo): void
  * =============================================================
  */
 
-function saveCustomerPrice(PDO $pdo): void
-{
-    $customerName = trim(
-        (string) (
-            $_POST['customer_name'] ?? ''
-        )
-    );
+function saveCustomerPrice(
+    PDO $pdo
+): void {
 
-    $priceRaw = trim(
-        (string) (
-            $_POST['gallon_price'] ?? ''
-        )
-    );
+    $customerName =
+        trim(
+            (string) (
+                $_POST['customer_name'] ?? ''
+            )
+        );
+
+
+    $priceRaw =
+        trim(
+            (string) (
+                $_POST['gallon_price'] ?? ''
+            )
+        );
+
 
     if ($customerName === '') {
+
         respond([
             'success' => false,
-            'message' => 'Customer name is required.'
+            'message' =>
+                'Customer name is required.'
         ], 400);
     }
+
 
     if (
         $priceRaw === '' ||
         !is_numeric($priceRaw) ||
         (float) $priceRaw <= 0
     ) {
+
         respond([
             'success' => false,
-            'message' => 'Price/Gal must be greater than zero.'
+            'message' =>
+                'Price/Gal must be greater than zero.'
         ], 400);
     }
 
-    $price = round(
-        (float) $priceRaw,
-        2
-    );
 
-    $stmt = $pdo->prepare(
-        "SELECT
-            customer_id,
-            customer_name
-         FROM customers
-         WHERE LOWER(TRIM(customer_name))
-               = LOWER(TRIM(?))
-         LIMIT 1"
-    );
+    $price =
+        round(
+            (float) $priceRaw,
+            2
+        );
+
+
+    $stmt =
+        $pdo->prepare(
+            "SELECT
+                customer_id,
+                customer_name
+             FROM customers
+             WHERE LOWER(TRIM(customer_name)) =
+                   LOWER(TRIM(?))
+             LIMIT 1"
+        );
+
 
     $stmt->execute([
         $customerName
     ]);
 
-    $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    /*
-     * Existing customer
-     */
+    $customer =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
 
     if ($customer) {
 
-        $stmt = $pdo->prepare(
-            "UPDATE customers
-             SET gallon_price = ?
-             WHERE customer_id = ?"
-        );
+        $stmt =
+            $pdo->prepare(
+                "UPDATE customers
+                 SET gallon_price = ?
+                 WHERE customer_id = ?"
+            );
+
 
         $stmt->execute([
             $price,
             (int) $customer['customer_id']
         ]);
 
+
         respond([
             'success' => true,
             'action' => 'updated',
-            'customer_id' => (int) $customer['customer_id'],
-            'customer_name' => $customer['customer_name'],
-            'gallon_price' => $price
+            'customer_id' =>
+                (int) $customer['customer_id'],
+            'customer_name' =>
+                $customer['customer_name'],
+            'gallon_price' =>
+                $price
         ]);
     }
 
 
-    /*
-     * New customer
-     */
+    $stmt =
+        $pdo->prepare(
+            "INSERT INTO customers (
+                customer_name,
+                gallon_price
+             )
+             VALUES (?, ?)"
+        );
 
-    $stmt = $pdo->prepare(
-        "INSERT INTO customers (
-            customer_name,
-            gallon_price
-         )
-         VALUES (?, ?)"
-    );
 
     $stmt->execute([
         $customerName,
         $price
     ]);
 
+
     respond([
         'success' => true,
         'action' => 'created',
-        'customer_id' => (int) $pdo->lastInsertId(),
-        'customer_name' => $customerName,
-        'gallon_price' => $price
+        'customer_id' =>
+            (int) $pdo->lastInsertId(),
+        'customer_name' =>
+            $customerName,
+        'gallon_price' =>
+            $price
     ]);
 }
 
@@ -660,30 +958,41 @@ function finalizeDailyClosing(
          LIMIT 1"
     );
 
+
     $stmt->execute([
         $dailyId
     ]);
 
-    $dailyRecord = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $dailyRecord =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
 
     if (!$dailyRecord) {
+
         respond([
             'success' => false,
-            'message' => 'Daily record not found.'
+            'message' =>
+                'Daily record not found.'
         ], 404);
     }
 
+
     if ($dailyRecord['status'] !== 'Open') {
+
         respond([
             'success' => false,
-            'message' => 'This daily record is no longer open.'
+            'message' =>
+                'This daily record is no longer open.'
         ], 409);
     }
 
 
     /*
      * =========================================================
-     * LOAD AUTOSAVE DRAFT
+     * LOAD SAVED AUTOSAVE DRAFT
      * =========================================================
      */
 
@@ -695,13 +1004,20 @@ function finalizeDailyClosing(
          LIMIT 1"
     );
 
+
     $stmt->execute([
         $dailyId
     ]);
 
-    $draftRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $draftRow =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
 
     if (!$draftRow) {
+
         respond([
             'success' => false,
             'message' =>
@@ -709,12 +1025,16 @@ function finalizeDailyClosing(
         ], 400);
     }
 
-    $draft = json_decode(
-        $draftRow['draft_data'],
-        true
-    );
+
+    $draft =
+        json_decode(
+            $draftRow['draft_data'],
+            true
+        );
+
 
     if (!is_array($draft)) {
+
         respond([
             'success' => false,
             'message' =>
@@ -725,20 +1045,29 @@ function finalizeDailyClosing(
 
     /*
      * =========================================================
-     * NORMALIZE DRAFT SECTIONS
+     * BASIC DRAFT STRUCTURE
      * =========================================================
      */
 
-    $shop = $draft['shop'] ?? [];
-    $driver = $draft['driver'] ?? [];
+    $shop =
+        $draft['shop']
+        ?? [];
+
+
+    $driver =
+        $draft['driver']
+        ?? [];
+
 
     if (!is_array($shop)) {
         $shop = [];
     }
 
+
     if (!is_array($driver)) {
         $driver = [];
     }
+
 
     $shopDeliveries =
         isset($shop['deliveries']) &&
@@ -746,17 +1075,20 @@ function finalizeDailyClosing(
             ? $shop['deliveries']
             : [];
 
+
     $driverDeliveries =
         isset($driver['deliveries']) &&
         is_array($driver['deliveries'])
             ? $driver['deliveries']
             : [];
 
+
     $shopExpenses =
         isset($shop['expenses']) &&
         is_array($shop['expenses'])
             ? $shop['expenses']
             : [];
+
 
     $driverExpenses =
         isset($driver['expenses']) &&
@@ -770,19 +1102,21 @@ function finalizeDailyClosing(
      * CLOSING RESULT
      * =========================================================
      *
-     * Automatic closing verification is intentionally NOT
-     * implemented yet.
+     * Actual closing verification will be implemented later.
      */
 
-    $closingResult = trim(
-        (string) (
-            $_POST['closing_result'] ?? ''
-        )
-    );
+    $closingResult =
+        trim(
+            (string) (
+                $_POST['closing_result'] ?? ''
+            )
+        );
+
 
     if ($closingResult === '') {
         $closingResult = 'Pending';
     }
+
 
     $allowedResults = [
         'Pending',
@@ -791,14 +1125,19 @@ function finalizeDailyClosing(
         'Over'
     ];
 
-    if (!in_array(
-        $closingResult,
-        $allowedResults,
-        true
-    )) {
+
+    if (
+        !in_array(
+            $closingResult,
+            $allowedResults,
+            true
+        )
+    ) {
+
         respond([
             'success' => false,
-            'message' => 'Invalid closing result.'
+            'message' =>
+                'Invalid closing result.'
         ], 400);
     }
 
@@ -809,29 +1148,38 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $actualStationCashRaw = trim(
-        (string) (
-            $_POST['actual_station_cash'] ?? ''
-        )
-    );
+    $actualStationCashRaw =
+        trim(
+            (string) (
+                $_POST['actual_station_cash'] ?? ''
+            )
+        );
+
 
     $actualStationCash = null;
+
 
     if ($actualStationCashRaw !== '') {
 
         if (!is_numeric($actualStationCashRaw)) {
+
             respond([
                 'success' => false,
-                'message' => 'Invalid actual station cash.'
+                'message' =>
+                    'Invalid actual station cash.'
             ], 400);
         }
 
-        $actualStationCash = round(
-            (float) $actualStationCashRaw,
-            2
-        );
+
+        $actualStationCash =
+            round(
+                (float) $actualStationCashRaw,
+                2
+            );
+
 
         if ($actualStationCash < 0) {
+
             respond([
                 'success' => false,
                 'message' =>
@@ -847,11 +1195,14 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $savedBy = isset($_SESSION['user_id'])
-        ? (int) $_SESSION['user_id']
-        : 0;
+    $savedBy =
+        isset($_SESSION['user_id'])
+            ? (int) $_SESSION['user_id']
+            : 0;
+
 
     if ($savedBy <= 0) {
+
         respond([
             'success' => false,
             'message' =>
@@ -866,34 +1217,53 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $cleanMoney = static function ($value): float {
+    $cleanMoney =
+        static function (
+            $value
+        ): float {
 
-        if (
-            $value === null ||
-            $value === ''
-        ) {
-            return 0.00;
-        }
+            /*
+             * Empty display placeholders are treated as zero.
+             *
+             * These are UI-only values and are not actual money.
+             */
 
-        if (!is_numeric($value)) {
-            throw new InvalidArgumentException(
-                'A money value is invalid.'
-            );
-        }
+            if (
+                $value === null ||
+                $value === '' ||
+                $value === '---' ||
+                $value === '—' ||
+                $value === '–'
+            ) {
+                return 0.00;
+            }
 
-        $amount = round(
-            (float) $value,
-            2
-        );
 
-        if ($amount < 0) {
-            throw new InvalidArgumentException(
-                'Money values cannot be negative.'
-            );
-        }
+            if (!is_numeric($value)) {
 
-        return $amount;
-    };
+                throw new InvalidArgumentException(
+                    'A money value is invalid.'
+                );
+            }
+
+
+            $amount =
+                round(
+                    (float) $value,
+                    2
+                );
+
+
+            if ($amount < 0) {
+
+                throw new InvalidArgumentException(
+                    'Money values cannot be negative.'
+                );
+            }
+
+
+            return $amount;
+        };
 
 
     /*
@@ -902,28 +1272,37 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $cleanQuantity = static function ($value): int {
+    $cleanQuantity =
+        static function (
+            $value
+        ): int {
 
-        if (
-            $value === null ||
-            $value === ''
-        ) {
-            return 0;
-        }
+            if (
+                $value === null ||
+                $value === '' ||
+                $value === '---' ||
+                $value === '—' ||
+                $value === '–'
+            ) {
+                return 0;
+            }
 
-        if (
-            !is_numeric($value) ||
-            (float) $value < 0
-        ) {
-            throw new InvalidArgumentException(
-                'Delivery quantities must be zero or greater.'
+
+            if (
+                !is_numeric($value) ||
+                (float) $value < 0
+            ) {
+
+                throw new InvalidArgumentException(
+                    'Delivery quantities must be zero or greater.'
+                );
+            }
+
+
+            return (int) round(
+                (float) $value
             );
-        }
-
-        return (int) round(
-            (float) $value
-        );
-    };
+        };
 
 
     /*
@@ -932,20 +1311,27 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $cleanCustomerName = static function ($value): string {
+    $cleanCustomerName =
+        static function (
+            $value
+        ): string {
 
-        $name = trim(
-            (string) $value
-        );
+            $name =
+                trim(
+                    (string) $value
+                );
 
-        if ($name === '') {
-            throw new InvalidArgumentException(
-                'Customer name is required for every delivery.'
-            );
-        }
 
-        return $name;
-    };
+            if ($name === '') {
+
+                throw new InvalidArgumentException(
+                    'Customer name is required for every delivery.'
+                );
+            }
+
+
+            return $name;
+        };
 
 
     /*
@@ -954,46 +1340,56 @@ function finalizeDailyClosing(
      * =========================================================
      */
 
-    $findCustomer = static function (
-        string $customerName
-    ) use ($pdo): array {
+    $findCustomer =
+        function (
+            string $customerName
+        ) use ($pdo): array {
 
-        $stmt = $pdo->prepare(
-            "SELECT
-                customer_id,
-                customer_name
-             FROM customers
-             WHERE LOWER(TRIM(customer_name))
-                   = LOWER(TRIM(?))
-             ORDER BY customer_id ASC"
-        );
+            $stmt =
+                $pdo->prepare(
+                    "SELECT
+                        customer_id,
+                        customer_name
+                     FROM customers
+                     WHERE LOWER(TRIM(customer_name))
+                           = LOWER(TRIM(?))
+                     ORDER BY customer_id ASC"
+                );
 
-        $stmt->execute([
-            $customerName
-        ]);
 
-        $customers = $stmt->fetchAll(
-            PDO::FETCH_ASSOC
-        );
+            $stmt->execute([
+                $customerName
+            ]);
 
-        if (count($customers) === 0) {
-            throw new InvalidArgumentException(
-                'Customer "' .
-                $customerName .
-                '" does not exist in the Customer List.'
-            );
-        }
 
-        if (count($customers) > 1) {
-            throw new InvalidArgumentException(
-                'Customer "' .
-                $customerName .
-                '" appears more than once in the Customer List.'
-            );
-        }
+            $customers =
+                $stmt->fetchAll(
+                    PDO::FETCH_ASSOC
+                );
 
-        return $customers[0];
-    };
+
+            if (count($customers) === 0) {
+
+                throw new InvalidArgumentException(
+                    'Customer "' .
+                    $customerName .
+                    '" does not exist in the Customer List.'
+                );
+            }
+
+
+            if (count($customers) > 1) {
+
+                throw new InvalidArgumentException(
+                    'Customer "' .
+                    $customerName .
+                    '" appears more than once in the Customer List.'
+                );
+            }
+
+
+            return $customers[0];
+        };
 
 
     /*
@@ -1013,34 +1409,48 @@ function finalizeDailyClosing(
          * =====================================================
          */
 
-        $walkInCustomers = $cleanQuantity(
-            $shop['walk_in_customers'] ?? 0
-        );
+        $walkInCustomers =
+            $cleanQuantity(
+                $shop['walk_in_customers']
+                ?? 0
+            );
 
-        $walkInPrice = 30.00;
+
+        $walkInPrice =
+            30.00;
+
+
+        $walkInSales =
+            round(
+                $walkInCustomers * $walkInPrice,
+                2
+            );
+
 
         if ($walkInCustomers > 0) {
 
-            $stmt = $pdo->prepare(
-                "INSERT INTO daily_sales (
-                    sales_date,
-                    walk_in_customers,
-                    walk_in_price,
-                    other_shop_payment,
-                    notes,
-                    daily_id,
-                    other_sales
-                 )
-                 VALUES (
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                 )"
-            );
+            $stmt =
+                $pdo->prepare(
+                    "INSERT INTO daily_sales (
+                        sales_date,
+                        walk_in_customers,
+                        walk_in_price,
+                        other_shop_payment,
+                        notes,
+                        daily_id,
+                        other_sales
+                     )
+                     VALUES (
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                     )"
+                );
+
 
             $stmt->execute([
                 $dailyRecord['business_date'],
@@ -1060,340 +1470,181 @@ function finalizeDailyClosing(
          * =====================================================
          */
 
-        $insertDelivery = static function (
-            array $delivery,
-            string $collectionLocation
-        ) use (
-            $pdo,
-            $dailyRecord,
-            $dailyId,
-            $cleanMoney,
-            $cleanQuantity,
-            $cleanCustomerName,
-            $findCustomer
-        ): void {
+        $insertDelivery =
+            function (
+                array $delivery,
+                string $collectionLocation
+            ) use (
+                $pdo,
+                $dailyRecord,
+                $dailyId,
+                $cleanMoney,
+                $cleanQuantity,
+                $cleanCustomerName,
+                $findCustomer
+            ): void {
 
-            $customerName = $cleanCustomerName(
-                $delivery['customer'] ?? ''
-            );
-
-            $customer = $findCustomer(
-                $customerName
-            );
-
-            $customerId = (int) $customer['customer_id'];
-
-            $slim = $cleanQuantity(
-                $delivery['slim'] ?? 0
-            );
-
-            $round = $cleanQuantity(
-                $delivery['round'] ?? 0
-            );
-
-            $price = $cleanMoney(
-                $delivery['price'] ?? 0
-            );
-
-            $payment = $cleanMoney(
-                $delivery['payment'] ?? 0
-            );
-
-            $method = trim(
-                (string) (
-                    $delivery['method'] ?? ''
-                )
-            );
-
-            if ($method === '') {
-                $method = 'Cash';
-            }
-
-            $allowedMethods = [
-                'Cash',
-                'GCash',
-                'Bank Transfer',
-                'Other'
-            ];
-
-            if (!in_array(
-                $method,
-                $allowedMethods,
-                true
-            )) {
-                throw new InvalidArgumentException(
-                    'Invalid payment method for customer "' .
-                    $customerName .
-                    '".'
-                );
-            }
-
-            $gallons = $slim + $round;
+                $customerName =
+                    $cleanCustomerName(
+                        $delivery['customer']
+                        ?? ''
+                    );
 
 
-            /*
-             * Completely empty rows are ignored.
-             */
-
-            if (
-                $gallons <= 0 &&
-                $payment <= 0
-            ) {
-                return;
-            }
-
-            if ($gallons <= 0) {
-                throw new InvalidArgumentException(
-                    'Customer "' .
-                    $customerName .
-                    '" has a payment but no delivery quantity.'
-                );
-            }
-
-            if ($price <= 0) {
-                throw new InvalidArgumentException(
-                    'Customer "' .
-                    $customerName .
-                    '" must have a valid Price/Gal.'
-                );
-            }
-
-            $amountDue = round(
-                $gallons * $price,
-                2
-            );
+                $customer =
+                    $findCustomer(
+                        $customerName
+                    );
 
 
-            /*
-             * =================================================
-             * SAVE DELIVERY
-             * =================================================
-             */
-
-            $stmt = $pdo->prepare(
-                "INSERT INTO deliveries (
-                    customer_id,
-                    delivery_date,
-                    slim_quantity,
-                    round_quantity,
-                    price_per_gallon,
-                    amount_due,
-                    notes,
-                    daily_id
-                 )
-                 VALUES (
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                 )"
-            );
-
-            $stmt->execute([
-                $customerId,
-                $dailyRecord['business_date'],
-                $slim,
-                $round,
-                $price,
-                $amountDue,
-                null,
-                $dailyId
-            ]);
-
-            $deliveryId = (int) $pdo->lastInsertId();
+                $customerId =
+                    (int) $customer['customer_id'];
 
 
-            /*
-             * =================================================
-             * PAYMENT ALLOCATION
-             * =================================================
-             *
-             * 1. Pay today's delivery first.
-             * 2. Any remaining money pays previous debt.
-             *
-             * Every payment is attached to the delivery it
-             * actually pays.
-             */
-
-            if ($payment <= 0) {
-                return;
-            }
-
-            $paymentRemaining = round(
-                $payment,
-                2
-            );
+                $slim =
+                    $cleanQuantity(
+                        $delivery['slim']
+                        ?? 0
+                    );
 
 
-            /*
-             * -------------------------------------------------
-             * STEP 1
-             * Today's delivery
-             * -------------------------------------------------
-             */
-
-            $todayPayment = min(
-                $paymentRemaining,
-                $amountDue
-            );
-
-            if ($todayPayment > 0) {
-
-                $stmt = $pdo->prepare(
-                    "INSERT INTO payments (
-                        delivery_id,
-                        customer_id,
-                        payment_date,
-                        amount,
-                        payment_method,
-                        collection_location,
-                        notes,
-                        daily_id
-                     )
-                     VALUES (
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?
-                     )"
-                );
-
-                $stmt->execute([
-                    $deliveryId,
-                    $customerId,
-                    $dailyRecord['business_date'],
-                    $todayPayment,
-                    $method,
-                    $collectionLocation,
-                    null,
-                    $dailyId
-                ]);
-
-                $paymentRemaining = round(
-                    $paymentRemaining - $todayPayment,
-                    2
-                );
-            }
+                $round =
+                    $cleanQuantity(
+                        $delivery['round']
+                        ?? 0
+                    );
 
 
-            /*
-             * -------------------------------------------------
-             * STEP 2
-             * Previous debt
-             * -------------------------------------------------
-             */
-
-            if ($paymentRemaining > 0) {
-
-                $stmt = $pdo->prepare(
-                    "SELECT
-                        d.delivery_id,
-                        d.amount_due,
-
-                        COALESCE(
-                            (
-                                SELECT SUM(p.amount)
-                                FROM payments p
-                                WHERE p.delivery_id = d.delivery_id
-                            ),
-                            0
-                        ) AS total_paid
-
-                     FROM deliveries d
-
-                     WHERE d.customer_id = ?
-                       AND d.delivery_date < ?
-
-                     HAVING
-                        d.amount_due -
-                        COALESCE(
-                            (
-                                SELECT SUM(p2.amount)
-                                FROM payments p2
-                                WHERE p2.delivery_id = d.delivery_id
-                            ),
-                            0
-                        ) > 0
-
-                     ORDER BY
-                        d.delivery_date ASC,
-                        d.delivery_id ASC
-
-                     FOR UPDATE"
-                );
-
-                $stmt->execute([
-                    $customerId,
-                    $dailyRecord['business_date']
-                ]);
-
-                $previousDebts = $stmt->fetchAll(
-                    PDO::FETCH_ASSOC
-                );
+                $price =
+                    $cleanMoney(
+                        $delivery['price']
+                        ?? 0
+                    );
 
 
-                foreach (
-                    $previousDebts as $previousDebt
+                $payment =
+                    $cleanMoney(
+                        $delivery['payment']
+                        ?? 0
+                    );
+
+
+                $method =
+                    trim(
+                        (string) (
+                            $delivery['method']
+                            ?? ''
+                        )
+                    );
+
+
+                if ($method === '') {
+                    $method = 'Cash';
+                }
+
+
+                $allowedMethods = [
+                    'Cash',
+                    'GCash',
+                    'Bank Transfer',
+                    'Other'
+                ];
+
+
+                if (
+                    !in_array(
+                        $method,
+                        $allowedMethods,
+                        true
+                    )
                 ) {
 
-                    if ($paymentRemaining <= 0) {
-                        break;
-                    }
+                    throw new InvalidArgumentException(
+                        'Invalid payment method for customer "' .
+                        $customerName .
+                        '".'
+                    );
+                }
 
-                    $previousAmountDue = round(
-                        (float) $previousDebt['amount_due'],
+
+                $gallons =
+                    $slim + $round;
+
+
+                /*
+                 * Completely empty rows are ignored.
+                 */
+
+                if (
+                    $gallons <= 0 &&
+                    $payment <= 0
+                ) {
+                    return;
+                }
+
+
+                if ($gallons <= 0) {
+
+                    throw new InvalidArgumentException(
+                        'Customer "' .
+                        $customerName .
+                        '" has a payment but no delivery quantity.'
+                    );
+                }
+
+
+                if ($price <= 0) {
+
+                    throw new InvalidArgumentException(
+                        'Customer "' .
+                        $customerName .
+                        '" must have a valid Price/Gal.'
+                    );
+                }
+
+
+                $amountDue =
+                    round(
+                        $gallons * $price,
                         2
                     );
 
-                    $previousTotalPaid = round(
-                        (float) $previousDebt['total_paid'],
-                        2
+
+                /*
+                 * =================================================
+                 * PAYMENT VALIDATION
+                 * =================================================
+                 */
+
+                if ($payment < 0) {
+
+                    throw new InvalidArgumentException(
+                        'Payment cannot be negative for customer "' .
+                        $customerName .
+                        '".'
                     );
-
-                    $previousRemaining = round(
-                        $previousAmountDue -
-                        $previousTotalPaid,
-                        2
-                    );
-
-                    if ($previousRemaining <= 0) {
-                        continue;
-                    }
-
-                    $debtPayment = min(
-                        $paymentRemaining,
-                        $previousRemaining
-                    );
-
-                    if ($debtPayment <= 0) {
-                        continue;
-                    }
+                }
 
 
-                    /*
-                     * Payment is attached to the ORIGINAL delivery.
-                     */
+                /*
+                 * =================================================
+                 * SAVE DELIVERY
+                 * =================================================
+                 */
 
-                    $stmt = $pdo->prepare(
-                        "INSERT INTO payments (
-                            delivery_id,
+                $stmt =
+                    $pdo->prepare(
+                        "INSERT INTO deliveries (
                             customer_id,
-                            payment_date,
-                            amount,
-                            payment_method,
-                            collection_location,
+                            delivery_date,
+                            slim_quantity,
+                            round_quantity,
+                            price_per_gallon,
+                            amount_due,
                             notes,
                             daily_id
-                         )
-                         VALUES (
+                        )
+                        VALUES (
                             ?,
                             ?,
                             ?,
@@ -1402,59 +1653,353 @@ function finalizeDailyClosing(
                             ?,
                             ?,
                             ?
-                         )"
+                        )"
                     );
 
+
+                $stmt->execute([
+                    $customerId,
+                    $dailyRecord['business_date'],
+                    $slim,
+                    $round,
+                    $price,
+                    $amountDue,
+                    null,
+                    $dailyId
+                ]);
+
+
+                $deliveryId =
+                    (int) $pdo->lastInsertId();
+
+
+                /*
+                 * =================================================
+                 * PAYMENT ALLOCATION
+                 * =================================================
+                 *
+                 * Payment order:
+                 *
+                 * 1. Current delivery
+                 * 2. Oldest previous outstanding debt
+                 * 3. Customer credit
+                 *
+                 * Current Debt does NOT perform this allocation.
+                 * Finalize is the only place where payment
+                 * allocation happens.
+                 */
+
+
+                if ($payment <= 0) {
+                    return;
+                }
+
+
+                /*
+                 * -------------------------------------------------
+                 * STEP 1
+                 * Pay today's delivery first.
+                 * -------------------------------------------------
+                 */
+
+                $paymentRemaining =
+                    round(
+                        $payment,
+                        2
+                    );
+
+
+                $todayPayment =
+                    min(
+                        $paymentRemaining,
+                        $amountDue
+                    );
+
+
+                if ($todayPayment > 0) {
+
+                    $stmt =
+                        $pdo->prepare(
+                            "INSERT INTO payments (
+                                delivery_id,
+                                customer_id,
+                                payment_date,
+                                amount,
+                                payment_method,
+                                collection_location,
+                                notes,
+                                daily_id
+                            )
+                            VALUES (
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?
+                            )"
+                        );
+
+
                     $stmt->execute([
-                        (int) $previousDebt['delivery_id'],
+                        $deliveryId,
                         $customerId,
                         $dailyRecord['business_date'],
-                        $debtPayment,
+                        $todayPayment,
                         $method,
                         $collectionLocation,
-                        'Payment toward previous debt',
+                        null,
                         $dailyId
                     ]);
 
-                    $paymentRemaining = round(
-                        $paymentRemaining - $debtPayment,
-                        2
-                    );
+
+                    $paymentRemaining =
+                        round(
+                            $paymentRemaining -
+                            $todayPayment,
+                            2
+                        );
                 }
-            }
 
 
-            /*
-             * -------------------------------------------------
-             * STEP 3
-             * Reject unapplied excess money.
-             * -------------------------------------------------
-             */
+                /*
+                 * -------------------------------------------------
+                 * STEP 2
+                 * Pay previous outstanding debt.
+                 *
+                 * Oldest debt is paid first.
+                 * -------------------------------------------------
+                 */
 
-            if ($paymentRemaining > 0.009) {
+                if ($paymentRemaining > 0) {
 
-                throw new InvalidArgumentException(
-                    'Payment of ₱' .
-                    number_format($payment, 2) .
-                    ' for customer "' .
-                    $customerName .
-                    '" exceeds the current delivery and all outstanding previous debt.'
-                );
-            }
-        };
+                    $stmt =
+                        $pdo->prepare(
+                            "SELECT
+                                d.delivery_id,
+                                d.amount_due,
+                                COALESCE(
+                                    SUM(p.amount),
+                                    0
+                                ) AS total_paid
+
+                            FROM deliveries d
+
+                            LEFT JOIN payments p
+                                ON p.delivery_id = d.delivery_id
+
+                            WHERE d.customer_id = ?
+                              AND d.delivery_date < ?
+
+                            GROUP BY
+                                d.delivery_id,
+                                d.amount_due,
+                                d.delivery_date
+
+                            HAVING
+                                d.amount_due -
+                                COALESCE(SUM(p.amount), 0) > 0
+
+                            ORDER BY
+                                d.delivery_date ASC,
+                                d.delivery_id ASC
+
+                            FOR UPDATE"
+                        );
+
+
+                    $stmt->execute([
+                        $customerId,
+                        $dailyRecord['business_date']
+                    ]);
+
+
+                    $previousDebts =
+                        $stmt->fetchAll(
+                            PDO::FETCH_ASSOC
+                        );
+
+
+                    foreach (
+                        $previousDebts
+                        as $previousDebt
+                    ) {
+
+                        if ($paymentRemaining <= 0) {
+                            break;
+                        }
+
+
+                        $previousAmountDue =
+                            round(
+                                (float) $previousDebt['amount_due'],
+                                2
+                            );
+
+
+                        $previousTotalPaid =
+                            round(
+                                (float) $previousDebt['total_paid'],
+                                2
+                            );
+
+
+                        $previousRemaining =
+                            round(
+                                $previousAmountDue -
+                                $previousTotalPaid,
+                                2
+                            );
+
+
+                        if ($previousRemaining <= 0) {
+                            continue;
+                        }
+
+
+                        $debtPayment =
+                            min(
+                                $paymentRemaining,
+                                $previousRemaining
+                            );
+
+
+                        if ($debtPayment <= 0) {
+                            continue;
+                        }
+
+
+                        /*
+                         * Payment points to the ORIGINAL delivery.
+                         */
+
+                        $stmt =
+                            $pdo->prepare(
+                                "INSERT INTO payments (
+                                    delivery_id,
+                                    customer_id,
+                                    payment_date,
+                                    amount,
+                                    payment_method,
+                                    collection_location,
+                                    notes,
+                                    daily_id
+                                )
+                                VALUES (
+                                    ?,
+                                    ?,
+                                    ?,
+                                    ?,
+                                    ?,
+                                    ?,
+                                    ?,
+                                    ?
+                                )"
+                            );
+
+
+                        $stmt->execute([
+                            (int) $previousDebt['delivery_id'],
+                            $customerId,
+                            $dailyRecord['business_date'],
+                            $debtPayment,
+                            $method,
+                            $collectionLocation,
+                            'Payment toward previous debt',
+                            $dailyId
+                        ]);
+
+
+                        $paymentRemaining =
+                            round(
+                                $paymentRemaining -
+                                $debtPayment,
+                                2
+                            );
+                    }
+                }
+
+
+                /*
+                 * -------------------------------------------------
+                 * STEP 3
+                 * Remaining money becomes customer credit.
+                 * -------------------------------------------------
+                 *
+                 * Examples:
+                 *
+                 * Delivery = 140
+                 * Payment  = 280
+                 * Previous debt = 0
+                 *
+                 * Current delivery receives 140.
+                 * Remaining 140 becomes credit.
+                 *
+                 *
+                 * Delivery = 140
+                 * Previous debt = 100
+                 * Payment = 280
+                 *
+                 * Current delivery = 140
+                 * Previous debt = 100
+                 * Remaining 40 = customer credit.
+                 */
+
+                if ($paymentRemaining > 0.009) {
+
+                    $stmt =
+                        $pdo->prepare(
+                            "INSERT INTO customer_credits (
+                                customer_id,
+                                credit_date,
+                                amount,
+                                payment_method,
+                                collection_location,
+                                daily_id,
+                                notes
+                            )
+                            VALUES (
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?,
+                                ?
+                            )"
+                        );
+
+
+                    $stmt->execute([
+                        $customerId,
+                        $dailyRecord['business_date'],
+                        $paymentRemaining,
+                        $method,
+                        $collectionLocation,
+                        $dailyId,
+                        'Customer credit from overpayment'
+                    ]);
+                }
+            };
 
 
         /*
          * =====================================================
-         * 3. SHOP DELIVERIES
+         * 3. SAVE SHOP DELIVERIES
          * =====================================================
          */
 
-        foreach ($shopDeliveries as $delivery) {
+        foreach (
+            $shopDeliveries
+            as $delivery
+        ) {
 
             if (!is_array($delivery)) {
                 continue;
             }
+
 
             $insertDelivery(
                 $delivery,
@@ -1465,15 +2010,19 @@ function finalizeDailyClosing(
 
         /*
          * =====================================================
-         * 4. DRIVER DELIVERIES
+         * 4. SAVE DRIVER DELIVERIES
          * =====================================================
          */
 
-        foreach ($driverDeliveries as $delivery) {
+        foreach (
+            $driverDeliveries
+            as $delivery
+        ) {
 
             if (!is_array($delivery)) {
                 continue;
             }
+
 
             $insertDelivery(
                 $delivery,
@@ -1484,131 +2033,152 @@ function finalizeDailyClosing(
 
         /*
          * =====================================================
-         * 5. EXPENSE INSERT HELPER
+         * 5. SAVE EXPENSE INSERT HELPER
          * =====================================================
          */
 
-        $insertExpense = static function (
-            array $expense,
-            string $location
-        ) use (
-            $pdo,
-            $dailyRecord,
-            $dailyId,
-            $cleanMoney
-        ): void {
+        $insertExpense =
+            function (
+                array $expense,
+                string $location
+            ) use (
+                $pdo,
+                $dailyRecord,
+                $dailyId,
+                $cleanMoney
+            ): void {
 
-            $category = trim(
-                (string) (
-                    $expense['category'] ?? ''
-                )
-            );
-
-            $amount = $cleanMoney(
-                $expense['amount'] ?? 0
-            );
-
-            $description = trim(
-                (string) (
-                    $expense['name'] ?? ''
-                )
-            );
+                $category =
+                    trim(
+                        (string) (
+                            $expense['category']
+                            ?? ''
+                        )
+                    );
 
 
-            /*
-             * Completely empty expense rows are ignored.
-             */
-
-            if (
-                $category === '' &&
-                $amount <= 0 &&
-                $description === ''
-            ) {
-                return;
-            }
+                $amount =
+                    $cleanMoney(
+                        $expense['amount']
+                        ?? 0
+                    );
 
 
-            /*
-             * UI uses "Others".
-             * Database uses "Miscellaneous".
-             */
-
-            if ($category === 'Others') {
-                $category = 'Miscellaneous';
-            }
-
-
-            $allowedCategories = [
-                'Gas',
-                'Food',
-                'Cash Advance',
-                'Miscellaneous',
-                'Others'
-            ];
-
-            if (!in_array(
-                $category,
-                $allowedCategories,
-                true
-            )) {
-                throw new InvalidArgumentException(
-                    'Invalid expense category.'
-                );
-            }
-
-            if ($amount <= 0) {
-                throw new InvalidArgumentException(
-                    'Expense amount must be greater than zero.'
-                );
-            }
+                $description =
+                    trim(
+                        (string) (
+                            $expense['name']
+                            ?? ''
+                        )
+                    );
 
 
-            $stmt = $pdo->prepare(
-                "INSERT INTO expenses (
-                    expense_date,
-                    category,
-                    expense_location,
-                    description,
-                    amount,
-                    notes,
-                    daily_id
-                 )
-                 VALUES (
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                 )"
-            );
+                /*
+                 * Completely empty expense rows are ignored.
+                 */
 
-            $stmt->execute([
-                $dailyRecord['business_date'],
-                $category,
-                $location,
-                $description !== ''
-                    ? $description
-                    : null,
-                $amount,
-                null,
-                $dailyId
-            ]);
-        };
+                if (
+                    $category === '' &&
+                    $amount <= 0 &&
+                    $description === ''
+                ) {
+                    return;
+                }
+
+
+                $allowedCategories = [
+                    'Gas',
+                    'Food',
+                    'Cash Advance',
+                    'Miscellaneous',
+                    'Others'
+                ];
+
+
+                /*
+                 * UI uses Others while database uses
+                 * Miscellaneous.
+                 */
+
+                if ($category === 'Others') {
+                    $category = 'Miscellaneous';
+                }
+
+
+                if (
+                    !in_array(
+                        $category,
+                        $allowedCategories,
+                        true
+                    )
+                ) {
+
+                    throw new InvalidArgumentException(
+                        'Invalid expense category.'
+                    );
+                }
+
+
+                if ($amount <= 0) {
+
+                    throw new InvalidArgumentException(
+                        'Expense amount must be greater than zero.'
+                    );
+                }
+
+
+                $stmt =
+                    $pdo->prepare(
+                        "INSERT INTO expenses (
+                            expense_date,
+                            category,
+                            expense_location,
+                            description,
+                            amount,
+                            notes,
+                            daily_id
+                         )
+                         VALUES (
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?
+                         )"
+                    );
+
+
+                $stmt->execute([
+                    $dailyRecord['business_date'],
+                    $category,
+                    $location,
+                    $description !== ''
+                        ? $description
+                        : null,
+                    $amount,
+                    null,
+                    $dailyId
+                ]);
+            };
 
 
         /*
          * =====================================================
-         * 6. SHOP EXPENSES
+         * 6. SAVE SHOP EXPENSES
          * =====================================================
          */
 
-        foreach ($shopExpenses as $expense) {
+        foreach (
+            $shopExpenses
+            as $expense
+        ) {
 
             if (!is_array($expense)) {
                 continue;
             }
+
 
             $insertExpense(
                 $expense,
@@ -1619,15 +2189,19 @@ function finalizeDailyClosing(
 
         /*
          * =====================================================
-         * 7. DRIVER EXPENSES
+         * 7. SAVE DRIVER EXPENSES
          * =====================================================
          */
 
-        foreach ($driverExpenses as $expense) {
+        foreach (
+            $driverExpenses
+            as $expense
+        ) {
 
             if (!is_array($expense)) {
                 continue;
             }
+
 
             $insertExpense(
                 $expense,
@@ -1642,18 +2216,20 @@ function finalizeDailyClosing(
          * =====================================================
          */
 
-        $stmt = $pdo->prepare(
-            "UPDATE daily_records
-             SET
-                status = 'Saved',
-                closing_result = ?,
-                actual_station_cash = ?,
-                saved_at = NOW(),
-                saved_by = ?,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE daily_id = ?
-               AND status = 'Open'"
-        );
+        $stmt =
+            $pdo->prepare(
+                "UPDATE daily_records
+                 SET
+                    status = 'Saved',
+                    closing_result = ?,
+                    actual_station_cash = ?,
+                    saved_at = NOW(),
+                    saved_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE daily_id = ?
+                   AND status = 'Open'"
+            );
+
 
         $stmt->execute([
             $closingResult,
@@ -1662,7 +2238,9 @@ function finalizeDailyClosing(
             $dailyId
         ]);
 
+
         if ($stmt->rowCount() !== 1) {
+
             throw new RuntimeException(
                 'The daily record could not be finalized.'
             );
@@ -1675,10 +2253,12 @@ function finalizeDailyClosing(
          * =====================================================
          */
 
-        $stmt = $pdo->prepare(
-            "DELETE FROM daily_closing_drafts
-             WHERE daily_id = ?"
-        );
+        $stmt =
+            $pdo->prepare(
+                "DELETE FROM daily_closing_drafts
+                 WHERE daily_id = ?"
+            );
+
 
         $stmt->execute([
             $dailyId
@@ -1687,7 +2267,7 @@ function finalizeDailyClosing(
 
         /*
          * =====================================================
-         * 10. COMMIT
+         * COMMIT
          * =====================================================
          */
 
@@ -1717,9 +2297,11 @@ function finalizeDailyClosing(
             $pdo->rollBack();
         }
 
+
         respond([
             'success' => false,
-            'message' => $e->getMessage()
+            'message' =>
+                $e->getMessage()
         ], 400);
     }
 }
@@ -1733,24 +2315,41 @@ function finalizeDailyClosing(
 
 try {
 
-    $method = strtoupper(
-        $_SERVER['REQUEST_METHOD'] ?? 'GET'
-    );
+    /*
+     * =========================================================
+     * ENSURE REQUIRED TABLES
+     * =========================================================
+     *
+     * These must run before GET and POST.
+     *
+     * This means simply opening Daily Closing will make sure
+     * the required tables exist.
+     */
+
+    ensureDraftTable($pdo);
+    ensureCreditTable($pdo);
+
+
+    $method =
+        strtoupper(
+            $_SERVER['REQUEST_METHOD'] ?? 'GET'
+        );
 
 
     /*
      * =========================================================
-     * GET REQUESTS
+     * GET
      * =========================================================
      */
 
     if ($method === 'GET') {
 
-        $action = trim(
-            (string) (
-                $_GET['action'] ?? ''
-            )
-        );
+        $action =
+            trim(
+                (string) (
+                    $_GET['action'] ?? ''
+                )
+            );
 
 
         /*
@@ -1760,6 +2359,7 @@ try {
          */
 
         if ($action === 'get_customers') {
+
             getCustomers($pdo);
         }
 
@@ -1772,17 +2372,22 @@ try {
 
         if ($action === 'get_current_debt') {
 
-            $dailyId = filter_input(
-                INPUT_GET,
-                'daily_id',
-                FILTER_VALIDATE_INT
-            );
+            $dailyId =
+                filter_input(
+                    INPUT_GET,
+                    'daily_id',
+                    FILTER_VALIDATE_INT
+                );
 
-            $dailyId = $dailyId
-                ? (int) $dailyId
-                : 0;
+
+            $dailyId =
+                $dailyId
+                    ? (int) $dailyId
+                    : 0;
+
 
             if ($dailyId <= 0) {
+
                 respond([
                     'success' => false,
                     'message' =>
@@ -1791,23 +2396,29 @@ try {
             }
 
 
-            $draftRaw = (string) (
-                $_GET['draft'] ?? ''
-            );
+            $draftRaw =
+                (string) (
+                    $_GET['draft'] ?? ''
+                );
+
 
             $draft = [];
 
+
             if ($draftRaw !== '') {
 
-                $decoded = json_decode(
-                    $draftRaw,
-                    true
-                );
+                $decoded =
+                    json_decode(
+                        $draftRaw,
+                        true
+                    );
+
 
                 if (is_array($decoded)) {
                     $draft = $decoded;
                 }
             }
+
 
             getCurrentDebt(
                 $pdo,
@@ -1821,45 +2432,49 @@ try {
          * -----------------------------------------------------
          * DAILY CONTEXT
          * -----------------------------------------------------
-         *
-         * Used when today's record is already Saved.
-         *
-         * This allows the Daily Closing page to still identify
-         * the current Daily ID without reopening the record.
          */
 
         if ($action === 'get_daily_context') {
 
-            $today = date('Y-m-d');
+            $today =
+                date('Y-m-d');
 
-            $stmt = $pdo->prepare(
-                "SELECT
-                    daily_id,
-                    business_date,
-                    status,
-                    closing_result,
-                    actual_station_cash,
-                    saved_at
-                 FROM daily_records
-                 WHERE business_date = ?
-                 LIMIT 1"
-            );
+
+            $stmt =
+                $pdo->prepare("
+                    SELECT
+                        daily_id,
+                        business_date,
+                        status,
+                        closing_result,
+                        actual_station_cash,
+                        saved_at
+                    FROM daily_records
+                    WHERE business_date = ?
+                    LIMIT 1
+                ");
+
 
             $stmt->execute([
                 $today
             ]);
 
-            $dailyRecord = $stmt->fetch(
-                PDO::FETCH_ASSOC
-            );
+
+            $dailyRecord =
+                $stmt->fetch(
+                    PDO::FETCH_ASSOC
+                );
+
 
             if (!$dailyRecord) {
+
                 respond([
                     'success' => false,
                     'message' =>
                         'No daily record exists for today.'
                 ], 404);
             }
+
 
             respond([
                 'success' => true,
@@ -1887,20 +2502,25 @@ try {
          * -----------------------------------------------------
          */
 
-        $requestedDailyId = filter_input(
-            INPUT_GET,
-            'daily_id',
-            FILTER_VALIDATE_INT
-        );
+        $requestedDailyId =
+            filter_input(
+                INPUT_GET,
+                'daily_id',
+                FILTER_VALIDATE_INT
+            );
 
-        $requestedDailyId = $requestedDailyId
-            ? (int) $requestedDailyId
-            : 0;
 
-        $dailyRecord = getOpenDailyRecord(
-            $pdo,
+        $requestedDailyId =
             $requestedDailyId
-        );
+                ? (int) $requestedDailyId
+                : 0;
+
+
+        $dailyRecord =
+            getOpenDailyRecord(
+                $pdo,
+                $requestedDailyId
+            );
 
 
         /*
@@ -1911,76 +2531,101 @@ try {
 
         if (!$dailyRecord) {
 
-            $today = date('Y-m-d');
-
-            $stmt = $pdo->prepare(
-                "SELECT
-                    daily_id,
-                    business_date,
-                    status
-                 FROM daily_records
-                 WHERE business_date = ?
-                 LIMIT 1"
-            );
-
-            $stmt->execute([
-                $today
-            ]);
-
-            $todayRecord = $stmt->fetch(
-                PDO::FETCH_ASSOC
-            );
+            $today =
+                date('Y-m-d');
 
 
             /*
-             * No record for today:
-             * create a new Open record.
+             * Check whether today's record already exists.
              */
 
-            if (!$todayRecord) {
-
-                $stmt = $pdo->prepare(
-                    "INSERT INTO daily_records (
-                        business_date,
-                        status,
-                        closing_result
-                     )
-                     VALUES (
-                        ?,
-                        'Open',
-                        'Pending'
-                     )"
-                );
-
-                $stmt->execute([
-                    $today
-                ]);
-
-                $newDailyId = (int) $pdo->lastInsertId();
-
-                $stmt = $pdo->prepare(
+            $stmt =
+                $pdo->prepare(
                     "SELECT
                         daily_id,
                         business_date,
                         status
                      FROM daily_records
-                     WHERE daily_id = ?
+                     WHERE business_date = ?
                      LIMIT 1"
                 );
+
+
+            $stmt->execute([
+                $today
+            ]);
+
+
+            $todayRecord =
+                $stmt->fetch(
+                    PDO::FETCH_ASSOC
+                );
+
+
+            /*
+             * Today's record does not exist.
+             *
+             * Create a new Open record.
+             */
+
+            if (!$todayRecord) {
+
+                $stmt =
+                    $pdo->prepare(
+                        "INSERT INTO daily_records (
+                            business_date,
+                            status,
+                            closing_result
+                         )
+                         VALUES (
+                            ?,
+                            'Open',
+                            'Pending'
+                         )"
+                    );
+
+
+                $stmt->execute([
+                    $today
+                ]);
+
+
+                $newDailyId =
+                    (int) $pdo->lastInsertId();
+
+
+                /*
+                 * Load newly-created record.
+                 */
+
+                $stmt =
+                    $pdo->prepare(
+                        "SELECT
+                            daily_id,
+                            business_date,
+                            status
+                         FROM daily_records
+                         WHERE daily_id = ?
+                         LIMIT 1"
+                    );
+
 
                 $stmt->execute([
                     $newDailyId
                 ]);
 
-                $dailyRecord = $stmt->fetch(
-                    PDO::FETCH_ASSOC
-                );
+
+                $dailyRecord =
+                    $stmt->fetch(
+                        PDO::FETCH_ASSOC
+                    );
 
             } else {
 
                 /*
                  * Today's record already exists but is not Open.
-                 * Never reopen it automatically.
+                 *
+                 * Do not reopen it automatically.
                  */
 
                 $dailyRecord = null;
@@ -1995,6 +2640,7 @@ try {
          */
 
         if (!$dailyRecord) {
+
             respond([
                 'success' => false,
                 'message' =>
@@ -2009,31 +2655,34 @@ try {
          * =====================================================
          */
 
-        ensureDraftTable($pdo);
+        $stmt =
+            $pdo->prepare(
+                "SELECT
+                    draft_data,
+                    updated_at
+                 FROM daily_closing_drafts
+                 WHERE daily_id = ?
+                 LIMIT 1"
+            );
 
-        $stmt = $pdo->prepare(
-            "SELECT
-                draft_data,
-                updated_at
-             FROM daily_closing_drafts
-             WHERE daily_id = ?
-             LIMIT 1"
-        );
 
         $stmt->execute([
             (int) $dailyRecord['daily_id']
         ]);
 
-        $draftRow = $stmt->fetch(
-            PDO::FETCH_ASSOC
-        );
+
+        $draftRow =
+            $stmt->fetch(
+                PDO::FETCH_ASSOC
+            );
 
 
         /*
-         * No draft means blank Daily Closing.
+         * No draft means new blank Daily Closing.
          */
 
         if (!$draftRow) {
+
             respond([
                 'success' => true,
                 'has_draft' => false,
@@ -2053,12 +2702,15 @@ try {
          * =====================================================
          */
 
-        $draft = json_decode(
-            $draftRow['draft_data'],
-            true
-        );
+        $draft =
+            json_decode(
+                $draftRow['draft_data'],
+                true
+            );
+
 
         if (!is_array($draft)) {
+
             respond([
                 'success' => false,
                 'message' =>
@@ -2092,17 +2744,18 @@ try {
 
     /*
      * =========================================================
-     * POST REQUESTS
+     * POST
      * =========================================================
      */
 
     if ($method === 'POST') {
 
-        $action = trim(
-            (string) (
-                $_POST['action'] ?? ''
-            )
-        );
+        $action =
+            trim(
+                (string) (
+                    $_POST['action'] ?? ''
+                )
+            );
 
 
         /*
@@ -2111,7 +2764,11 @@ try {
          * -----------------------------------------------------
          */
 
-        if ($action === 'save_customer_price') {
+        if (
+            $action ===
+            'save_customer_price'
+        ) {
+
             saveCustomerPrice($pdo);
         }
 
@@ -2122,17 +2779,22 @@ try {
          * -----------------------------------------------------
          */
 
-        $dailyId = filter_input(
-            INPUT_POST,
-            'daily_id',
-            FILTER_VALIDATE_INT
-        );
+        $dailyId =
+            filter_input(
+                INPUT_POST,
+                'daily_id',
+                FILTER_VALIDATE_INT
+            );
 
-        $dailyId = $dailyId
-            ? (int) $dailyId
-            : 0;
+
+        $dailyId =
+            $dailyId
+                ? (int) $dailyId
+                : 0;
+
 
         if ($dailyId <= 0) {
+
             respond([
                 'success' => false,
                 'message' =>
@@ -2147,25 +2809,21 @@ try {
          * -----------------------------------------------------
          */
 
-        $dailyRecord = getOpenDailyRecord(
-            $pdo,
-            $dailyId
-        );
+        $dailyRecord =
+            getOpenDailyRecord(
+                $pdo,
+                $dailyId
+            );
+
 
         if (!$dailyRecord) {
+
             respond([
                 'success' => false,
                 'message' =>
                     'The selected daily record is not open.'
             ], 409);
         }
-
-
-        /*
-         * Make sure the draft table exists.
-         */
-
-        ensureDraftTable($pdo);
 
 
         /*
@@ -2176,11 +2834,14 @@ try {
 
         if ($action === 'save') {
 
-            $draftRaw = (string) (
-                $_POST['draft'] ?? ''
-            );
+            $draftRaw =
+                (string) (
+                    $_POST['draft'] ?? ''
+                );
+
 
             if ($draftRaw === '') {
+
                 respond([
                     'success' => false,
                     'message' =>
@@ -2188,12 +2849,16 @@ try {
                 ], 400);
             }
 
-            $draft = json_decode(
-                $draftRaw,
-                true
-            );
+
+            $draft =
+                json_decode(
+                    $draftRaw,
+                    true
+                );
+
 
             if (!is_array($draft)) {
+
                 respond([
                     'success' => false,
                     'message' =>
@@ -2201,13 +2866,17 @@ try {
                 ], 400);
             }
 
-            $encodedDraft = json_encode(
-                $draft,
-                JSON_UNESCAPED_UNICODE |
-                JSON_UNESCAPED_SLASHES
-            );
+
+            $encodedDraft =
+                json_encode(
+                    $draft,
+                    JSON_UNESCAPED_UNICODE |
+                    JSON_UNESCAPED_SLASHES
+                );
+
 
             if ($encodedDraft === false) {
+
                 respond([
                     'success' => false,
                     'message' =>
@@ -2215,26 +2884,33 @@ try {
                 ], 500);
             }
 
-            $stmt = $pdo->prepare(
-                "INSERT INTO daily_closing_drafts (
-                    daily_id,
-                    draft_data
-                 )
-                 VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE
-                    draft_data = VALUES(draft_data),
-                    updated_at = CURRENT_TIMESTAMP"
-            );
+
+            $stmt =
+                $pdo->prepare(
+                    "INSERT INTO daily_closing_drafts (
+                        daily_id,
+                        draft_data
+                     )
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE
+                        draft_data =
+                            VALUES(draft_data),
+                        updated_at =
+                            CURRENT_TIMESTAMP"
+                );
+
 
             $stmt->execute([
                 $dailyId,
                 $encodedDraft
             ]);
 
+
             respond([
                 'success' => true,
                 'action' => 'save',
-                'daily_id' => $dailyId,
+                'daily_id' =>
+                    $dailyId,
                 'business_date' =>
                     $dailyRecord['business_date']
             ]);
@@ -2264,19 +2940,23 @@ try {
 
         if ($action === 'reset') {
 
-            $stmt = $pdo->prepare(
-                "DELETE FROM daily_closing_drafts
-                 WHERE daily_id = ?"
-            );
+            $stmt =
+                $pdo->prepare(
+                    "DELETE FROM daily_closing_drafts
+                     WHERE daily_id = ?"
+                );
+
 
             $stmt->execute([
                 $dailyId
             ]);
 
+
             respond([
                 'success' => true,
                 'action' => 'reset',
-                'daily_id' => $dailyId
+                'daily_id' =>
+                    $dailyId
             ]);
         }
 
@@ -2289,7 +2969,8 @@ try {
 
         respond([
             'success' => false,
-            'message' => 'Unknown action.'
+            'message' =>
+                'Unknown action.'
         ], 400);
     }
 
@@ -2302,7 +2983,8 @@ try {
 
     respond([
         'success' => false,
-        'message' => 'Method not allowed.'
+        'message' =>
+            'Method not allowed.'
     ], 405);
 
 
@@ -2310,6 +2992,7 @@ try {
 
     respond([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' =>
+            $e->getMessage()
     ], 500);
 }
