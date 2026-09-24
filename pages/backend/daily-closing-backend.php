@@ -746,6 +746,17 @@ function finalizeDailyClosing(
         )
     );
 
+    /*
+    * Finalize currently does not require a manual
+    * closing-result input.
+    *
+    * Until actual closing verification is implemented,
+    * an empty result is stored as Pending.
+    */
+    if ($closingResult === '') {
+        $closingResult = 'Pending';
+    }
+
     $allowedResults = [
         'Pending',
         'Balanced',
@@ -766,7 +777,6 @@ function finalizeDailyClosing(
                 'Invalid closing result.'
         ], 400);
     }
-
 
     /*
      * =========================================================

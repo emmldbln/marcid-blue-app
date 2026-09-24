@@ -110,34 +110,36 @@ $currentPage = 'daily-records';
 
         /* ---------- Column widths ---------- */
 
+        /* ---------- Column widths ---------- */
+
         .records-table th:nth-child(1),
         .records-table td:nth-child(1) {
-            width: 17%;
+            width: 15%;
         }
 
         .records-table th:nth-child(2),
         .records-table td:nth-child(2) {
-            width: 12%;
+            width: 10%;
         }
 
         .records-table th:nth-child(3),
         .records-table td:nth-child(3) {
-            width: 17%;
+            width: 16%;
         }
 
         .records-table th:nth-child(4),
         .records-table td:nth-child(4) {
-            width: 14%;
+            width: 12%;
         }
 
         .records-table th:nth-child(5),
         .records-table td:nth-child(5) {
-            width: 23%;
+            width: 25%;
         }
 
         .records-table th:nth-child(6),
         .records-table td:nth-child(6) {
-            width: 17%;
+            width: 22%;
         }
 
         .record-date {
@@ -148,6 +150,22 @@ $currentPage = 'daily-records';
         .record-id {
             color: var(--text-muted);
             font-size: 13px;
+        }
+
+        /* ---------- Record Actions ---------- */
+
+        .records-table td:nth-child(6) {
+            white-space: nowrap;
+        }
+
+        .records-table td:nth-child(6) .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 14px;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         /* ---------- Closing Result ---------- */
@@ -979,26 +997,21 @@ $currentPage = 'daily-records';
                         record.status === 'Open' ||
                         record.status === 'Reopened'
                     ) {
-
                         action =
                             '<a ' +
                             'class="btn btn-outline" ' +
                             'href="daily-closing.php">' +
                             'Open Daily Closing' +
                             '</a>';
-
                     } else {
-
                         action =
-                            '<button ' +
-                            'type="button" ' +
-                            'class="btn btn-outline record-view" ' +
-                            'data-id="' +
-                            escapeHtml(record.daily_id) +
+                            '<a ' +
+                            'class="btn btn-outline" ' +
+                            'href="subpages/daily-record-view.php?daily_id=' +
+                            encodeURIComponent(record.daily_id) +
                             '">' +
                             'View Record' +
-                            '</button>';
-
+                            '</a>';
                     }
 
 

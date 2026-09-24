@@ -2,6 +2,27 @@
 
 $currentPage = $currentPage ?? 'home';
 
+/*
+ * Path configuration
+ *
+ * Main pages:
+ *   pages/daily-records.php
+ *
+ * Subpages:
+ *   pages/subpages/daily-record-view.php
+ *
+ * Main pages:
+ *   $pageRoot = ''
+ *   $assetRoot = '../'
+ *
+ * Subpages:
+ *   $pageRoot = '../'
+ *   $assetRoot = '../../'
+ */
+
+$pageRoot = $pageRoot ?? '';
+$assetRoot = $assetRoot ?? '../';
+
 $validPages = [
     'home',
     'customers',
@@ -15,7 +36,7 @@ if (!in_array($currentPage, $validPages, true)) {
 
 $navItems = [
     'home' => [
-        'href' => 'home.php',
+        'href' => $pageRoot . 'home.php',
         'icon' => '🏠',
         'label' => 'Home'
     ],
@@ -27,13 +48,13 @@ $navItems = [
     ],
 
     'daily-records' => [
-        'href' => 'daily-records.php',
+        'href' => $pageRoot . 'daily-records.php',
         'icon' => '📅',
         'label' => 'Daily Records'
     ],
 
     'daily-closing' => [
-        'href' => 'daily-closing.php',
+        'href' => $pageRoot . 'daily-closing.php',
         'icon' => '🧾',
         'label' => 'Daily Closing'
     ]
@@ -48,7 +69,7 @@ $navItems = [
         <div class="brand-icon">
 
             <img
-                src="../assets/images/mb-logo.png"
+                src="<?= htmlspecialchars($assetRoot) ?>assets/images/mb-logo.png"
                 alt="Marcid Blue Logo"
             >
 
