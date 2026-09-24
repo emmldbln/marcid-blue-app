@@ -854,216 +854,271 @@
     }
 
 
-    function renderCurrentDebt(
-        result
-    ) {
+            function renderCurrentDebt(
+            result
+        ) {
 
-        const totalElement =
-            getElement(
-                'currentDebtTotal'
-            );
-
-        const list =
-            getElement(
-                'currentDebtList'
-            );
-
-
-        if (!totalElement || !list) {
-            return;
-        }
-
-
-        const totalDebt =
-            Number(
-                result.total_debt
-            ) || 0;
-
-
-        const customers =
-            Array.isArray(
-                result.customers
-            )
-                ? result.customers
-                : [];
-
-
-        const formattedTotal =
-            formatDebtMoney(
-                totalDebt
-            );
-
-
-        totalElement.textContent =
-            formattedTotal;
-
-
-        list.innerHTML = '';
-
-
-        if (customers.length === 0) {
-
-            const empty =
-                document.createElement(
-                    'div'
+            const totalElement =
+                getElement(
+                    'currentDebtTotal'
                 );
 
-            empty.className =
-                'current-debt-empty';
-
-            empty.textContent =
-                'No customers currently have an outstanding balance.';
-
-            list.appendChild(
-                empty
-            );
-
-            return;
-        }
+            const list =
+                getElement(
+                    'currentDebtList'
+                );
 
 
-        customers.forEach(
-            customer => {
+            if (!totalElement || !list) {
+                return;
+            }
 
-                const item =
+
+            const totalDebt =
+                Number(
+                    result.total_debt
+                ) || 0;
+
+
+            const groupedDebts =
+                result.grouped_debts &&
+                typeof result.grouped_debts === 'object'
+                    ? result.grouped_debts
+                    : {};
+
+
+            totalElement.textContent =
+                formatDebtMoney(
+                    totalDebt
+                );
+
+
+            list.innerHTML = '';
+
+
+            const debtDates =
+                Object.keys(
+                    groupedDebts
+                );
+
+
+            if (debtDates.length === 0) {
+
+                const empty =
                     document.createElement(
                         'div'
                     );
 
-                item.className =
-                    'current-debt-item';
+                empty.className =
+                    'current-debt-empty';
 
-
-                const header =
-                    document.createElement(
-                        'div'
-                    );
-
-                header.className =
-                    'current-debt-item-header';
-
-
-                const name =
-                    document.createElement(
-                        'div'
-                    );
-
-                name.className =
-                    'current-debt-customer';
-
-                name.textContent =
-                    customer.customer_name;
-
-
-                const amount =
-                    document.createElement(
-                        'div'
-                    );
-
-                amount.className =
-                    'current-debt-amount';
-
-                amount.textContent =
-                    formatDebtMoney(
-                        customer.current_balance
-                    );
-
-
-                header.appendChild(
-                    name
-                );
-
-                header.appendChild(
-                    amount
-                );
-
-
-                const details =
-                    document.createElement(
-                        'div'
-                    );
-
-                details.className =
-                    'current-debt-item-details';
-
-
-                const historical =
-                    Number(
-                        customer.historical_balance
-                    ) || 0;
-
-                const todayDue =
-                    Number(
-                        customer.today_due
-                    ) || 0;
-
-                const todayPayment =
-                    Number(
-                        customer.today_payment
-                    ) || 0;
-
-
-                const detailParts = [];
-
-
-                if (historical > 0) {
-
-                    detailParts.push(
-                        'Previous: ' +
-                        formatDebtMoney(
-                            historical
-                        )
-                    );
-
-                }
-
-
-                if (todayDue > 0) {
-
-                    detailParts.push(
-                        'Today: +' +
-                        formatDebtMoney(
-                            todayDue
-                        )
-                    );
-
-                }
-
-
-                if (todayPayment > 0) {
-
-                    detailParts.push(
-                        'Paid today: −' +
-                        formatDebtMoney(
-                            todayPayment
-                        )
-                    );
-
-                }
-
-
-                details.textContent =
-                    detailParts.length > 0
-                        ? detailParts.join(' · ')
-                        : 'Outstanding customer balance';
-
-
-                item.appendChild(
-                    header
-                );
-
-                item.appendChild(
-                    details
-                );
+                empty.textContent =
+                    'No customers currently have an outstanding balance.';
 
                 list.appendChild(
-                    item
+                    empty
                 );
 
+                return;
             }
-        );
 
-    }
+
+            debtDates.forEach(
+                date => {
+
+                    const debts =
+                        Array.isArray(
+                            groupedDebts[date]
+                        )
+                            ? groupedDebts[date]
+                            : [];
+
+
+                    if (debts.length === 0) {
+                        return;
+                    }
+
+
+                    /*
+                    * Debt date heading
+                    */
+                    const dateHeading =
+                        document.createElement(
+                            'div'
+                        );
+
+                    dateHeading.className =
+                        'current-debt-date-heading';
+
+
+                    const parsedDate =
+                        new Date(
+                            date + 'T00:00:00'
+                        );
+
+
+                    if (
+                        !Number.isNaN(
+                            parsedDate.getTime()
+                        )
+                    ) {
+
+                        dateHeading.textContent =
+                            parsedDate.toLocaleDateString(
+                                'en-PH',
+                                {
+                                    month: 'long',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                }
+                            );
+
+                    } else {
+
+                        dateHeading.textContent =
+                            date;
+
+                    }
+
+
+                    list.appendChild(
+                        dateHeading
+                    );
+
+
+                    /*
+                    * Individual outstanding debts
+                    */
+                    debts.forEach(
+                        debt => {
+
+                            const item =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            item.className =
+                                'current-debt-item';
+
+
+                            const header =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            header.className =
+                                'current-debt-item-header';
+
+
+                            const name =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            name.className =
+                                'current-debt-customer';
+
+                            name.textContent =
+                                debt.customer_name;
+
+
+                            const amount =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            amount.className =
+                                'current-debt-amount';
+
+                            amount.textContent =
+                                formatDebtMoney(
+                                    debt.remaining_amount
+                                );
+
+
+                            header.appendChild(
+                                name
+                            );
+
+                            header.appendChild(
+                                amount
+                            );
+
+
+                            const details =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            details.className =
+                                'current-debt-item-details';
+
+
+                            const originalAmount =
+                                Number(
+                                    debt.original_amount
+                                ) || 0;
+
+
+                            const totalPaid =
+                                Number(
+                                    debt.total_paid
+                                ) || 0;
+
+
+                            const detailParts = [];
+
+
+                            if (originalAmount > 0) {
+
+                                detailParts.push(
+                                    'Original: ' +
+                                    formatDebtMoney(
+                                        originalAmount
+                                    )
+                                );
+
+                            }
+
+
+                            if (totalPaid > 0) {
+
+                                detailParts.push(
+                                    'Paid: −' +
+                                    formatDebtMoney(
+                                        totalPaid
+                                    )
+                                );
+
+                            }
+
+
+                            details.textContent =
+                                detailParts.length > 0
+                                    ? detailParts.join(' · ')
+                                    : 'Outstanding debt';
+
+
+                            item.appendChild(
+                                header
+                            );
+
+                            item.appendChild(
+                                details
+                            );
+
+
+                            list.appendChild(
+                                item
+                            );
+
+                        }
+                    );
+
+                }
+            );
+
+        }
 
 
     function formatDebtMoney(

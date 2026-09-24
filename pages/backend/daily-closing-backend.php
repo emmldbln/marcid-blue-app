@@ -65,114 +65,147 @@ function getCurrentDebt(
         ], 404);
     }
 
-    $businessDate =
-        $dailyRecord['business_date'];
-
+    $businessDate = $dailyRecord['business_date'];
 
     /*
-     * Historical customer balances.
+     * Get every historical delivery that was created
+     * before today's business date.
      *
-     * Only transactions before today's business date
-     * are included here. Today's draft is added separately.
+     * Each delivery is treated as its own debt record.
+     * Payments are matched through payments.delivery_id.
      */
     $stmt = $pdo->prepare(
         "SELECT
-            c.customer_id,
+            d.delivery_id,
+            d.customer_id,
             c.customer_name,
+            d.delivery_date,
+            d.amount_due,
 
             COALESCE(
-                (
-                    SELECT SUM(d.amount_due)
-                    FROM deliveries d
-                    WHERE d.customer_id = c.customer_id
-                      AND d.delivery_date < ?
-                ),
+                SUM(p.amount),
                 0
-            ) AS historical_due,
+            ) AS total_paid
 
-            COALESCE(
-                (
-                    SELECT SUM(p.amount)
-                    FROM payments p
-                    WHERE p.customer_id = c.customer_id
-                      AND p.payment_date < ?
-                ),
-                0
-            ) AS historical_paid
+         FROM deliveries d
 
-         FROM customers c
+         INNER JOIN customers c
+            ON c.customer_id = d.customer_id
 
-         WHERE TRIM(c.customer_name) <> ''
+         LEFT JOIN payments p
+            ON p.delivery_id = d.delivery_id
 
-         ORDER BY c.customer_name ASC"
+         WHERE d.delivery_date < ?
+
+         GROUP BY
+            d.delivery_id,
+            d.customer_id,
+            c.customer_name,
+            d.delivery_date,
+            d.amount_due
+
+         ORDER BY
+            d.delivery_date ASC,
+            d.delivery_id ASC"
     );
 
     $stmt->execute([
-        $businessDate,
         $businessDate
     ]);
 
+    $deliveryRows = $stmt->fetchAll(
+        PDO::FETCH_ASSOC
+    );
 
-    $customers =
-        $stmt->fetchAll(
-            PDO::FETCH_ASSOC
+
+    /*
+     * Build the active debt list.
+     */
+    $debts = [];
+
+    $totalDebt = 0.00;
+
+
+    foreach ($deliveryRows as $delivery) {
+
+        $originalAmount = round(
+            (float) $delivery['amount_due'],
+            2
+        );
+
+        $totalPaid = round(
+            (float) $delivery['total_paid'],
+            2
+        );
+
+        $remaining = round(
+            $originalAmount - $totalPaid,
+            2
         );
 
 
-    $balances = [];
+        /*
+         * Ignore fully paid deliveries.
+         *
+         * These will later be available through
+         * the Debt History endpoint.
+         */
+        if ($remaining <= 0) {
+            continue;
+        }
 
 
-    foreach ($customers as $customer) {
+        /*
+         * Ignore invalid/empty delivery amounts.
+         */
+        if ($originalAmount <= 0) {
+            continue;
+        }
 
-        $customerId =
-            (int) $customer['customer_id'];
 
-        $historicalDue =
-            round(
-                (float) $customer['historical_due'],
-                2
-            );
+        $debts[] = [
+            'delivery_id' =>
+                (int) $delivery['delivery_id'],
 
-        $historicalPaid =
-            round(
-                (float) $customer['historical_paid'],
-                2
-            );
-
-        $historicalBalance =
-            round(
-                $historicalDue -
-                $historicalPaid,
-                2
-            );
-
-        $balances[$customerId] = [
             'customer_id' =>
-                $customerId,
+                (int) $delivery['customer_id'],
 
             'customer_name' =>
-                $customer['customer_name'],
+                $delivery['customer_name'],
 
-            'historical_balance' =>
-                $historicalBalance,
+            'date_incurred' =>
+                $delivery['delivery_date'],
 
-            'today_due' =>
-                0.00,
+            'original_amount' =>
+                $originalAmount,
 
-            'today_payment' =>
-                0.00,
+            'total_paid' =>
+                $totalPaid,
 
-            'current_balance' =>
-                $historicalBalance,
+            'remaining_amount' =>
+                $remaining,
 
-            'credit' =>
-                0.00
+            'status' =>
+                'Outstanding'
         ];
+
+
+        $totalDebt = round(
+            $totalDebt + $remaining,
+            2
+        );
     }
 
 
     /*
      * Today's draft deliveries.
+     *
+     * These have not been permanently inserted into
+     * the deliveries table yet, so we display them
+     * temporarily as today's outstanding debt.
+     *
+     * They will become permanent delivery records
+     * when Finalize & Close Day is connected.
      */
     $draftShopDeliveries =
         $draft['shop']['deliveries']
@@ -183,7 +216,7 @@ function getCurrentDebt(
         ?? [];
 
 
-    $todayDeliveries = array_merge(
+    $todayDraftDeliveries = array_merge(
         is_array($draftShopDeliveries)
             ? $draftShopDeliveries
             : [],
@@ -193,330 +226,177 @@ function getCurrentDebt(
     );
 
 
-    foreach ($todayDeliveries as $delivery) {
+    /*
+     * Track today's draft debts separately.
+     */
+    foreach ($todayDraftDeliveries as $delivery) {
 
-        $customerName =
-            trim(
-                (string) (
-                    $delivery['customer']
-                    ?? ''
-                )
-            );
+        $customerName = trim(
+            (string) (
+                $delivery['customer']
+                ?? ''
+            )
+        );
 
         if ($customerName === '') {
             continue;
         }
 
-        $slim =
-            max(
-                0,
-                (float) (
-                    $delivery['slim']
-                    ?? 0
-                )
-            );
 
-        $round =
-            max(
-                0,
-                (float) (
-                    $delivery['round']
-                    ?? 0
-                )
-            );
+        $slim = max(
+            0,
+            (float) (
+                $delivery['slim']
+                ?? 0
+            )
+        );
 
-        $price =
-            max(
-                0,
-                (float) (
-                    $delivery['price']
-                    ?? 0
-                )
-            );
+        $round = max(
+            0,
+            (float) (
+                $delivery['round']
+                ?? 0
+            )
+        );
 
-        $todayDue =
-            round(
-                ($slim + $round) * $price,
-                2
-            );
+        $price = max(
+            0,
+            (float) (
+                $delivery['price']
+                ?? 0
+            )
+        );
+
+        $amountDue = round(
+            ($slim + $round) * $price,
+            2
+        );
 
 
-        if ($todayDue <= 0) {
+        if ($amountDue <= 0) {
             continue;
         }
 
 
-        $customerKey = null;
-
-        foreach ($balances as $id => $balance) {
-
-            if (
-                mb_strtolower(
-                    trim($balance['customer_name'])
-                )
-                ===
-                mb_strtolower(
-                    $customerName
-                )
-            ) {
-                $customerKey = $id;
-                break;
-            }
-        }
+        $payment = max(
+            0,
+            (float) (
+                $delivery['payment']
+                ?? 0
+            )
+        );
 
 
         /*
-         * A customer can be typed before the master
-         * customer record exists.
+         * Today's draft payment is applied against
+         * today's draft delivery.
          */
-        if ($customerKey === null) {
-
-            $customerKey =
-                'new:' .
-                mb_strtolower(
-                    $customerName
-                );
-
-            if (!isset($balances[$customerKey])) {
-
-                $balances[$customerKey] = [
-                    'customer_id' =>
-                        0,
-
-                    'customer_name' =>
-                        $customerName,
-
-                    'historical_balance' =>
-                        0.00,
-
-                    'today_due' =>
-                        0.00,
-
-                    'today_payment' =>
-                        0.00,
-
-                    'current_balance' =>
-                        0.00,
-
-                    'credit' =>
-                        0.00
-                ];
-            }
-        }
+        $remaining = round(
+            $amountDue - $payment,
+            2
+        );
 
 
-        $balances[$customerKey]['today_due'] =
-            round(
-                $balances[$customerKey]['today_due']
-                + $todayDue,
-                2
-            );
-    }
-
-
-    /*
-     * Today's actual payments.
-     *
-     * The payment is money received today,
-     * regardless of which debt it eventually settles.
-     */
-    $todayPayment = function (
-        array $deliveryRows
-    ) use (
-        &$balances
-    ): void {
-
-        foreach ($deliveryRows as $delivery) {
-
-            $customerName =
-                trim(
-                    (string) (
-                        $delivery['customer']
-                        ?? ''
-                    )
-                );
-
-            if ($customerName === '') {
-                continue;
-            }
-
-            $payment =
-                max(
-                    0,
-                    (float) (
-                        $delivery['payment']
-                        ?? 0
-                    )
-                );
-
-            if ($payment <= 0) {
-                continue;
-            }
-
-
-            $customerKey = null;
-
-            foreach ($balances as $id => $balance) {
-
-                if (
-                    mb_strtolower(
-                        trim($balance['customer_name'])
-                    )
-                    ===
-                    mb_strtolower(
-                        $customerName
-                    )
-                ) {
-                    $customerKey = $id;
-                    break;
-                }
-            }
-
-
-            if ($customerKey === null) {
-
-                $customerKey =
-                    'new:' .
-                    mb_strtolower(
-                        $customerName
-                    );
-
-                if (!isset($balances[$customerKey])) {
-
-                    $balances[$customerKey] = [
-                        'customer_id' => 0,
-                        'customer_name' => $customerName,
-                        'historical_balance' => 0.00,
-                        'today_due' => 0.00,
-                        'today_payment' => 0.00,
-                        'current_balance' => 0.00,
-                        'credit' => 0.00
-                    ];
-                }
-            }
-
-
-            $balances[$customerKey]['today_payment'] =
-                round(
-                    $balances[$customerKey]['today_payment']
-                    + $payment,
-                    2
-                );
-        }
-    };
-
-
-    $todayPayment(
-        is_array($draftShopDeliveries)
-            ? $draftShopDeliveries
-            : []
-    );
-
-    $todayPayment(
-        is_array($draftDriverDeliveries)
-            ? $draftDriverDeliveries
-            : []
-    );
-
-
-    /*
-     * Final customer-level balance:
-     *
-     * historical debt
-     * + today's delivery
-     * - today's payment
-     *
-     * Positive = debt
-     * Negative = customer credit
-     */
-    $result = [];
-
-    $totalDebt = 0.00;
-    $totalCredit = 0.00;
-
-
-    foreach ($balances as $balance) {
-
-        $grossBalance =
-            round(
-                $balance['historical_balance']
-                + $balance['today_due']
-                - $balance['today_payment'],
-                2
-            );
-
-
-        $currentDebt =
-            max(
-                0,
-                $grossBalance
-            );
-
-        $credit =
-            max(
-                0,
-                -$grossBalance
-            );
-
-
-        if (
-            $currentDebt <= 0 &&
-            $credit <= 0
-        ) {
+        /*
+         * If today's delivery has been fully paid,
+         * it does not belong in Current Debt.
+         */
+        if ($remaining <= 0) {
             continue;
         }
 
 
-        $balance['current_balance'] =
-            $currentDebt;
+        $debts[] = [
+            'delivery_id' =>
+                0,
 
-        $balance['credit'] =
-            $credit;
+            'customer_id' =>
+                0,
+
+            'customer_name' =>
+                $customerName,
+
+            'date_incurred' =>
+                $businessDate,
+
+            'original_amount' =>
+                $amountDue,
+
+            'total_paid' =>
+                $payment,
+
+            'remaining_amount' =>
+                $remaining,
+
+            'status' =>
+                'Outstanding',
+
+            'is_draft' =>
+                true
+        ];
 
 
-        $totalDebt =
-            round(
-                $totalDebt +
-                $currentDebt,
-                2
-            );
-
-        $totalCredit =
-            round(
-                $totalCredit +
-                $credit,
-                2
-            );
-
-
-        $result[] = $balance;
+        $totalDebt = round(
+            $totalDebt + $remaining,
+            2
+        );
     }
 
 
+    /*
+     * Sort all outstanding debts by their
+     * original debt date.
+     */
     usort(
-        $result,
+        $debts,
         function (
             array $a,
             array $b
         ): int {
 
-            if (
-                $a['current_balance'] ===
-                $b['current_balance']
-            ) {
-                return strcasecmp(
-                    $a['customer_name'],
-                    $b['customer_name']
+            $dateCompare =
+                strcmp(
+                    $a['date_incurred'],
+                    $b['date_incurred']
                 );
+
+            if ($dateCompare !== 0) {
+                return $dateCompare;
             }
 
-            return
-                $a['current_balance'] <
-                $b['current_balance']
-                    ? 1
-                    : -1;
+            return strcasecmp(
+                $a['customer_name'],
+                $b['customer_name']
+            );
         }
     );
+
+
+    /*
+     * Group debts by their original debt date.
+     *
+     * The frontend can use this to display:
+     *
+     * September 21, 2026
+     *   Allyssa
+     *   Matyline
+     *
+     * September 22, 2026
+     *   Cloud
+     */
+    $groupedDebts = [];
+
+
+    foreach ($debts as $debt) {
+
+        $date = $debt['date_incurred'];
+
+        if (!isset($groupedDebts[$date])) {
+            $groupedDebts[$date] = [];
+        }
+
+        $groupedDebts[$date][] = $debt;
+    }
 
 
     respond([
@@ -532,10 +412,13 @@ function getCurrentDebt(
             round($totalDebt, 2),
 
         'total_credit' =>
-            round($totalCredit, 2),
+            0.00,
 
-        'customers' =>
-            $result
+        'debts' =>
+            $debts,
+
+        'grouped_debts' =>
+            $groupedDebts
     ]);
 }
 
