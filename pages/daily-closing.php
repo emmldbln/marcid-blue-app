@@ -3184,7 +3184,7 @@ $walkInOtherSales = 0.00;
                                     >
 
                                         <option
-                                            value=""
+                                            value="Cash"
                                             selected
                                         >
                                             Cash
@@ -3358,7 +3358,7 @@ $walkInOtherSales = 0.00;
                                     >
 
                                         <option
-                                            value=""
+                                            value="Cash"
                                             selected
                                         >
                                             Cash
@@ -4887,7 +4887,7 @@ class DriverDeliveryPaymentController
                 >
 
                     <option
-                        value=""
+                        value="Cash"
                         selected
                     >
                         Cash

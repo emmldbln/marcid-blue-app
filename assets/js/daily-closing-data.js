@@ -1508,7 +1508,7 @@
                         )
                     ) {
 
-                        select.value = '';
+                        select.value = 'Cash';
 
                         return;
 
@@ -1960,20 +1960,89 @@
      * ---------------------------------------------------------
      */
 
-    window.marcidBlueDailyClosingData = {
-
+        window.marcidBlueDailyClosingData = {
         collectDraft,
-
         saveDraft,
-
         loadDraft,
-
-        reset:
-            resetDailyClosing,
-
-        getDailyId:
-            () => dailyId
-
+        reset: resetDailyClosing,
+        finalizeDailyClosing,
+        getDailyId: () => dailyId
     };
+
+
+    const finalizeButton = document.getElementById(
+        'finalizeDailyClosingButton'
+    );
+
+    if (finalizeButton) {
+        finalizeButton.addEventListener(
+            'click',
+            finalizeDailyClosing
+        );
+    }
+
+    async function finalizeDailyClosing() {
+    const button = document.getElementById('finalizeDailyClosingButton');
+
+    if (!button) {
+        console.error('Finalize button not found.');
+        return;
+    }
+
+    const confirmed = window.confirm(
+        'Are you sure you want to finalize and close this day?\n\n' +
+        'Once finalized, the daily record will be saved and closed.'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    button.disabled = true;
+    const originalText = button.textContent;
+    button.textContent = 'Finalizing...';
+
+    try {
+        // Make sure the latest values are saved into the draft first.
+        const draft = collectDraft();
+        await saveDraft(draft);
+
+        const formData = new FormData();
+        formData.append('action', 'finalize');
+        formData.append('daily_id', String(dailyId));
+
+        const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.message || 'Unable to finalize the daily closing.'
+            );
+        }
+
+        alert(
+            result.message ||
+            'Daily closing finalized successfully.'
+        );
+
+        // Reload the page so the newly saved/closed state is displayed.
+        window.location.reload();
+
+    } catch (error) {
+        console.error('Finalize daily closing error:', error);
+
+        alert(
+            error.message ||
+            'Unable to finalize the daily closing.'
+        );
+
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+}
 
 })();

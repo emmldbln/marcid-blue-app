@@ -606,8 +606,11 @@ function finalizeDailyClosing(
 ): void {
 
     /*
-     * Only an Open daily record can be finalized.
+     * =========================================================
+     * LOAD DAILY RECORD
+     * =========================================================
      */
+
     $stmt = $pdo->prepare(
         "SELECT
             daily_id,
@@ -622,19 +625,16 @@ function finalizeDailyClosing(
         $dailyId
     ]);
 
-    $dailyRecord =
-        $stmt->fetch(
-            PDO::FETCH_ASSOC
-        );
+    $dailyRecord = $stmt->fetch(
+        PDO::FETCH_ASSOC
+    );
 
     if (!$dailyRecord) {
         respond([
             'success' => false,
-            'message' =>
-                'Daily record not found.'
+            'message' => 'Daily record not found.'
         ], 404);
     }
-
 
     if ($dailyRecord['status'] !== 'Open') {
         respond([
@@ -646,16 +646,105 @@ function finalizeDailyClosing(
 
 
     /*
-     * The frontend will provide the final result
-     * after running the existing Daily Closing calculations.
+     * =========================================================
+     * LOAD THE SAVED AUTOSAVE DRAFT
+     * =========================================================
      */
-    $closingResult =
-        trim(
-            (string) (
-                $_POST['closing_result'] ?? ''
-            )
-        );
 
+    $stmt = $pdo->prepare(
+        "SELECT
+            draft_data
+         FROM daily_closing_drafts
+         WHERE daily_id = ?
+         LIMIT 1"
+    );
+
+    $stmt->execute([
+        $dailyId
+    ]);
+
+    $draftRow = $stmt->fetch(
+        PDO::FETCH_ASSOC
+    );
+
+    if (!$draftRow) {
+        respond([
+            'success' => false,
+            'message' =>
+                'There is no saved Daily Closing draft to finalize.'
+        ], 400);
+    }
+
+    $draft = json_decode(
+        $draftRow['draft_data'],
+        true
+    );
+
+    if (!is_array($draft)) {
+        respond([
+            'success' => false,
+            'message' =>
+                'The saved Daily Closing draft is invalid.'
+        ], 400);
+    }
+
+
+    /*
+     * =========================================================
+     * BASIC DRAFT STRUCTURE
+     * =========================================================
+     */
+
+    $shop = $draft['shop'] ?? [];
+    $driver = $draft['driver'] ?? [];
+
+    if (!is_array($shop)) {
+        $shop = [];
+    }
+
+    if (!is_array($driver)) {
+        $driver = [];
+    }
+
+    $shopDeliveries =
+        isset($shop['deliveries']) &&
+        is_array($shop['deliveries'])
+            ? $shop['deliveries']
+            : [];
+
+    $driverDeliveries =
+        isset($driver['deliveries']) &&
+        is_array($driver['deliveries'])
+            ? $driver['deliveries']
+            : [];
+
+    $shopExpenses =
+        isset($shop['expenses']) &&
+        is_array($shop['expenses'])
+            ? $shop['expenses']
+            : [];
+
+    $driverExpenses =
+        isset($driver['expenses']) &&
+        is_array($driver['expenses'])
+            ? $driver['expenses']
+            : [];
+
+
+    /*
+     * =========================================================
+     * CLOSING RESULT
+     * =========================================================
+     *
+     * The frontend will eventually send this when the
+     * Finalize button is connected.
+     */
+
+    $closingResult = trim(
+        (string) (
+            $_POST['closing_result'] ?? ''
+        )
+    );
 
     $allowedResults = [
         'Pending',
@@ -663,7 +752,6 @@ function finalizeDailyClosing(
         'Short',
         'Over'
     ];
-
 
     if (
         !in_array(
@@ -681,31 +769,22 @@ function finalizeDailyClosing(
 
 
     /*
-     * Actual station cash is optional for now.
-     *
-     * The existing Daily Closing calculation will determine
-     * what value should be sent here when we connect the
-     * Finalize & Close Day button.
+     * =========================================================
+     * ACTUAL STATION CASH
+     * =========================================================
      */
-    $actualStationCashRaw =
-        trim(
-            (string) (
-                $_POST['actual_station_cash']
-                ?? ''
-            )
-        );
 
+    $actualStationCashRaw = trim(
+        (string) (
+            $_POST['actual_station_cash'] ?? ''
+        )
+    );
 
     $actualStationCash = null;
 
-
     if ($actualStationCashRaw !== '') {
 
-        if (
-            !is_numeric(
-                $actualStationCashRaw
-            )
-        ) {
+        if (!is_numeric($actualStationCashRaw)) {
             respond([
                 'success' => false,
                 'message' =>
@@ -713,13 +792,10 @@ function finalizeDailyClosing(
             ], 400);
         }
 
-
-        $actualStationCash =
-            round(
-                (float) $actualStationCashRaw,
-                2
-            );
-
+        $actualStationCash = round(
+            (float) $actualStationCashRaw,
+            2
+        );
 
         if ($actualStationCash < 0) {
             respond([
@@ -732,13 +808,15 @@ function finalizeDailyClosing(
 
 
     /*
-     * Use the authenticated admin account.
+     * =========================================================
+     * AUTHENTICATED USER
+     * =========================================================
      */
+
     $savedBy =
         isset($_SESSION['user_id'])
             ? (int) $_SESSION['user_id']
             : 0;
-
 
     if ($savedBy <= 0) {
         respond([
@@ -749,33 +827,641 @@ function finalizeDailyClosing(
     }
 
 
+    /*
+     * =========================================================
+     * HELPERS
+     * =========================================================
+     */
+
+    $cleanMoney = static function (
+        $value
+    ): float {
+
+        if (
+            $value === null ||
+            $value === ''
+        ) {
+            return 0.00;
+        }
+
+        if (!is_numeric($value)) {
+            throw new InvalidArgumentException(
+                'A money value is invalid.'
+            );
+        }
+
+        $amount = round(
+            (float) $value,
+            2
+        );
+
+        if ($amount < 0) {
+            throw new InvalidArgumentException(
+                'Money values cannot be negative.'
+            );
+        }
+
+        return $amount;
+    };
+
+
+    $cleanQuantity = static function (
+        $value
+    ): int {
+
+        if (
+            $value === null ||
+            $value === ''
+        ) {
+            return 0;
+        }
+
+        if (
+            !is_numeric($value) ||
+            (float) $value < 0
+        ) {
+            throw new InvalidArgumentException(
+                'Delivery quantities must be zero or greater.'
+            );
+        }
+
+        return (int) round(
+            (float) $value
+        );
+    };
+
+
+    $cleanCustomerName = static function (
+        $value
+    ): string {
+
+        $name = trim(
+            (string) $value
+        );
+
+        if ($name === '') {
+            throw new InvalidArgumentException(
+                'Customer name is required for every delivery.'
+            );
+        }
+
+        return $name;
+    };
+
+
+    /*
+     * Resolve a customer by exact name, ignoring
+     * capitalization and surrounding spaces.
+     */
+    $findCustomer = function (
+        string $customerName
+    ) use ($pdo): array {
+
+        $stmt = $pdo->prepare(
+            "SELECT
+                customer_id,
+                customer_name
+             FROM customers
+             WHERE LOWER(TRIM(customer_name))
+                   = LOWER(TRIM(?))
+             ORDER BY customer_id ASC"
+        );
+
+        $stmt->execute([
+            $customerName
+        ]);
+
+        $customers = $stmt->fetchAll(
+            PDO::FETCH_ASSOC
+        );
+
+        if (count($customers) === 0) {
+            throw new InvalidArgumentException(
+                'Customer "' .
+                $customerName .
+                '" does not exist in the Customer List.'
+            );
+        }
+
+        if (count($customers) > 1) {
+            throw new InvalidArgumentException(
+                'Customer "' .
+                $customerName .
+                '" appears more than once in the Customer List.'
+            );
+        }
+
+        return $customers[0];
+    };
+
+
+    /*
+     * =========================================================
+     * TRANSACTION
+     * =========================================================
+     */
+
     try {
 
         $pdo->beginTransaction();
 
 
         /*
-         * Finalize the daily record.
-         *
-         * Open → Saved
-         *
-         * The closing result is stored independently
-         * from the daily record status.
+         * =====================================================
+         * 1. SAVE WALK-IN SALES
+         * =====================================================
          */
-        $stmt =
-            $pdo->prepare(
-                "UPDATE daily_records
-                 SET
-                    status = 'Saved',
-                    closing_result = ?,
-                    actual_station_cash = ?,
-                    saved_at = NOW(),
-                    saved_by = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                 WHERE daily_id = ?
-                   AND status = 'Open'"
+
+        $walkInCustomers = $cleanQuantity(
+            $shop['walk_in_customers'] ?? 0
+        );
+
+        $walkInPrice = 30.00;
+
+        /*
+         * Use the fixed ₱30 walk-in price.
+         */
+        $walkInSales = round(
+            $walkInCustomers * $walkInPrice,
+            2
+        );
+
+
+        /*
+         * Avoid creating a meaningless record when there
+         * were no walk-in customers.
+         */
+        if ($walkInCustomers > 0) {
+
+            $stmt = $pdo->prepare(
+                "INSERT INTO daily_sales (
+                    sales_date,
+                    walk_in_customers,
+                    walk_in_price,
+                    other_shop_payment,
+                    notes,
+                    daily_id,
+                    other_sales
+                 )
+                 VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?
+                 )"
             );
 
+            $stmt->execute([
+                $dailyRecord['business_date'],
+                $walkInCustomers,
+                $walkInPrice,
+                0.00,
+                null,
+                $dailyId,
+                0.00
+            ]);
+        }
+
+
+        /*
+         * =====================================================
+         * 2. DELIVERY INSERT HELPER
+         * =====================================================
+         *
+         * This handles both Station and Driver deliveries.
+         */
+
+        $insertDelivery = function (
+            array $delivery,
+            string $collectionLocation
+        ) use (
+            $pdo,
+            $dailyRecord,
+            $dailyId,
+            $cleanMoney,
+            $cleanQuantity,
+            $cleanCustomerName,
+            $findCustomer
+        ): void {
+
+            $customerName =
+                $cleanCustomerName(
+                    $delivery['customer'] ?? ''
+                );
+
+            $customer =
+                $findCustomer(
+                    $customerName
+                );
+
+            $customerId =
+                (int) $customer['customer_id'];
+
+            $slim =
+                $cleanQuantity(
+                    $delivery['slim'] ?? 0
+                );
+
+            $round =
+                $cleanQuantity(
+                    $delivery['round'] ?? 0
+                );
+
+            $price =
+                $cleanMoney(
+                    $delivery['price'] ?? 0
+                );
+
+            $payment =
+                $cleanMoney(
+                    $delivery['payment'] ?? 0
+                );
+
+            $method =
+                trim(
+                    (string) (
+                        $delivery['method']
+                        ?? ''
+                    )
+                );
+
+            /*
+             * Empty method means Cash because the UI
+             * defaults to Cash.
+             */
+            if ($method === '') {
+                $method = 'Cash';
+            }
+
+            $allowedMethods = [
+                'Cash',
+                'GCash',
+                'Bank Transfer',
+                'Other'
+            ];
+
+            if (
+                !in_array(
+                    $method,
+                    $allowedMethods,
+                    true
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Invalid payment method for customer "' .
+                    $customerName .
+                    '".'
+                );
+            }
+
+            $gallons =
+                $slim + $round;
+
+            /*
+             * Ignore completely empty rows.
+             */
+            if (
+                $gallons <= 0 &&
+                $payment <= 0
+            ) {
+                return;
+            }
+
+            if ($gallons <= 0) {
+                throw new InvalidArgumentException(
+                    'Customer "' .
+                    $customerName .
+                    '" has a payment but no delivery quantity.'
+                );
+            }
+
+            if ($price <= 0) {
+                throw new InvalidArgumentException(
+                    'Customer "' .
+                    $customerName .
+                    '" must have a valid Price/Gal.'
+                );
+            }
+
+            $amountDue = round(
+                $gallons * $price,
+                2
+            );
+
+            /*
+             * Payment may be zero for an unpaid delivery.
+             * Overpayment is allowed because the existing UI
+             * explicitly supports an Over balance.
+             */
+            if ($payment < 0) {
+                throw new InvalidArgumentException(
+                    'Payment cannot be negative for customer "' .
+                    $customerName .
+                    '".'
+                );
+            }
+
+            $stmt = $pdo->prepare(
+                "INSERT INTO deliveries (
+                    customer_id,
+                    delivery_date,
+                    slim_quantity,
+                    round_quantity,
+                    price_per_gallon,
+                    amount_due,
+                    notes,
+                    daily_id
+                 )
+                 VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?
+                 )"
+            );
+
+            $stmt->execute([
+                $customerId,
+                $dailyRecord['business_date'],
+                $slim,
+                $round,
+                $price,
+                $amountDue,
+                null,
+                $dailyId
+            ]);
+
+            $deliveryId =
+                (int) $pdo->lastInsertId();
+
+
+            /*
+             * Save an actual payment only when money
+             * was received.
+             */
+            if ($payment > 0) {
+
+                $stmt = $pdo->prepare(
+                    "INSERT INTO payments (
+                        delivery_id,
+                        customer_id,
+                        payment_date,
+                        amount,
+                        payment_method,
+                        collection_location,
+                        notes,
+                        daily_id
+                     )
+                     VALUES (
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                     )"
+                );
+
+                $stmt->execute([
+                    $deliveryId,
+                    $customerId,
+                    $dailyRecord['business_date'],
+                    $payment,
+                    $method,
+                    $collectionLocation,
+                    null,
+                    $dailyId
+                ]);
+            }
+        };
+
+
+        /*
+         * =====================================================
+         * 3. SAVE SHOP DELIVERIES
+         * =====================================================
+         */
+
+        foreach (
+            $shopDeliveries
+            as $delivery
+        ) {
+
+            if (!is_array($delivery)) {
+                continue;
+            }
+
+            $insertDelivery(
+                $delivery,
+                'Station'
+            );
+        }
+
+
+        /*
+         * =====================================================
+         * 4. SAVE DRIVER DELIVERIES
+         * =====================================================
+         */
+
+        foreach (
+            $driverDeliveries
+            as $delivery
+        ) {
+
+            if (!is_array($delivery)) {
+                continue;
+            }
+
+            $insertDelivery(
+                $delivery,
+                'Driver'
+            );
+        }
+
+
+        /*
+         * =====================================================
+         * 5. SAVE SHOP EXPENSES
+         * =====================================================
+         */
+
+        $insertExpense = function (
+            array $expense,
+            string $location
+        ) use (
+            $pdo,
+            $dailyRecord,
+            $dailyId,
+            $cleanMoney
+        ): void {
+
+            $category =
+                trim(
+                    (string) (
+                        $expense['category']
+                        ?? ''
+                    )
+                );
+
+            $amount =
+                $cleanMoney(
+                    $expense['amount'] ?? 0
+                );
+
+            $description =
+                trim(
+                    (string) (
+                        $expense['name']
+                        ?? ''
+                    )
+                );
+
+            /*
+             * Ignore completely empty expense rows.
+             */
+            if (
+                $category === '' &&
+                $amount <= 0 &&
+                $description === ''
+            ) {
+                return;
+            }
+
+            $allowedCategories = [
+                'Gas',
+                'Food',
+                'Cash Advance',
+                'Miscellaneous',
+                'Others'
+            ];
+
+            /*
+             * The current UI contains "Others", while
+             * the database uses "Miscellaneous".
+             */
+            if ($category === 'Others') {
+                $category = 'Miscellaneous';
+            }
+
+            if (
+                !in_array(
+                    $category,
+                    $allowedCategories,
+                    true
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Invalid expense category.'
+                );
+            }
+
+            if ($amount <= 0) {
+                throw new InvalidArgumentException(
+                    'Expense amount must be greater than zero.'
+                );
+            }
+
+            $stmt = $pdo->prepare(
+                "INSERT INTO expenses (
+                    expense_date,
+                    category,
+                    expense_location,
+                    description,
+                    amount,
+                    notes,
+                    daily_id
+                 )
+                 VALUES (
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?
+                 )"
+            );
+
+            $stmt->execute([
+                $dailyRecord['business_date'],
+                $category,
+                $location,
+                $description !== ''
+                    ? $description
+                    : null,
+                $amount,
+                null,
+                $dailyId
+            ]);
+        };
+
+
+        foreach (
+            $shopExpenses
+            as $expense
+        ) {
+
+            if (!is_array($expense)) {
+                continue;
+            }
+
+            $insertExpense(
+                $expense,
+                'Station'
+            );
+        }
+
+
+        /*
+         * =====================================================
+         * 6. SAVE DRIVER EXPENSES
+         * =====================================================
+         */
+
+        foreach (
+            $driverExpenses
+            as $expense
+        ) {
+
+            if (!is_array($expense)) {
+                continue;
+            }
+
+            $insertExpense(
+                $expense,
+                'Driver'
+            );
+        }
+
+
+        /*
+         * =====================================================
+         * 7. FINALIZE DAILY RECORD
+         * =====================================================
+         */
+
+        $stmt = $pdo->prepare(
+            "UPDATE daily_records
+             SET
+                status = 'Saved',
+                closing_result = ?,
+                actual_station_cash = ?,
+                saved_at = NOW(),
+                saved_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE daily_id = ?
+               AND status = 'Open'"
+        );
 
         $stmt->execute([
             $closingResult,
@@ -784,9 +1470,7 @@ function finalizeDailyClosing(
             $dailyId
         ]);
 
-
         if ($stmt->rowCount() !== 1) {
-
             throw new RuntimeException(
                 'The daily record could not be finalized.'
             );
@@ -794,20 +1478,31 @@ function finalizeDailyClosing(
 
 
         /*
-         * The draft is no longer needed because the day
-         * has now been permanently saved.
+         * =====================================================
+         * 8. DELETE TEMPORARY DRAFT
+         * =====================================================
+         *
+         * This is deliberately last.
+         *
+         * If anything above fails, the transaction rolls back
+         * and the draft remains available.
          */
-        $stmt =
-            $pdo->prepare(
-                "DELETE FROM daily_closing_drafts
-                 WHERE daily_id = ?"
-            );
 
+        $stmt = $pdo->prepare(
+            "DELETE FROM daily_closing_drafts
+             WHERE daily_id = ?"
+        );
 
         $stmt->execute([
             $dailyId
         ]);
 
+
+        /*
+         * =====================================================
+         * COMMIT
+         * =====================================================
+         */
 
         $pdo->commit();
 
@@ -815,20 +1510,16 @@ function finalizeDailyClosing(
         respond([
             'success' => true,
             'action' => 'finalize',
-            'daily_id' =>
-                $dailyId,
+            'daily_id' => $dailyId,
             'business_date' =>
                 $dailyRecord['business_date'],
-            'status' =>
-                'Saved',
-            'closing_result' =>
-                $closingResult,
+            'status' => 'Saved',
+            'closing_result' => $closingResult,
             'actual_station_cash' =>
                 $actualStationCash,
             'saved_at' =>
                 date('Y-m-d H:i:s'),
-            'saved_by' =>
-                $savedBy
+            'saved_by' => $savedBy
         ]);
 
     } catch (Throwable $e) {
@@ -837,12 +1528,12 @@ function finalizeDailyClosing(
             $pdo->rollBack();
         }
 
-
-        throw $e;
+        respond([
+            'success' => false,
+            'message' => $e->getMessage()
+        ], 400);
     }
 }
-
-
 
 
 try {
