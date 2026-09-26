@@ -176,10 +176,10 @@ function ensureCreditTable(
  */
 
 function getCurrentDebt(
-    PDO $pdo,
-    int $dailyId,
-    array $draft
-): void {
+        PDO $pdo,
+        int $dailyId,
+        array $draft
+    ): void {
 
     /*
      * =========================================================
@@ -255,6 +255,11 @@ function getCurrentDebt(
      * =========================================================
      * PERMANENT HISTORICAL DEBT
      * =========================================================
+     *
+     * Load all previously-created deliveries that still have
+     * an outstanding balance.
+     *
+     * These are later adjusted by today's draft payments.
      */
 
     $stmt = $pdo->prepare(
@@ -304,13 +309,16 @@ function getCurrentDebt(
 
     /*
      * =========================================================
-     * BUILD ACTIVE DEBT
+     * BUILD HISTORICAL DEBT BUCKETS
      * =========================================================
+     *
+     * We keep these separately so draft payments can be
+     * temporarily allocated against them.
      */
 
-    $debts = [];
+    $historicalDebts = [];
 
-    $totalDebt = 0.00;
+    $customerDebtBuckets = [];
 
 
     foreach ($deliveryRows as $delivery) {
@@ -334,25 +342,21 @@ function getCurrentDebt(
             );
 
 
-        /*
-         * Ignore invalid deliveries.
-         */
-
         if ($originalAmount <= 0) {
             continue;
         }
 
-
-        /*
-         * Fully paid deliveries are no longer Current Debt.
-         */
 
         if ($remaining <= 0) {
             continue;
         }
 
 
-        $debts[] = [
+        $debtIndex =
+            count($historicalDebts);
+
+
+        $historicalDebts[] = [
 
             'delivery_id' =>
                 (int) $delivery['delivery_id'],
@@ -383,11 +387,19 @@ function getCurrentDebt(
         ];
 
 
-        $totalDebt =
-            round(
-                $totalDebt + $remaining,
-                2
-            );
+        $customerId =
+            (int) $delivery['customer_id'];
+
+
+        if (!isset($customerDebtBuckets[$customerId])) {
+            $customerDebtBuckets[$customerId] = [];
+        }
+
+
+        $customerDebtBuckets[$customerId][] = [
+            'type' => 'historical',
+            'index' => $debtIndex
+        ];
     }
 
 
@@ -395,11 +407,6 @@ function getCurrentDebt(
      * =========================================================
      * TODAY'S DRAFT DELIVERIES
      * =========================================================
-     *
-     * These have not yet been finalized.
-     *
-     * They remain temporary and are included in Current Debt
-     * while today's Daily Closing is being edited.
      */
 
     $draftShopDeliveries =
@@ -424,6 +431,18 @@ function getCurrentDebt(
         );
 
 
+    /*
+     * =========================================================
+     * CUSTOMER LOOKUP
+     * =========================================================
+     *
+     * Draft rows may contain customer_id/customerId.
+     * If they do not, resolve the customer using the name.
+     */
+
+    $customerLookup = [];
+
+
     foreach ($todayDraftDeliveries as $delivery) {
 
         $customerName =
@@ -437,6 +456,110 @@ function getCurrentDebt(
 
         if ($customerName === '') {
             continue;
+        }
+
+
+        $customerId =
+            (int) (
+                $delivery['customer_id']
+                ?? $delivery['customerId']
+                ?? 0
+            );
+
+
+        if ($customerId > 0) {
+
+            $customerLookup[$customerName] =
+                $customerId;
+
+            continue;
+        }
+
+
+        if (isset($customerLookup[$customerName])) {
+            continue;
+        }
+
+
+        $stmt = $pdo->prepare(
+            "SELECT
+                customer_id
+             FROM customers
+             WHERE customer_name = ?
+             LIMIT 1"
+        );
+
+        $stmt->execute([
+            $customerName
+        ]);
+
+
+        $foundCustomer =
+            $stmt->fetch(
+                PDO::FETCH_ASSOC
+            );
+
+
+        if ($foundCustomer) {
+
+            $customerLookup[$customerName] =
+                (int) $foundCustomer['customer_id'];
+        }
+    }
+
+
+    /*
+     * =========================================================
+     * DRAFT DEBT + DRAFT CREDIT PREVIEW
+     * =========================================================
+     *
+     * This is the important part.
+     *
+     * For every draft delivery:
+     *
+     * 1. Payment covers the current delivery.
+     * 2. Remaining payment covers older debt.
+     * 3. Any remaining money becomes temporary credit.
+     *
+     * Nothing is written to MySQL here.
+     */
+
+    $draftDebts = [];
+
+    $draftCredits = [];
+
+
+    foreach ($todayDraftDeliveries as $delivery) {
+
+        $customerName =
+            trim(
+                (string) (
+                    $delivery['customer']
+                    ?? ''
+                )
+            );
+
+
+        if ($customerName === '') {
+            continue;
+        }
+
+
+        $customerId =
+            (int) (
+                $delivery['customer_id']
+                ?? $delivery['customerId']
+                ?? 0
+            );
+
+
+        if ($customerId <= 0) {
+
+            $customerId =
+                (int) (
+                    $customerLookup[$customerName]
+                    ?? 0
+                );
         }
 
 
@@ -492,40 +615,261 @@ function getCurrentDebt(
             );
 
 
-        /*
-         * IMPORTANT:
-         *
-         * Current Debt display only considers the payment
-         * entered against today's draft delivery.
-         *
-         * It does NOT perform previous-debt allocation.
-         *
-         * Allocation happens only during Finalize.
-         */
-
-        $remaining =
+        $paymentRemaining =
             round(
-                $amountDue - $payment,
+                $payment,
                 2
             );
 
 
         /*
-         * Fully paid draft deliveries are not debt.
+         * -----------------------------------------------------
+         * STEP 1
+         * Pay the current draft delivery.
+         * -----------------------------------------------------
          */
 
-        if ($remaining <= 0) {
-            continue;
+        $currentPayment =
+            min(
+                $paymentRemaining,
+                $amountDue
+            );
+
+
+        $currentPayment =
+            round(
+                $currentPayment,
+                2
+            );
+
+
+        $paymentRemaining =
+            round(
+                $paymentRemaining -
+                $currentPayment,
+                2
+            );
+
+
+        $currentRemaining =
+            round(
+                $amountDue -
+                $currentPayment,
+                2
+            );
+
+
+        /*
+         * -----------------------------------------------------
+         * STEP 2
+         * Use remaining payment against older debt.
+         *
+         * This includes:
+         *
+         * - Historical debt
+         * - Earlier draft deliveries today
+         * -----------------------------------------------------
+         */
+
+        if (
+            $paymentRemaining > 0.009
+            && $customerId > 0
+            && isset(
+                $customerDebtBuckets[$customerId]
+            )
+        ) {
+
+            foreach (
+                $customerDebtBuckets[$customerId]
+                as $bucket
+            ) {
+
+                if ($paymentRemaining <= 0.009) {
+                    break;
+                }
+
+
+                $bucketRemaining = 0.00;
+
+
+                if (
+                    $bucket['type'] ===
+                    'historical'
+                ) {
+
+                    $bucketIndex =
+                        $bucket['index'];
+
+
+                    $bucketRemaining =
+                        $historicalDebts[
+                            $bucketIndex
+                        ]['remaining_amount'];
+
+                } else {
+
+                    $bucketIndex =
+                        $bucket['index'];
+
+
+                    $bucketRemaining =
+                        $draftDebts[
+                            $bucketIndex
+                        ]['remaining_amount'];
+                }
+
+
+                if ($bucketRemaining <= 0) {
+                    continue;
+                }
+
+
+                $debtPayment =
+                    min(
+                        $paymentRemaining,
+                        $bucketRemaining
+                    );
+
+
+                $debtPayment =
+                    round(
+                        $debtPayment,
+                        2
+                    );
+
+
+                if (
+                    $bucket['type'] ===
+                    'historical'
+                ) {
+
+                    $historicalDebts[
+                        $bucketIndex
+                    ]['total_paid'] =
+                        round(
+                            $historicalDebts[
+                                $bucketIndex
+                            ]['total_paid']
+                            + $debtPayment,
+                            2
+                        );
+
+
+                    $historicalDebts[
+                        $bucketIndex
+                    ]['remaining_amount'] =
+                        round(
+                            $historicalDebts[
+                                $bucketIndex
+                            ]['remaining_amount']
+                            - $debtPayment,
+                            2
+                        );
+
+                } else {
+
+                    $draftDebts[
+                        $bucketIndex
+                    ]['total_paid'] =
+                        round(
+                            $draftDebts[
+                                $bucketIndex
+                            ]['total_paid']
+                            + $debtPayment,
+                            2
+                        );
+
+
+                    $draftDebts[
+                        $bucketIndex
+                    ]['remaining_amount'] =
+                        round(
+                            $draftDebts[
+                                $bucketIndex
+                            ]['remaining_amount']
+                            - $debtPayment,
+                            2
+                        );
+                }
+
+
+                $paymentRemaining =
+                    round(
+                        $paymentRemaining -
+                        $debtPayment,
+                        2
+                    );
+            }
         }
 
 
-        $debts[] = [
+        /*
+         * -----------------------------------------------------
+         * STEP 3
+         * Anything still remaining is customer credit.
+         * -----------------------------------------------------
+         */
+
+        if (
+            $paymentRemaining > 0.009
+            && $customerId > 0
+        ) {
+
+            if (
+                !isset(
+                    $draftCredits[$customerId]
+                )
+            ) {
+
+                $draftCredits[$customerId] = [
+
+                    'customer_id' =>
+                        $customerId,
+
+                    'customer_name' =>
+                        $customerName,
+
+                    'total_credit' =>
+                        0.00
+                ];
+            }
+
+
+            $draftCredits[$customerId][
+                'total_credit'
+            ] =
+                round(
+                    $draftCredits[$customerId][
+                        'total_credit'
+                    ]
+                    + $paymentRemaining,
+                    2
+                );
+        }
+
+
+        /*
+         * -----------------------------------------------------
+         * Add current draft delivery to the debt list.
+         *
+         * Important:
+         *
+         * The delivery is added AFTER its own payment
+         * is processed, so its remaining amount is correct.
+         * -----------------------------------------------------
+         */
+
+        $draftDebtIndex =
+            count($draftDebts);
+
+
+        $draftDebts[] = [
 
             'delivery_id' =>
                 0,
 
             'customer_id' =>
-                0,
+                $customerId,
 
             'customer_name' =>
                 $customerName,
@@ -537,10 +881,10 @@ function getCurrentDebt(
                 $amountDue,
 
             'total_paid' =>
-                $payment,
+                $currentPayment,
 
             'remaining_amount' =>
-                $remaining,
+                $currentRemaining,
 
             'status' =>
                 'Outstanding',
@@ -550,9 +894,122 @@ function getCurrentDebt(
         ];
 
 
+        /*
+         * Add this draft delivery as an older debt bucket
+         * for subsequent deliveries from the same customer.
+         */
+
+        if ($customerId > 0) {
+
+            if (
+                !isset(
+                    $customerDebtBuckets[$customerId]
+                )
+            ) {
+
+                $customerDebtBuckets[$customerId] = [];
+            }
+
+
+            /*
+             * Insert at the end because deliveries are
+             * processed in their draft order.
+             */
+
+            $customerDebtBuckets[$customerId][] = [
+
+                'type' =>
+                    'draft',
+
+                'index' =>
+                    $draftDebtIndex
+            ];
+        }
+    }
+
+
+    /*
+     * =========================================================
+     * BUILD ACTIVE DEBT
+     * =========================================================
+     */
+
+    $debts = [];
+
+    $totalDebt = 0.00;
+
+
+    /*
+     * Historical debt after today's draft payments.
+     */
+
+    foreach (
+        $historicalDebts
+        as $debt
+    ) {
+
+        $remaining =
+            round(
+                (float) $debt['remaining_amount'],
+                2
+            );
+
+
+        if ($remaining <= 0.009) {
+            continue;
+        }
+
+
+        $debt['remaining_amount'] =
+            $remaining;
+
+
+        $debts[] =
+            $debt;
+
+
         $totalDebt =
             round(
-                $totalDebt + $remaining,
+                $totalDebt +
+                $remaining,
+                2
+            );
+    }
+
+
+    /*
+     * Today's draft debt after payment allocation.
+     */
+
+    foreach (
+        $draftDebts
+        as $debt
+    ) {
+
+        $remaining =
+            round(
+                (float) $debt['remaining_amount'],
+                2
+            );
+
+
+        if ($remaining <= 0.009) {
+            continue;
+        }
+
+
+        $debt['remaining_amount'] =
+            $remaining;
+
+
+        $debts[] =
+            $debt;
+
+
+        $totalDebt =
+            round(
+                $totalDebt +
+                $remaining,
                 2
             );
     }
@@ -560,12 +1017,8 @@ function getCurrentDebt(
 
     /*
      * =========================================================
-     * CUSTOMER CREDITS
+     * CUSTOMER CREDITS FROM DATABASE
      * =========================================================
-     *
-     * Credits are currently only accumulated.
-     *
-     * They are NOT automatically used against future deliveries.
      */
 
     $stmt = $pdo->query(
@@ -596,12 +1049,13 @@ function getCurrentDebt(
         );
 
 
-    $credits = [];
-
-    $totalCredit = 0.00;
+    $creditsByCustomer = [];
 
 
-    foreach ($creditRows as $credit) {
+    foreach (
+        $creditRows
+        as $credit
+    ) {
 
         $customerCredit =
             round(
@@ -615,10 +1069,14 @@ function getCurrentDebt(
         }
 
 
-        $creditItem = [
+        $customerId =
+            (int) $credit['customer_id'];
+
+
+        $creditsByCustomer[$customerId] = [
 
             'customer_id' =>
-                (int) $credit['customer_id'],
+                $customerId,
 
             'customer_name' =>
                 $credit['customer_name'],
@@ -626,16 +1084,106 @@ function getCurrentDebt(
             'total_credit' =>
                 $customerCredit
         ];
+    }
 
 
-        $credits[] =
-            $creditItem;
+    /*
+     * =========================================================
+     * ADD TODAY'S DRAFT CREDITS
+     * =========================================================
+     */
 
+    foreach (
+        $draftCredits
+        as $customerId =>
+        $draftCredit
+    ) {
+
+        $draftAmount =
+            round(
+                (float) $draftCredit['total_credit'],
+                2
+            );
+
+
+        if ($draftAmount <= 0.009) {
+            continue;
+        }
+
+
+        if (
+            isset(
+                $creditsByCustomer[$customerId]
+            )
+        ) {
+
+            $creditsByCustomer[$customerId][
+                'total_credit'
+            ] =
+                round(
+                    $creditsByCustomer[$customerId][
+                        'total_credit'
+                    ]
+                    + $draftAmount,
+                    2
+                );
+
+        } else {
+
+            $creditsByCustomer[$customerId] = [
+
+                'customer_id' =>
+                    $customerId,
+
+                'customer_name' =>
+                    $draftCredit['customer_name'],
+
+                'total_credit' =>
+                    $draftAmount
+            ];
+        }
+    }
+
+
+    /*
+     * =========================================================
+     * FINAL CREDIT LIST
+     * =========================================================
+     */
+
+    $credits =
+        array_values(
+            $creditsByCustomer
+        );
+
+
+    usort(
+        $credits,
+        function (
+            array $a,
+            array $b
+        ): int {
+
+            return strcasecmp(
+                $a['customer_name'],
+                $b['customer_name']
+            );
+        }
+    );
+
+
+    $totalCredit = 0.00;
+
+
+    foreach (
+        $credits
+        as $credit
+    ) {
 
         $totalCredit =
             round(
                 $totalCredit +
-                $customerCredit,
+                (float) $credit['total_credit'],
                 2
             );
     }
@@ -683,7 +1231,10 @@ function getCurrentDebt(
     $groupedDebts = [];
 
 
-    foreach ($debts as $debt) {
+    foreach (
+        $debts
+        as $debt
+    ) {
 
         $date =
             $debt['date_incurred'];
@@ -1572,8 +2123,8 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * Completely empty rows are ignored.
-                 */
+                * Completely empty rows are ignored.
+                */
 
                 if (
                     $gallons <= 0 &&
@@ -1611,10 +2162,10 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * =================================================
-                 * PAYMENT VALIDATION
-                 * =================================================
-                 */
+                * =====================================================
+                * PAYMENT VALIDATION
+                * =====================================================
+                */
 
                 if ($payment < 0) {
 
@@ -1627,10 +2178,10 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * =================================================
-                 * SAVE DELIVERY
-                 * =================================================
-                 */
+                * =====================================================
+                * SAVE DELIVERY
+                * =====================================================
+                */
 
                 $stmt =
                     $pdo->prepare(
@@ -1674,20 +2225,28 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * =================================================
-                 * PAYMENT ALLOCATION
-                 * =================================================
-                 *
-                 * Payment order:
-                 *
-                 * 1. Current delivery
-                 * 2. Oldest previous outstanding debt
-                 * 3. Customer credit
-                 *
-                 * Current Debt does NOT perform this allocation.
-                 * Finalize is the only place where payment
-                 * allocation happens.
-                 */
+                * =====================================================
+                * PAYMENT ALLOCATION
+                * =====================================================
+                *
+                * Payment is classified in this exact order:
+                *
+                * 1. Current delivery
+                * 2. Oldest outstanding delivery belonging
+                *    to the same customer
+                * 3. Customer Credit
+                *
+                * IMPORTANT:
+                *
+                * Previous debt includes:
+                *
+                * - older dates
+                * - earlier deliveries from TODAY
+                *
+                * The current delivery itself is excluded because
+                * only delivery_id values lower than the current
+                * delivery_id are considered.
+                */
 
 
                 if ($payment <= 0) {
@@ -1696,11 +2255,14 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * -------------------------------------------------
-                 * STEP 1
-                 * Pay today's delivery first.
-                 * -------------------------------------------------
-                 */
+                * =====================================================
+                * STEP 1
+                * CURRENT DELIVERY PAYMENT
+                * =====================================================
+                *
+                * Always pay the delivery that the payment was
+                * entered against first.
+                */
 
                 $paymentRemaining =
                     round(
@@ -1765,21 +2327,28 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * -------------------------------------------------
-                 * STEP 2
-                 * Pay previous outstanding debt.
-                 *
-                 * Oldest debt is paid first.
-                 * -------------------------------------------------
-                 */
+                * =====================================================
+                * STEP 2
+                * PREVIOUS OUTSTANDING DEBT
+                * =====================================================
+                *
+                * Any remaining payment is now used against the
+                * customer's oldest unpaid delivery.
+                *
+                * This includes earlier deliveries made TODAY.
+                *
+                * delivery_id < current delivery_id guarantees that
+                * the current delivery is never selected here.
+                */
 
-                if ($paymentRemaining > 0) {
+                if ($paymentRemaining > 0.009) {
 
                     $stmt =
                         $pdo->prepare(
                             "SELECT
                                 d.delivery_id,
                                 d.amount_due,
+
                                 COALESCE(
                                     SUM(p.amount),
                                     0
@@ -1788,10 +2357,11 @@ function finalizeDailyClosing(
                             FROM deliveries d
 
                             LEFT JOIN payments p
-                                ON p.delivery_id = d.delivery_id
+                                ON p.delivery_id =
+                                d.delivery_id
 
                             WHERE d.customer_id = ?
-                              AND d.delivery_date < ?
+                            AND d.delivery_id < ?
 
                             GROUP BY
                                 d.delivery_id,
@@ -1800,7 +2370,10 @@ function finalizeDailyClosing(
 
                             HAVING
                                 d.amount_due -
-                                COALESCE(SUM(p.amount), 0) > 0
+                                COALESCE(
+                                    SUM(p.amount),
+                                    0
+                                ) > 0.009
 
                             ORDER BY
                                 d.delivery_date ASC,
@@ -1812,7 +2385,7 @@ function finalizeDailyClosing(
 
                     $stmt->execute([
                         $customerId,
-                        $dailyRecord['business_date']
+                        $deliveryId
                     ]);
 
 
@@ -1827,21 +2400,23 @@ function finalizeDailyClosing(
                         as $previousDebt
                     ) {
 
-                        if ($paymentRemaining <= 0) {
+                        if ($paymentRemaining <= 0.009) {
                             break;
                         }
 
 
                         $previousAmountDue =
                             round(
-                                (float) $previousDebt['amount_due'],
+                                (float)
+                                $previousDebt['amount_due'],
                                 2
                             );
 
 
                         $previousTotalPaid =
                             round(
-                                (float) $previousDebt['total_paid'],
+                                (float)
+                                $previousDebt['total_paid'],
                                 2
                             );
 
@@ -1854,7 +2429,7 @@ function finalizeDailyClosing(
                             );
 
 
-                        if ($previousRemaining <= 0) {
+                        if ($previousRemaining <= 0.009) {
                             continue;
                         }
 
@@ -1866,14 +2441,22 @@ function finalizeDailyClosing(
                             );
 
 
-                        if ($debtPayment <= 0) {
+                        $debtPayment =
+                            round(
+                                $debtPayment,
+                                2
+                            );
+
+
+                        if ($debtPayment <= 0.009) {
                             continue;
                         }
 
 
                         /*
-                         * Payment points to the ORIGINAL delivery.
-                         */
+                        * The payment is attached to the ORIGINAL
+                        * delivery that created the debt.
+                        */
 
                         $stmt =
                             $pdo->prepare(
@@ -1901,13 +2484,21 @@ function finalizeDailyClosing(
 
 
                         $stmt->execute([
-                            (int) $previousDebt['delivery_id'],
+                            (int)
+                            $previousDebt['delivery_id'],
+
                             $customerId,
+
                             $dailyRecord['business_date'],
+
                             $debtPayment,
+
                             $method,
+
                             $collectionLocation,
+
                             'Payment toward previous debt',
+
                             $dailyId
                         ]);
 
@@ -1923,31 +2514,28 @@ function finalizeDailyClosing(
 
 
                 /*
-                 * -------------------------------------------------
-                 * STEP 3
-                 * Remaining money becomes customer credit.
-                 * -------------------------------------------------
-                 *
-                 * Examples:
-                 *
-                 * Delivery = 140
-                 * Payment  = 280
-                 * Previous debt = 0
-                 *
-                 * Current delivery receives 140.
-                 * Remaining 140 becomes credit.
-                 *
-                 *
-                 * Delivery = 140
-                 * Previous debt = 100
-                 * Payment = 280
-                 *
-                 * Current delivery = 140
-                 * Previous debt = 100
-                 * Remaining 40 = customer credit.
-                 */
+                * =====================================================
+                * STEP 3
+                * TRUE OVERPAYMENT → CUSTOMER CREDIT
+                * =====================================================
+                *
+                * At this point:
+                *
+                * - Current delivery is fully paid
+                * - All previous outstanding debt has been paid
+                *
+                * Therefore, anything remaining is TRUE overpayment
+                * and becomes customer credit.
+                */
 
                 if ($paymentRemaining > 0.009) {
+
+                    $paymentRemaining =
+                        round(
+                            $paymentRemaining,
+                            2
+                        );
+
 
                     $stmt =
                         $pdo->prepare(
@@ -1974,11 +2562,17 @@ function finalizeDailyClosing(
 
                     $stmt->execute([
                         $customerId,
+
                         $dailyRecord['business_date'],
+
                         $paymentRemaining,
+
                         $method,
+
                         $collectionLocation,
+
                         $dailyId,
+
                         'Customer credit from overpayment'
                     ]);
                 }

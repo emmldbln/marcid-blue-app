@@ -868,7 +868,6 @@
 
     }
 
-
     function renderCurrentDebt(
         result
     ) {
@@ -908,10 +907,14 @@
                 : {};
 
 
-        totalElement.textContent =
+        const formattedTotal =
             formatDebtMoney(
                 totalDebt
             );
+
+
+        totalElement.textContent =
+            formattedTotal;
 
 
         list.innerHTML = '';
@@ -925,7 +928,7 @@
 
         /*
         * =========================================================
-        * DEBT LIST
+        * CURRENT DEBT LIST
         * =========================================================
         */
 
@@ -966,7 +969,7 @@
 
                     /*
                     * -------------------------------------------------
-                    * DATE HEADING
+                    * DATE
                     * -------------------------------------------------
                     */
 
@@ -975,8 +978,23 @@
                             'div'
                         );
 
-                    dateHeading.className =
-                        'current-debt-date-heading';
+                    dateHeading.style.padding =
+                        '14px 0 6px';
+
+                    dateHeading.style.color =
+                        'var(--text-muted)';
+
+                    dateHeading.style.fontSize =
+                        '11px';
+
+                    dateHeading.style.fontWeight =
+                        '700';
+
+                    dateHeading.style.textTransform =
+                        'uppercase';
+
+                    dateHeading.style.letterSpacing =
+                        '0.04em';
 
 
                     const parsedDate =
@@ -1016,7 +1034,7 @@
 
                     /*
                     * -------------------------------------------------
-                    * DEBT ITEMS
+                    * CUSTOMERS
                     * -------------------------------------------------
                     */
 
@@ -1032,15 +1050,28 @@
                                 'current-debt-item';
 
 
-                            const customer =
+                            /*
+                            * CUSTOMER + AMOUNT
+                            */
+
+                            const header =
                                 document.createElement(
                                     'div'
                                 );
 
-                            customer.className =
+                            header.className =
+                                'current-debt-item-header';
+
+
+                            const name =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            name.className =
                                 'current-debt-customer';
 
-                            customer.textContent =
+                            name.textContent =
                                 debt.customer_name ||
                                 'Unknown Customer';
 
@@ -1061,12 +1092,49 @@
                                 );
 
 
-                            item.appendChild(
-                                customer
+                            header.appendChild(
+                                name
                             );
 
-                            item.appendChild(
+                            header.appendChild(
                                 amount
+                            );
+
+
+                            /*
+                            * DETAIL
+                            */
+
+                            const details =
+                                document.createElement(
+                                    'div'
+                                );
+
+                            details.className =
+                                'current-debt-item-details';
+
+
+                            /*
+                            * Only add the details element when
+                            * there is actual detail text.
+                            *
+                            * This prevents empty subtext from
+                            * creating unnecessary spacing.
+                            */
+
+                            if (
+                                details.textContent.trim() !== ''
+                            ) {
+
+                                item.appendChild(
+                                    details
+                                );
+                            }
+
+
+                            item.insertBefore(
+                                header,
+                                item.firstChild
                             );
 
 
@@ -1088,12 +1156,17 @@
         * CUSTOMER CREDIT
         * =========================================================
         *
-        * Uses the EXISTING Current Debt UI classes.
+        * Credit is displayed underneath the existing debt list.
         *
-        * No new credit-specific CSS is required.
+        * The section intentionally shows only:
         *
-        * Credit is displayed only.
-        * It is NOT automatically applied to future deliveries.
+        * Customer Credit
+        *
+        * Customer Name                    ₱Amount
+        *
+        * No total credit row.
+        * No "Available Credit" label.
+        * No additional credit description.
         */
 
         const totalCredit =
@@ -1111,8 +1184,7 @@
 
 
         /*
-        * Only show Customer Credit when there is
-        * actually available credit.
+        * Only display the credit section when credit exists.
         */
 
         if (
@@ -1122,11 +1194,8 @@
 
             /*
             * -------------------------------------------------
-            * SECTION SPACING
+            * CREDIT SECTION HEADING
             * -------------------------------------------------
-            *
-            * Use the existing debt date-heading class so
-            * the credit heading follows the same typography.
             */
 
             const creditHeading =
@@ -1134,18 +1203,29 @@
                     'div'
                 );
 
-            creditHeading.className =
-                'current-debt-date-heading';
-
-
-            /*
-            * Add a little separation from the debt list
-            * without creating a new visual component.
-            */
-
             creditHeading.style.marginTop =
-                '20px';
+                '18px';
 
+            creditHeading.style.padding =
+                '14px 0 6px';
+
+            creditHeading.style.borderTop =
+                '1px solid var(--border)';
+
+            creditHeading.style.color =
+                'var(--text-muted)';
+
+            creditHeading.style.fontSize =
+                '11px';
+
+            creditHeading.style.fontWeight =
+                '700';
+
+            creditHeading.style.textTransform =
+                'uppercase';
+
+            creditHeading.style.letterSpacing =
+                '0.04em';
 
             creditHeading.textContent =
                 'Customer Credit';
@@ -1158,64 +1238,7 @@
 
             /*
             * -------------------------------------------------
-            * AVAILABLE CREDIT TOTAL
-            * -------------------------------------------------
-            *
-            * Use the same row structure as the debt rows.
-            */
-
-            const creditTotalItem =
-                document.createElement(
-                    'div'
-                );
-
-            creditTotalItem.className =
-                'current-debt-item';
-
-
-            const creditTotalCustomer =
-                document.createElement(
-                    'div'
-                );
-
-            creditTotalCustomer.className =
-                'current-debt-customer';
-
-            creditTotalCustomer.textContent =
-                'Available Credit';
-
-
-            const creditTotalAmount =
-                document.createElement(
-                    'div'
-                );
-
-            creditTotalAmount.className =
-                'current-debt-amount';
-
-            creditTotalAmount.textContent =
-                formatDebtMoney(
-                    totalCredit
-                );
-
-
-            creditTotalItem.appendChild(
-                creditTotalCustomer
-            );
-
-            creditTotalItem.appendChild(
-                creditTotalAmount
-            );
-
-
-            list.appendChild(
-                creditTotalItem
-            );
-
-
-            /*
-            * -------------------------------------------------
-            * CUSTOMER CREDIT ITEMS
+            * INDIVIDUAL CUSTOMER CREDIT
             * -------------------------------------------------
             */
 
@@ -1231,15 +1254,24 @@
                         'current-debt-item';
 
 
-                    const customer =
+                    const header =
                         document.createElement(
                             'div'
                         );
 
-                    customer.className =
+                    header.className =
+                        'current-debt-item-header';
+
+
+                    const name =
+                        document.createElement(
+                            'div'
+                        );
+
+                    name.className =
                         'current-debt-customer';
 
-                    customer.textContent =
+                    name.textContent =
                         credit.customer_name ||
                         'Unknown Customer';
 
@@ -1250,7 +1282,7 @@
                         );
 
                     amount.className =
-                        'current-debt-amount';
+                        'current-debt-amount current-debt-credit';
 
                     amount.textContent =
                         formatDebtMoney(
@@ -1260,12 +1292,17 @@
                         );
 
 
-                    item.appendChild(
-                        customer
+                    header.appendChild(
+                        name
                     );
 
-                    item.appendChild(
+                    header.appendChild(
                         amount
+                    );
+
+
+                    item.appendChild(
+                        header
                     );
 
 
@@ -1277,8 +1314,8 @@
             );
 
         }
-    }
 
+    }
 
     function formatDebtMoney(
         value
