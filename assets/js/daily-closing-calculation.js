@@ -143,6 +143,64 @@
             return roundMoney(total);
         }
 
+        // =========================================================
+        // SHOP EXPECTED DELIVERY SALES
+        // =========================================================
+        //
+        // Full expected value of Shop deliveries.
+        // Payment status does not matter here.
+        //
+        // Paid:
+        //     Full expected amount
+        //
+        // Partial / Due:
+        //     Full expected amount
+        //
+        // Unpaid:
+        //     Full expected amount
+        //
+        // Overpaid:
+        //     Full expected amount
+        // =========================================================
+
+        function getShopDeliveryExpectedSales() {
+
+            let total = 0;
+
+            getRows('.delivery-payment-row').forEach(function (row) {
+
+                const slimInput =
+                    row.querySelector('.delivery-slim');
+
+                const roundInput =
+                    row.querySelector('.delivery-round');
+
+                const priceInput =
+                    row.querySelector('.delivery-price-input');
+
+                const slim =
+                    getInputNumber(slimInput);
+
+                const round =
+                    getInputNumber(roundInput);
+
+                const price =
+                    getInputNumber(priceInput);
+
+                const gallons =
+                    slim + round;
+
+                const expected =
+                    roundMoney(
+                        gallons * price
+                    );
+
+                total += expected;
+            });
+
+            return roundMoney(total);
+        }
+
 
         // =========================================================
         // DRIVER DELIVERY PAYMENTS
@@ -814,11 +872,14 @@
             const shopDeliveryPayments =
                 getShopDeliveryPayments();
 
+            const shopExpectedDeliverySales =
+                getShopDeliveryExpectedSales();
+
 
             const expectedDeliveryMoneyToday =
                 roundMoney(
                     deliveryTotals.totalExpectedMoney
-                    + shopDeliveryPayments
+                    + shopExpectedDeliverySales
                 );
 
 
@@ -865,6 +926,8 @@
                 ...deliveryTotals,
                 shopDeliveryPayments:
                     shopDeliveryPayments,
+                shopExpectedDeliverySales:
+                    shopExpectedDeliverySales,
                 expectedDeliveryMoneyToday:
                     expectedDeliveryMoneyToday
             };

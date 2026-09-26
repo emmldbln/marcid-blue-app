@@ -1046,13 +1046,14 @@
                                     'div'
                                 );
 
+                            const isDraftPaid =
+                                Boolean(debt.is_draft_paid);
+
                             item.className =
-                                'current-debt-item';
-
-
-                            /*
-                            * CUSTOMER + AMOUNT
-                            */
+                                'current-debt-item' +
+                                (isDraftPaid
+                                    ? ' current-debt-item-paid'
+                                    : '');
 
                             const header =
                                 document.createElement(
@@ -1081,15 +1082,55 @@
                                     'div'
                                 );
 
+                            const originalAmount =
+                                Number(debt.original_amount) || 0;
+
+                            const remainingAmount =
+                                Number(debt.remaining_amount) || 0;
+
+                            const draftPayment =
+                                Number(debt.draft_payment) || 0;
+
                             amount.className =
                                 'current-debt-amount';
 
-                            amount.textContent =
-                                formatDebtMoney(
-                                    Number(
-                                        debt.remaining_amount
-                                    ) || 0
-                                );
+                            if (draftPayment > 0.009) {
+                                const originalSpan =
+                                    document.createElement('span');
+
+                                originalSpan.className =
+                                    isDraftPaid
+                                        ? 'current-debt-original-paid'
+                                        : '';
+
+                                originalSpan.textContent =
+                                    formatDebtMoney(originalAmount);
+
+                                const arrowSpan =
+                                    document.createElement('span');
+
+                                arrowSpan.className =
+                                    'current-debt-arrow';
+
+                                arrowSpan.textContent =
+                                    ' → ';
+
+                                const remainingSpan =
+                                    document.createElement('span');
+
+                                remainingSpan.className =
+                                    'current-debt-remaining';
+
+                                remainingSpan.textContent =
+                                    formatDebtMoney(remainingAmount);
+
+                                amount.appendChild(originalSpan);
+                                amount.appendChild(arrowSpan);
+                                amount.appendChild(remainingSpan);
+                            } else {
+                                amount.textContent =
+                                    formatDebtMoney(remainingAmount);
+                            }
 
 
                             header.appendChild(

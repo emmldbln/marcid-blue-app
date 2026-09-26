@@ -1718,6 +1718,12 @@ $walkInOtherSales = 0.00;
         white-space: nowrap;
     }
 
+        .current-debt-item-paid .current-debt-customer,
+    .current-debt-original-paid {
+        text-decoration: line-through;
+        opacity: 0.6;
+    }
+
     .current-debt-item-details {
         margin-top: 5px;
 
@@ -2745,7 +2751,7 @@ $walkInOtherSales = 0.00;
                         <div class="driver-summary-field">
 
                             <div class="summary-label">
-                                Total Sales of Delivery
+                                Actual Sales of Delivery
                             </div>
 
 
@@ -2762,7 +2768,7 @@ $walkInOtherSales = 0.00;
                         <div class="driver-summary-field">
 
                             <div class="summary-label">
-                                Expected Delivery Money Today
+                                Expected Sales for Today
                             </div>
 
 

@@ -379,6 +379,9 @@ function getCurrentDebt(
             'remaining_amount' =>
                 $remaining,
 
+            'draft_payment' =>
+                0.00,
+
             'status' =>
                 'Outstanding',
 
@@ -765,6 +768,17 @@ function getCurrentDebt(
                             - $debtPayment,
                             2
                         );
+                    
+                    $historicalDebts[
+                        $bucketIndex
+                    ]['draft_payment'] =
+                        round(
+                            $historicalDebts[
+                                $bucketIndex
+                            ]['draft_payment']
+                            + $debtPayment,
+                            2
+                        );
 
                 } else {
 
@@ -954,15 +968,35 @@ function getCurrentDebt(
                 2
             );
 
+        $draftPayment =
+            round(
+                (float) ($debt['draft_payment'] ?? 0),
+                2
+            );
 
-        if ($remaining <= 0.009) {
+        /*
+        * Keep a historical debt visible when today's draft
+        * payment has fully settled it.
+        *
+        * This is temporary UI state only.
+        * The payment is not permanent until Finalize.
+        */
+        if (
+            $remaining <= 0.009
+            && $draftPayment <= 0.009
+        ) {
             continue;
         }
 
-
         $debt['remaining_amount'] =
-            $remaining;
+            max(0.00, $remaining);
 
+        $debt['draft_payment'] =
+            $draftPayment;
+
+        $debt['is_draft_paid'] =
+            $remaining <= 0.009
+            && $draftPayment > 0.009;
 
         $debts[] =
             $debt;
