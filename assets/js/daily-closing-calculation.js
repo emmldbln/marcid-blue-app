@@ -98,6 +98,65 @@
 
 
         // =========================================================
+        // DELIVERY EXPECTED SALE
+        // =========================================================
+        //
+        // Calculates the amount that should be represented in
+        // "Expected Sale for Today".
+        //
+        // Base expected amount:
+        //     gallons × price
+        //
+        // Unpaid:
+        //     Expected amount remains due.
+        //
+        // Partial / Due:
+        //     Expected amount remains the full expected sale.
+        //
+        // Paid:
+        //     Expected amount is used.
+        //
+        // Overpaid:
+        //     Expected amount + overpayment.
+        //
+        // Therefore:
+        //
+        //     expected sale = max(expected amount, payment)
+        //
+        // This uses the same expected/payment values that are
+        // already used by the Balance field.
+        // =========================================================
+
+        function getExpectedSaleWithOverpayment(
+            expected,
+            payment
+        ) {
+
+            const expectedAmount =
+                roundMoney(expected);
+
+            const paymentAmount =
+                roundMoney(payment);
+
+            if (expectedAmount <= MONEY_TOLERANCE) {
+                return 0;
+            }
+
+            const overpayment =
+                Math.max(
+                    0,
+                    roundMoney(
+                        paymentAmount - expectedAmount
+                    )
+                );
+
+            return roundMoney(
+                expectedAmount + overpayment
+            );
+        }
+
+
+        // =========================================================
         // SHOP EXPENSES
         // =========================================================
 
@@ -121,11 +180,19 @@
         // SHOP DELIVERY PAYMENTS
         // =========================================================
         //
-        // These are actual payments received for shop deliveries.
-        // Unpaid rows therefore contribute ₱0.
+        // Actual money received from Shop deliveries.
         //
-        // Partial payments contribute only the amount actually
-        // entered in the payment field.
+        // Unpaid:
+        //     ₱0
+        //
+        // Partial:
+        //     Actual payment
+        //
+        // Paid:
+        //     Actual payment
+        //
+        // Overpaid:
+        //     Actual payment, including overpayment
         // =========================================================
 
         function getShopDeliveryPayments() {
@@ -143,24 +210,15 @@
             return roundMoney(total);
         }
 
+
         // =========================================================
         // SHOP EXPECTED DELIVERY SALES
         // =========================================================
         //
-        // Full expected value of Shop deliveries.
-        // Payment status does not matter here.
+        // Uses the same payment and expected values as the
+        // Shop Balance field.
         //
-        // Paid:
-        //     Full expected amount
-        //
-        // Partial / Due:
-        //     Full expected amount
-        //
-        // Unpaid:
-        //     Full expected amount
-        //
-        // Overpaid:
-        //     Full expected amount
+        // Overpayment is added to the expected sale.
         // =========================================================
 
         function getShopDeliveryExpectedSales() {
@@ -169,23 +227,26 @@
 
             getRows('.delivery-payment-row').forEach(function (row) {
 
-                const slimInput =
-                    row.querySelector('.delivery-slim');
-
-                const roundInput =
-                    row.querySelector('.delivery-round');
-
-                const priceInput =
-                    row.querySelector('.delivery-price-input');
-
                 const slim =
-                    getInputNumber(slimInput);
+                    getInputNumber(
+                        row.querySelector('.delivery-slim')
+                    );
 
                 const round =
-                    getInputNumber(roundInput);
+                    getInputNumber(
+                        row.querySelector('.delivery-round')
+                    );
 
                 const price =
-                    getInputNumber(priceInput);
+                    getInputNumber(
+                        row.querySelector('.delivery-price-input')
+                    );
+
+                const payment =
+                    getInputNumber(
+                        row.querySelector('.delivery-payment')
+                    );
+
 
                 const gallons =
                     slim + round;
@@ -195,7 +256,15 @@
                         gallons * price
                     );
 
-                total += expected;
+
+                const expectedSale =
+                    getExpectedSaleWithOverpayment(
+                        expected,
+                        payment
+                    );
+
+
+                total += expectedSale;
             });
 
             return roundMoney(total);
@@ -206,7 +275,7 @@
         // DRIVER DELIVERY PAYMENTS
         // =========================================================
         //
-        // These are actual payments received for driver deliveries.
+        // Actual money received from Driver deliveries.
         // =========================================================
 
         function getDriverDeliveryPayments() {
@@ -228,22 +297,11 @@
         // TOTAL ACTUAL DELIVERY SALES
         // =========================================================
         //
-        // Total Sales of Delivery represents money actually paid
-        // by customers for delivery transactions.
+        // Represents money actually received from all delivery
+        // transactions.
         //
-        // It does NOT use expected delivery sales.
-        //
-        // Unpaid:
-        //     Payment = ₱0
-        //
-        // Partial:
-        //     Only the actual payment is counted.
-        //
-        // Fully paid:
-        //     The full payment is counted.
-        //
-        // Overpaid:
-        //     The actual payment entered is counted.
+        // Overpayments are included because the actual payment
+        // field is used directly.
         // =========================================================
 
         function getTotalDeliverySalesReceived() {
@@ -308,10 +366,14 @@
                 slim + round;
 
             const expected =
-                roundMoney(gallons * price);
+                roundMoney(
+                    gallons * price
+                );
 
             const difference =
-                roundMoney(expected - payment);
+                roundMoney(
+                    expected - payment
+                );
 
 
             if (gallons <= 0) {
@@ -362,7 +424,9 @@
 
 
             balanceElement.textContent =
-                'Over ' + formatMoney(Math.abs(difference));
+                'Over ' + formatMoney(
+                    Math.abs(difference)
+                );
 
             balanceElement.className =
                 'delivery-balance delivery-balance-overpaid';
@@ -662,7 +726,9 @@
 
 
             balanceElement.textContent =
-                'Over ' + formatMoney(Math.abs(difference));
+                'Over ' + formatMoney(
+                    Math.abs(difference)
+                );
 
             balanceElement.className =
                 'driver-delivery-balance ' +
@@ -701,6 +767,13 @@
                             )
                         );
 
+                    const payment =
+                        getInputNumber(
+                            row.querySelector(
+                                '.driver-delivery-payment'
+                            )
+                        );
+
 
                     const gallons =
                         slim + round;
@@ -711,13 +784,23 @@
                         );
 
 
+                    const expectedSale =
+                        getExpectedSaleWithOverpayment(
+                            expected,
+                            payment
+                        );
+
+
                     if (gallons > 0) {
                         deliveryRows++;
                     }
 
 
                     totalQuantity += gallons;
-                    totalExpectedMoney += expected;
+
+                    totalExpectedMoney +=
+                        expectedSale;
+
 
                     updateDriverDeliveryBalance(row);
                 }
@@ -891,9 +974,9 @@
 
 
             /*
-            * Total Sales of Delivery represents actual
-            * payments received from Shop + Driver deliveries.
-            */
+             * Actual Sales of Delivery represents actual
+             * payments received from Shop + Driver deliveries.
+             */
             setText(
                 'driverTotalDeliverySales',
                 formatMoney(
@@ -903,14 +986,20 @@
 
 
             /*
-            * Expected Delivery Money Today consists of:
-            *
-            * Driver Expected Delivery Money
-            * + Shop Delivery Payments
-            *
-            * Shop unpaid deliveries contribute ₱0 because
-            * getShopDeliveryPayments() only reads actual payments.
-            */
+             * Expected Sale for Today represents the full
+             * expected value of every delivery.
+             *
+             * If a customer overpays, the overpayment is added
+             * to the expected sale.
+             *
+             * Example:
+             *
+             * Expected = ₱140
+             * Payment  = ₱180
+             * Balance  = Over ₱40
+             *
+             * Expected Sale = ₱180
+             */
             setText(
                 'driverTotalExpectedMoney',
                 formatMoney(
@@ -933,11 +1022,9 @@
             };
         }
 
+
         // =========================================================
         // TOTAL DELIVERY GALLONS CARD
-        // =========================================================
-        //
-        // This card counts gallons, not transactions.
         // =========================================================
 
         function updateTotalDeliveriesCard() {
@@ -964,7 +1051,8 @@
                             )
                         );
 
-                    totalDeliveries += slim + round;
+                    totalDeliveries +=
+                        slim + round;
                 }
             );
 
@@ -988,7 +1076,8 @@
                             )
                         );
 
-                    totalDeliveries += slim + round;
+                    totalDeliveries +=
+                        slim + round;
                 }
             );
 
@@ -1011,14 +1100,14 @@
         // NET PROFIT FOR TODAY
         // =========================================================
         //
-        // Net Profit for Today is based on actual sales received:
+        // Based on actual money received:
         //
         // Walk-in Sales
         // + Other / Additional Sales
         // + Actual Delivery Payments
         //
-        // Unpaid delivery amounts are NOT included.
-        // Partial payments contribute only the amount received.
+        // Overpayments are included because they are actual
+        // payments received.
         // =========================================================
 
         function updateNetProfit() {
@@ -1066,7 +1155,8 @@
 
             return totalReceived;
         }
-        
+
+
         // =========================================================
         // CURRENT DRAFT DEBT
         // =========================================================
@@ -1081,7 +1171,6 @@
                 return String(value ?? '')
                     .trim()
                     .toLowerCase();
-
             }
 
 
@@ -1114,7 +1203,6 @@
                             today_payment: 0
                         }
                     );
-
                 }
 
 
@@ -1134,7 +1222,6 @@
                         balance.today_payment +
                         getNumber(payment)
                     );
-
             }
 
 
@@ -1184,7 +1271,6 @@
                     ),
                     payment
                 );
-
             });
 
 
@@ -1234,7 +1320,6 @@
                     ),
                     payment
                 );
-
             });
 
 
@@ -1251,6 +1336,7 @@
 
 
                 customers.push({
+
                     customer_name:
                         balance.customer_name,
 
@@ -1272,7 +1358,6 @@
                             -gross
                         )
                 });
-
             });
 
 
@@ -1280,7 +1365,6 @@
                 customers
             };
         }
-
 
 
         // =========================================================

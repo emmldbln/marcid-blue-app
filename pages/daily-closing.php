@@ -1705,6 +1705,18 @@ $walkInOtherSales = 0.00;
         gap: 12px;
     }
 
+    .current-debt-credit-original {
+        opacity: 0.6;
+    }
+
+    .current-debt-credit-new {
+        opacity: 1;
+    }
+
+    .current-debt-credit-draft {
+        opacity: 1;
+    }
+
     .current-debt-customer {
         color: var(--text);
         font-size: 14px;

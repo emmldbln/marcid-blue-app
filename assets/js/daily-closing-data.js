@@ -907,14 +907,10 @@
                 : {};
 
 
-        const formattedTotal =
+        totalElement.textContent =
             formatDebtMoney(
                 totalDebt
             );
-
-
-        totalElement.textContent =
-            formattedTotal;
 
 
         list.innerHTML = '';
@@ -928,7 +924,7 @@
 
         /*
         * =========================================================
-        * CURRENT DEBT LIST
+        * NO CURRENT DEBT
         * =========================================================
         */
 
@@ -951,6 +947,12 @@
 
         } else {
 
+            /*
+            * =====================================================
+            * EACH DATE
+            * =====================================================
+            */
+
             debtDates.forEach(
                 date => {
 
@@ -968,9 +970,9 @@
 
 
                     /*
-                    * -------------------------------------------------
-                    * DATE
-                    * -------------------------------------------------
+                    * ---------------------------------------------
+                    * DATE HEADING
+                    * ---------------------------------------------
                     */
 
                     const dateHeading =
@@ -1033,103 +1035,361 @@
 
 
                     /*
-                    * -------------------------------------------------
-                    * CUSTOMERS
-                    * -------------------------------------------------
+                    * =================================================
+                    * GROUP BY CUSTOMER WITHIN THIS DATE ONLY
+                    * =================================================
+                    *
+                    * Same customer + same date:
+                    *
+                    *     Dennis ₱140
+                    *     Dennis ₱140
+                    *
+                    * becomes:
+                    *
+                    *     Dennis ₱280
+                    *             ₱140 + ₱140
+                    *
+                    *
+                    * Same customer + different date:
+                    *
+                    *     Sep 10  Dennis ₱140
+                    *     Sep 11  Dennis ₱140
+                    *
+                    * remains two separate entries.
                     */
+
+                    const customerGroups = {};
+
 
                     debts.forEach(
                         debt => {
+
+                            /*
+                            * Prefer customer_id.
+                            *
+                            * The fallback customer name is only
+                            * used if customer_id is unavailable.
+                            */
+
+                            const customerId =
+                                debt.customer_id !== undefined &&
+                                debt.customer_id !== null &&
+                                String(
+                                    debt.customer_id
+                                ).trim() !== ''
+                                    ? String(
+                                        debt.customer_id
+                                    )
+                                    : (
+                                        String(
+                                            debt.customer_name ||
+                                            'Unknown Customer'
+                                        )
+                                            .trim()
+                                            .toLowerCase()
+                                    );
+
+
+                            if (
+                                !customerGroups[
+                                    customerId
+                                ]
+                            ) {
+
+                                customerGroups[
+                                    customerId
+                                ] = {
+                                    customer_id:
+                                        debt.customer_id,
+
+                                    customer_name:
+                                        debt.customer_name ||
+                                        'Unknown Customer',
+
+                                    debts: []
+                                };
+
+                            }
+
+
+                            customerGroups[
+                                customerId
+                            ].debts.push(
+                                debt
+                            );
+
+                        }
+                    );
+
+
+                    /*
+                    * =================================================
+                    * RENDER EACH CUSTOMER
+                    * =================================================
+                    */
+
+                    Object.values(
+                        customerGroups
+                    ).forEach(
+                        group => {
+
+                            const customerDebts =
+                                group.debts;
+
+
+                            /*
+                            * -----------------------------------------
+                            * TOTAL ORIGINAL AMOUNT
+                            * -----------------------------------------
+                            */
+
+                            const totalOriginal =
+                                customerDebts.reduce(
+                                    (
+                                        total,
+                                        debt
+                                    ) => {
+
+                                        return total +
+                                            (
+                                                Number(
+                                                    debt.original_amount
+                                                ) || 0
+                                            );
+
+                                    },
+                                    0
+                                );
+
+
+                            /*
+                            * -----------------------------------------
+                            * TOTAL REMAINING AMOUNT
+                            * -----------------------------------------
+                            */
+
+                            const totalRemaining =
+                                customerDebts.reduce(
+                                    (
+                                        total,
+                                        debt
+                                    ) => {
+
+                                        return total +
+                                            (
+                                                Number(
+                                                    debt.remaining_amount
+                                                ) || 0
+                                            );
+
+                                    },
+                                    0
+                                );
+
+
+                            /*
+                            * -----------------------------------------
+                            * TOTAL DRAFT PAYMENT
+                            * -----------------------------------------
+                            */
+
+                            const totalDraftPayment =
+                                customerDebts.reduce(
+                                    (
+                                        total,
+                                        debt
+                                    ) => {
+
+                                        return total +
+                                            (
+                                                Number(
+                                                    debt.draft_payment
+                                                ) || 0
+                                            );
+
+                                    },
+                                    0
+                                );
+
+
+                            /*
+                            * -----------------------------------------
+                            * HAS DRAFT PAYMENT?
+                            * -----------------------------------------
+                            */
+
+                            const hasDraftPayment =
+                                totalDraftPayment >
+                                0.009;
+
+
+                            /*
+                            * -----------------------------------------
+                            * FULLY PAID IN CURRENT DRAFT?
+                            * -----------------------------------------
+                            */
+
+                            const isDraftPaid =
+                                totalRemaining <= 0.009 &&
+                                hasDraftPayment;
+
+
+                            /*
+                            * -----------------------------------------
+                            * MAIN ITEM
+                            * -----------------------------------------
+                            */
 
                             const item =
                                 document.createElement(
                                     'div'
                                 );
 
-                            const isDraftPaid =
-                                Boolean(debt.is_draft_paid);
 
                             item.className =
                                 'current-debt-item' +
-                                (isDraftPaid
-                                    ? ' current-debt-item-paid'
-                                    : '');
+                                (
+                                    isDraftPaid
+                                        ? ' current-debt-item-paid'
+                                        : ''
+                                );
+
+
+                            /*
+                            * -----------------------------------------
+                            * HEADER
+                            * -----------------------------------------
+                            */
 
                             const header =
                                 document.createElement(
                                     'div'
                                 );
 
+
                             header.className =
                                 'current-debt-item-header';
 
+
+                            /*
+                            * -----------------------------------------
+                            * CUSTOMER NAME
+                            * -----------------------------------------
+                            */
 
                             const name =
                                 document.createElement(
                                     'div'
                                 );
 
+
                             name.className =
                                 'current-debt-customer';
 
+
                             name.textContent =
-                                debt.customer_name ||
+                                group.customer_name ||
                                 'Unknown Customer';
 
+
+                            /*
+                            * -----------------------------------------
+                            * AMOUNT
+                            * -----------------------------------------
+                            */
 
                             const amount =
                                 document.createElement(
                                     'div'
                                 );
 
-                            const originalAmount =
-                                Number(debt.original_amount) || 0;
-
-                            const remainingAmount =
-                                Number(debt.remaining_amount) || 0;
-
-                            const draftPayment =
-                                Number(debt.draft_payment) || 0;
 
                             amount.className =
                                 'current-debt-amount';
 
-                            if (draftPayment > 0.009) {
+
+                            /*
+                            * If today's draft payment changed
+                            * this customer's debt, show:
+                            *
+                            *     ₱280.00 → ₱180.00
+                            *
+                            * Otherwise:
+                            *
+                            *     ₱280.00
+                            */
+
+                            if (
+                                hasDraftPayment
+                            ) {
+
                                 const originalSpan =
-                                    document.createElement('span');
+                                    document.createElement(
+                                        'span'
+                                    );
+
 
                                 originalSpan.className =
                                     isDraftPaid
                                         ? 'current-debt-original-paid'
                                         : '';
 
+
                                 originalSpan.textContent =
-                                    formatDebtMoney(originalAmount);
+                                    formatDebtMoney(
+                                        totalOriginal
+                                    );
+
 
                                 const arrowSpan =
-                                    document.createElement('span');
+                                    document.createElement(
+                                        'span'
+                                    );
+
 
                                 arrowSpan.className =
                                     'current-debt-arrow';
 
+
                                 arrowSpan.textContent =
                                     ' → ';
 
+
                                 const remainingSpan =
-                                    document.createElement('span');
+                                    document.createElement(
+                                        'span'
+                                    );
+
 
                                 remainingSpan.className =
                                     'current-debt-remaining';
 
-                                remainingSpan.textContent =
-                                    formatDebtMoney(remainingAmount);
 
-                                amount.appendChild(originalSpan);
-                                amount.appendChild(arrowSpan);
-                                amount.appendChild(remainingSpan);
+                                remainingSpan.textContent =
+                                    formatDebtMoney(
+                                        totalRemaining
+                                    );
+
+
+                                amount.appendChild(
+                                    originalSpan
+                                );
+
+                                amount.appendChild(
+                                    arrowSpan
+                                );
+
+                                amount.appendChild(
+                                    remainingSpan
+                                );
+
                             } else {
+
                                 amount.textContent =
-                                    formatDebtMoney(remainingAmount);
+                                    formatDebtMoney(
+                                        totalRemaining
+                                    );
+
                             }
 
 
@@ -1142,41 +1402,65 @@
                             );
 
 
-                            /*
-                            * DETAIL
-                            */
-
-                            const details =
-                                document.createElement(
-                                    'div'
-                                );
-
-                            details.className =
-                                'current-debt-item-details';
+                            item.appendChild(
+                                header
+                            );
 
 
                             /*
-                            * Only add the details element when
-                            * there is actual detail text.
+                            * =================================================
+                            * SAME-DAY TRANSACTION BREAKDOWN
+                            * =================================================
                             *
-                            * This prevents empty subtext from
-                            * creating unnecessary spacing.
+                            * Only show this when the customer has
+                            * multiple debt transactions on this date.
+                            *
+                            * Example:
+                            *
+                            * Dennis                 ₱280.00
+                            *                       ₱140 + ₱140
+                            *
+                            * A single transaction has no subtext.
                             */
 
                             if (
-                                details.textContent.trim() !== ''
+                                customerDebts.length > 1
                             ) {
+
+                                const details =
+                                    document.createElement(
+                                        'div'
+                                    );
+
+
+                                details.className =
+                                    'current-debt-item-details';
+
+
+                                const breakdownAmounts =
+                                    customerDebts
+                                        .map(
+                                            debt =>
+                                                formatDebtMoney(
+                                                    Number(
+                                                        debt.original_amount
+                                                    ) || 0
+                                                )
+                                        )
+                                        .join(
+                                            ' + '
+                                        );
+
+
+                                details.textContent =
+                                    breakdownAmounts;
+
 
                                 item.appendChild(
                                     details
                                 );
+
                             }
-
-
-                            item.insertBefore(
-                                header,
-                                item.firstChild
-                            );
 
 
                             list.appendChild(
@@ -1197,17 +1481,22 @@
         * CUSTOMER CREDIT
         * =========================================================
         *
-        * Credit is displayed underneath the existing debt list.
+        * Credit remains separate from debt.
         *
-        * The section intentionally shows only:
+        * Existing credit:
         *
-        * Customer Credit
+        *     ₱140.00
         *
-        * Customer Name                    ₱Amount
+        * Existing + draft credit:
         *
-        * No total credit row.
-        * No "Available Credit" label.
-        * No additional credit description.
+        *     ₱140.00 → ₱210.00
+        *
+        * Draft-only credit:
+        *
+        *     ₱0.00 → ₱70.00
+        *
+        * This function only renders the result.
+        * It does NOT save anything to SQL.
         */
 
         const totalCredit =
@@ -1224,25 +1513,22 @@
                 : [];
 
 
-        /*
-        * Only display the credit section when credit exists.
-        */
-
         if (
             totalCredit > 0 ||
             credits.length > 0
         ) {
 
             /*
-            * -------------------------------------------------
-            * CREDIT SECTION HEADING
-            * -------------------------------------------------
+            * ---------------------------------------------
+            * CREDIT HEADING
+            * ---------------------------------------------
             */
 
             const creditHeading =
                 document.createElement(
                     'div'
                 );
+
 
             creditHeading.style.marginTop =
                 '18px';
@@ -1278,9 +1564,9 @@
 
 
             /*
-            * -------------------------------------------------
-            * INDIVIDUAL CUSTOMER CREDIT
-            * -------------------------------------------------
+            * ---------------------------------------------
+            * CREDIT CUSTOMERS
+            * ---------------------------------------------
             */
 
             credits.forEach(
@@ -1291,14 +1577,29 @@
                             'div'
                         );
 
+
+                    const hasDraftCredit =
+                        (
+                            Number(
+                                credit.draft_credit
+                            ) || 0
+                        ) > 0.009;
+
+
                     item.className =
-                        'current-debt-item';
+                        'current-debt-item' +
+                        (
+                            hasDraftCredit
+                                ? ' current-debt-item-credit-draft'
+                                : ''
+                        );
 
 
                     const header =
                         document.createElement(
                             'div'
                         );
+
 
                     header.className =
                         'current-debt-item-header';
@@ -1309,8 +1610,10 @@
                             'div'
                         );
 
+
                     name.className =
                         'current-debt-customer';
+
 
                     name.textContent =
                         credit.customer_name ||
@@ -1322,15 +1625,93 @@
                             'div'
                         );
 
+
                     amount.className =
                         'current-debt-amount current-debt-credit';
 
-                    amount.textContent =
-                        formatDebtMoney(
-                            Number(
-                                credit.total_credit
-                            ) || 0
+
+                    const originalCredit =
+                        Number(
+                            credit.original_credit
+                        ) || 0;
+
+
+                    const totalCustomerCredit =
+                        Number(
+                            credit.total_credit
+                        ) || 0;
+
+
+                    if (
+                        hasDraftCredit
+                    ) {
+
+                        const originalSpan =
+                            document.createElement(
+                                'span'
+                            );
+
+
+                        originalSpan.className =
+                            'current-debt-credit-original';
+
+
+                        originalSpan.textContent =
+                            formatDebtMoney(
+                                originalCredit
+                            );
+
+
+                        const arrowSpan =
+                            document.createElement(
+                                'span'
+                            );
+
+
+                        arrowSpan.className =
+                            'current-debt-arrow';
+
+
+                        arrowSpan.textContent =
+                            ' → ';
+
+
+                        const newCreditSpan =
+                            document.createElement(
+                                'span'
+                            );
+
+
+                        newCreditSpan.className =
+                            'current-debt-credit-new';
+
+
+                        newCreditSpan.textContent =
+                            formatDebtMoney(
+                                totalCustomerCredit
+                            );
+
+
+                        amount.appendChild(
+                            originalSpan
                         );
+
+                        amount.appendChild(
+                            arrowSpan
+                        );
+
+                        amount.appendChild(
+                            newCreditSpan
+                        );
+
+                    } else {
+
+                        amount.textContent =
+                            formatDebtMoney(
+                                totalCustomerCredit
+                            );
+
+                    }
 
 
                     header.appendChild(
