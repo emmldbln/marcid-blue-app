@@ -1775,22 +1775,74 @@ final class DailyClosingService
                     (float) $credit['total_credit'],
                     2
                 );
+            /*
+            * Do not show a zero-credit row when the credit was created
+            * and completely consumed within today's draft.
+            *
+            * Example:
+            *
+            *     Today's overpayment   +₱140
+            *     Today's later debt    -₱140
+            *     Remaining credit       ₱0
+            *
+            * There is no actual customer credit to display.
+            *
+            * However, if the customer had existing credit before today,
+            * keep the row so the UI can show:
+            *
+            *     ₱140 → ₱0
+            */
 
-            $changed =
-                !empty(
-                    $credit['is_draft_credit']
-                );
-
-            if (
-                $current <=
-                self::MONEY_TOLERANCE
-                &&
-                !$changed
+            foreach (
+                $creditsByCustomer
+                as $customerId =>
+                $credit
             ) {
 
-                unset(
-                    $creditsByCustomer[$customerId]
-                );
+                $current =
+                    round(
+                        (float) (
+                            $credit['total_credit']
+                            ?? 0
+                        ),
+                        2
+                    );
+
+                $original =
+                    round(
+                        (float) (
+                            $credit['original_credit']
+                            ?? 0
+                        ),
+                        2
+                    );
+
+                /*
+                * No existing credit + no remaining credit:
+                * remove the row completely.
+                */
+                if (
+                    $original <=
+                    self::MONEY_TOLERANCE
+                    &&
+                    $current <=
+                    self::MONEY_TOLERANCE
+                ) {
+
+                    unset(
+                        $creditsByCustomer[$customerId]
+                    );
+
+                    continue;
+                }
+
+                /*
+                * Existing credit that was completely consumed:
+                *
+                *     ₱140 → ₱0
+                *
+                * remains visible.
+                */
             }
         }
 

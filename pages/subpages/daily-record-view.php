@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 require_once '../../auth/auth.php';
 requireAdmin();
 
@@ -8,7 +10,487 @@ require_once '../../config/database.php';
 
 /*
  * =========================================================
- * DAILY RECORD ID
+ * DAILY RECORD REPOSITORY
+ * =========================================================
+ */
+
+final class DailyRecordRepository
+{
+    public function __construct(
+        private PDO $pdo
+    ) {
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * DAILY RECORD
+     * ---------------------------------------------------------
+     */
+
+    public function getDailyRecord(int $dailyId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                daily_id,
+                business_date,
+                status,
+                closing_result,
+                actual_station_cash,
+                created_at,
+                updated_at,
+                saved_at,
+                saved_by
+             FROM daily_records
+             WHERE daily_id = ?
+             LIMIT 1"
+        );
+
+        $stmt->execute([$dailyId]);
+
+        $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $record ?: null;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * SALES
+     * ---------------------------------------------------------
+     */
+
+    public function getSales(
+        string $businessDate,
+        int $dailyId
+    ): array {
+
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                COALESCE(SUM(walk_in_customers), 0)
+                    AS walk_in_customers,
+
+                COALESCE(
+                    SUM(
+                        walk_in_customers * walk_in_price
+                    ),
+                    0
+                ) AS walk_in_total,
+
+                COALESCE(
+                    SUM(other_shop_payment),
+                    0
+                ) AS other_shop_payment,
+
+                COALESCE(
+                    SUM(other_sales),
+                    0
+                ) AS other_sales
+
+             FROM daily_sales
+
+             WHERE sales_date = ?
+               AND daily_id = ?"
+        );
+
+        $stmt->execute([
+            $businessDate,
+            $dailyId
+        ]);
+
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'walk_in_customers' => 0,
+            'walk_in_total' => 0,
+            'other_shop_payment' => 0,
+            'other_sales' => 0
+        ];
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * DELIVERIES + PAYMENTS
+     * ---------------------------------------------------------
+     */
+
+    public function getDeliveries(int $dailyId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                d.delivery_id,
+                d.customer_id,
+                c.customer_name,
+                d.delivery_date,
+                d.slim_quantity,
+                d.round_quantity,
+                d.price_per_gallon,
+                d.amount_due,
+                d.notes,
+                d.created_at,
+
+                COALESCE(
+                    payment_totals.amount_received,
+                    0
+                ) AS amount_received
+
+             FROM deliveries d
+
+             LEFT JOIN customers c
+                ON c.customer_id = d.customer_id
+
+             LEFT JOIN (
+                SELECT
+                    p.delivery_id,
+                    SUM(p.amount) AS amount_received
+
+                FROM payments p
+
+                WHERE p.daily_id = ?
+
+                GROUP BY p.delivery_id
+
+             ) payment_totals
+                ON payment_totals.delivery_id =
+                   d.delivery_id
+
+             WHERE d.daily_id = ?
+
+             ORDER BY d.delivery_id ASC"
+        );
+
+        $stmt->execute([
+            $dailyId,
+            $dailyId
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * EXPENSES
+     * ---------------------------------------------------------
+     */
+
+    public function getExpenses(int $dailyId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                expense_id,
+                expense_date,
+                category,
+                expense_location,
+                description,
+                amount,
+                notes,
+                created_at
+
+             FROM expenses
+
+             WHERE daily_id = ?
+
+             ORDER BY expense_id ASC"
+        );
+
+        $stmt->execute([$dailyId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * DEBT CREATED
+     * ---------------------------------------------------------
+     */
+
+    public function getDebts(int $dailyId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                d.delivery_id,
+                d.customer_id,
+                c.customer_name,
+                d.delivery_date,
+                d.slim_quantity,
+                d.round_quantity,
+                d.amount_due,
+
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN p.daily_id = d.daily_id
+                            THEN p.amount
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS amount_paid,
+
+                (
+                    d.amount_due -
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN p.daily_id = d.daily_id
+                                THEN p.amount
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    )
+                ) AS remaining_balance
+
+             FROM deliveries d
+
+             LEFT JOIN customers c
+                ON c.customer_id = d.customer_id
+
+             LEFT JOIN payments p
+                ON p.delivery_id = d.delivery_id
+
+             WHERE d.daily_id = ?
+
+             GROUP BY
+                d.delivery_id,
+                d.customer_id,
+                c.customer_name,
+                d.delivery_date,
+                d.slim_quantity,
+                d.round_quantity,
+                d.amount_due
+
+             HAVING remaining_balance > 0
+
+             ORDER BY d.delivery_id ASC"
+        );
+
+        $stmt->execute([$dailyId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * CREDIT
+     * ---------------------------------------------------------
+     */
+
+    public function getCredits(int $dailyId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                cc.customer_id,
+                c.customer_name,
+                SUM(cc.amount) AS credit_amount
+
+             FROM customer_credits cc
+
+             INNER JOIN customers c
+                ON c.customer_id = cc.customer_id
+
+             WHERE cc.daily_id = ?
+
+             GROUP BY
+                cc.customer_id,
+                c.customer_name
+
+             HAVING credit_amount > 0.009
+
+             ORDER BY c.customer_name ASC"
+        );
+
+        $stmt->execute([$dailyId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * TOTALS
+     * ---------------------------------------------------------
+     */
+
+    public function calculateDeliveryQuantity(
+        array $deliveries
+    ): int {
+
+        return array_sum(
+            array_map(
+                static fn(array $delivery): int =>
+                    (int) ($delivery['slim_quantity'] ?? 0)
+                    +
+                    (int) ($delivery['round_quantity'] ?? 0),
+                $deliveries
+            )
+        );
+    }
+
+
+    public function calculatePaymentTotal(
+        array $deliveries
+    ): float {
+
+        return round(
+            array_sum(
+                array_map(
+                    static fn(array $delivery): float =>
+                        (float) (
+                            $delivery['amount_received'] ?? 0
+                        ),
+                    $deliveries
+                )
+            ),
+            2
+        );
+    }
+
+
+    public function calculateExpenseTotal(
+        array $expenses
+    ): float {
+
+        return round(
+            array_sum(
+                array_map(
+                    static fn(array $expense): float =>
+                        (float) ($expense['amount'] ?? 0),
+                    $expenses
+                )
+            ),
+            2
+        );
+    }
+
+
+    public function calculateDebtTotal(
+        array $debts
+    ): float {
+
+        return round(
+            array_sum(
+                array_map(
+                    static fn(array $debt): float =>
+                        (float) (
+                            $debt['remaining_balance'] ?? 0
+                        ),
+                    $debts
+                )
+            ),
+            2
+        );
+    }
+
+
+    public function calculateCreditTotal(
+        array $credits
+    ): float {
+
+        return round(
+            array_sum(
+                array_map(
+                    static fn(array $credit): float =>
+                        (float) (
+                            $credit['credit_amount'] ?? 0
+                        ),
+                    $credits
+                )
+            ),
+            2
+        );
+    }
+}
+
+
+/*
+ * =========================================================
+ * DAILY RECORD FORMATTER
+ * =========================================================
+ */
+
+final class DailyRecordFormatter
+{
+    public static function escape(
+        mixed $value
+    ): string {
+
+        return htmlspecialchars(
+            (string) ($value ?? ''),
+            ENT_QUOTES,
+            'UTF-8'
+        );
+    }
+
+
+    public static function money(
+        mixed $value
+    ): string {
+
+        return '₱' . number_format(
+            (float) ($value ?? 0),
+            2
+        );
+    }
+
+
+    public static function date(
+        ?string $date
+    ): string {
+
+        if (!$date) {
+            return '—';
+        }
+
+        $timestamp = strtotime($date);
+
+        if (!$timestamp) {
+            return self::escape($date);
+        }
+
+        return date(
+            'F j, Y',
+            $timestamp
+        );
+    }
+
+
+    public static function deliveryDescription(
+        int $slim,
+        int $round
+    ): string {
+
+        $parts = [];
+
+        if ($slim > 0) {
+            $parts[] = $slim . ' Slim';
+        }
+
+        if ($round > 0) {
+            $parts[] = $round . ' Round';
+        }
+
+        return $parts
+            ? implode(' + ', $parts)
+            : '—';
+    }
+
+
+    public static function recordLabel(
+        int $count
+    ): string {
+
+        return $count . ' ' .
+            ($count === 1 ? 'record' : 'records');
+    }
+}
+
+
+/*
+ * =========================================================
+ * LOAD DAILY RECORD
  * =========================================================
  */
 
@@ -19,388 +501,79 @@ $dailyId = filter_input(
 );
 
 if (!$dailyId || $dailyId <= 0) {
-
     header('Location: ../daily-records.php');
     exit;
-
 }
 
 
-/*
- * =========================================================
- * HELPERS
- * =========================================================
- */
+$repository = new DailyRecordRepository($pdo);
 
-function escapeHtml($value): string
-{
-    return htmlspecialchars(
-        (string) ($value ?? ''),
-        ENT_QUOTES,
-        'UTF-8'
-    );
-}
-
-
-function money($value): string
-{
-    return '₱' . number_format(
-        (float) ($value ?? 0),
-        2
-    );
-}
-
-
-function formatDate($date): string
-{
-    if (!$date) {
-        return '—';
-    }
-
-    $timestamp = strtotime($date);
-
-    if (!$timestamp) {
-        return escapeHtml($date);
-    }
-
-    return date('F j, Y', $timestamp);
-}
-
-
-function deliveryDescription(
-    int $slim,
-    int $round
-): string {
-
-    $parts = [];
-
-    if ($slim > 0) {
-        $parts[] = $slim . ' Slim';
-    }
-
-    if ($round > 0) {
-        $parts[] = $round . ' Round';
-    }
-
-    if (!$parts) {
-        return '—';
-    }
-
-    return implode(' + ', $parts);
-}
-
-
-/*
- * =========================================================
- * DAILY RECORD
- * =========================================================
- */
-
-$stmt = $pdo->prepare(
-    "SELECT
-        daily_id,
-        business_date,
-        status,
-        closing_result,
-        actual_station_cash,
-        created_at,
-        updated_at,
-        saved_at,
-        saved_by
-     FROM daily_records
-     WHERE daily_id = ?
-     LIMIT 1"
-);
-
-$stmt->execute([
-    $dailyId
-]);
-
-$daily = $stmt->fetch(PDO::FETCH_ASSOC);
+$daily = $repository->getDailyRecord($dailyId);
 
 if (!$daily) {
-
     header('Location: ../daily-records.php');
     exit;
-
 }
 
 
 /*
  * =========================================================
- * WALK-IN SALES
+ * LOAD REPORT DATA
  * =========================================================
  */
 
-$stmt = $pdo->prepare(
-    "SELECT
-        COALESCE(SUM(walk_in_customers), 0) AS walk_in_customers,
-        COALESCE(SUM(walk_in_customers * walk_in_price), 0) AS walk_in_total,
-        COALESCE(SUM(other_shop_payment), 0) AS other_shop_payment,
-        COALESCE(SUM(other_sales), 0) AS other_sales
-     FROM daily_sales
-     WHERE sales_date = ?
-       AND daily_id = ?"
-);
-
-$stmt->execute([
+$sales = $repository->getSales(
     $daily['business_date'],
     $dailyId
-]);
-
-$sales = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$sales) {
-
-    $sales = [
-        'walk_in_customers' => 0,
-        'walk_in_total' => 0,
-        'other_shop_payment' => 0,
-        'other_sales' => 0
-    ];
-
-}
-
-
-/*
- * =========================================================
- * DELIVERIES
- * =========================================================
- */
-
-$stmt = $pdo->prepare(
-    "SELECT
-        d.delivery_id,
-        d.customer_id,
-        c.customer_name,
-        d.delivery_date,
-        d.slim_quantity,
-        d.round_quantity,
-        d.price_per_gallon,
-        d.amount_due,
-        d.notes,
-        d.created_at
-     FROM deliveries d
-     LEFT JOIN customers c
-        ON c.customer_id = d.customer_id
-     WHERE d.daily_id = ?
-     ORDER BY d.delivery_id ASC"
 );
 
-$stmt->execute([
+$deliveries = $repository->getDeliveries(
     $dailyId
-]);
-
-$deliveries = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-
-/*
- * =========================================================
- * PAYMENTS
- * =========================================================
- */
-
-$stmt = $pdo->prepare(
-    "SELECT
-        p.payment_id,
-        p.delivery_id,
-        p.customer_id,
-        c.customer_name,
-        p.payment_date,
-        p.amount,
-        p.payment_method,
-        p.collection_location,
-        p.notes,
-        p.created_at
-     FROM payments p
-     LEFT JOIN customers c
-        ON c.customer_id = p.customer_id
-     WHERE p.daily_id = ?
-     ORDER BY p.payment_id ASC"
 );
 
-$stmt->execute([
+$expenses = $repository->getExpenses(
     $dailyId
-]);
-
-$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-
-/*
- * =========================================================
- * EXPENSES
- * =========================================================
- */
-
-$stmt = $pdo->prepare(
-    "SELECT
-        expense_id,
-        expense_date,
-        category,
-        expense_location,
-        description,
-        amount,
-        notes,
-        created_at
-     FROM expenses
-     WHERE daily_id = ?
-     ORDER BY expense_id ASC"
 );
 
-$stmt->execute([
+$debts = $repository->getDebts(
     $dailyId
-]);
-
-$expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-
-/*
- * =========================================================
- * DELIVERY TOTAL
- * =========================================================
- */
-
-$deliveryTotal = 0;
-
-foreach ($deliveries as $delivery) {
-
-    $deliveryTotal += (float) (
-        $delivery['amount_due'] ?? 0
-    );
-
-}
-
-
-/*
- * =========================================================
- * PAYMENT TOTAL
- * =========================================================
- */
-
-$paymentTotal = 0;
-
-foreach ($payments as $payment) {
-
-    $paymentTotal += (float) (
-        $payment['amount'] ?? 0
-    );
-
-}
-
-
-/*
- * =========================================================
- * EXPENSE TOTAL
- * =========================================================
- */
-
-$expenseTotal = 0;
-
-foreach ($expenses as $expense) {
-
-    $expenseTotal += (float) (
-        $expense['amount'] ?? 0
-    );
-
-}
-
-
-/*
- * =========================================================
- * DEBT CREATED ON THIS DAY
- *
- * Important:
- *
- * We only consider payments that belong to THIS daily
- * record when determining how much debt was created
- * on this day.
- *
- * A later payment on another day does not erase the
- * debt from this historical Daily Record.
- * =========================================================
- */
-
-$stmt = $pdo->prepare(
-    "SELECT
-        d.delivery_id,
-        d.customer_id,
-        c.customer_name,
-        d.delivery_date,
-        d.slim_quantity,
-        d.round_quantity,
-        d.amount_due,
-
-        COALESCE(
-            SUM(
-                CASE
-                    WHEN p.daily_id = d.daily_id
-                    THEN p.amount
-                    ELSE 0
-                END
-            ),
-            0
-        ) AS amount_paid,
-
-        (
-            d.amount_due -
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN p.daily_id = d.daily_id
-                        THEN p.amount
-                        ELSE 0
-                    END
-                ),
-                0
-            )
-        ) AS remaining_balance
-
-     FROM deliveries d
-
-     LEFT JOIN customers c
-        ON c.customer_id = d.customer_id
-
-     LEFT JOIN payments p
-        ON p.delivery_id = d.delivery_id
-
-     WHERE d.daily_id = ?
-
-     GROUP BY
-        d.delivery_id,
-        d.customer_id,
-        c.customer_name,
-        d.delivery_date,
-        d.slim_quantity,
-        d.round_quantity,
-        d.amount_due
-
-     HAVING remaining_balance > 0
-
-     ORDER BY d.delivery_id ASC"
 );
 
-$stmt->execute([
+$credits = $repository->getCredits(
     $dailyId
-]);
-
-$debts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+);
 
 
 /*
  * =========================================================
- * DEBT TOTAL
+ * CALCULATE REPORT TOTALS
  * =========================================================
  */
 
-$debtCreatedTotal = 0;
-
-foreach ($debts as $debt) {
-
-    $debtCreatedTotal += (float) (
-        $debt['remaining_balance'] ?? 0
+$paymentTotal =
+    $repository->calculatePaymentTotal(
+        $deliveries
     );
 
-}
+$deliveryTotalQuantity =
+    $repository->calculateDeliveryQuantity(
+        $deliveries
+    );
+
+$expenseTotal =
+    $repository->calculateExpenseTotal(
+        $expenses
+    );
+
+$debtCreatedTotal =
+    $repository->calculateDebtTotal(
+        $debts
+    );
+
+$creditTotal =
+    $repository->calculateCreditTotal(
+        $credits
+    );
 
 
 /*
@@ -409,7 +582,7 @@ foreach ($debts as $debt) {
  * =========================================================
  */
 
-$walkInCustomers = (int) (
+$walkInGallons = (int) (
     $sales['walk_in_customers'] ?? 0
 );
 
@@ -425,24 +598,28 @@ $otherSales = (float) (
     $sales['other_sales'] ?? 0
 );
 
-$closingResult = trim(
-    (string) (
-        $daily['closing_result'] ?? ''
-    )
-);
 
-if ($closingResult === '') {
-    $closingResult = 'Pending';
-}
+/*
+ * =========================================================
+ * NET PROFIT
+ * =========================================================
+ *
+ * Preserved from the existing report logic:
+ *
+ * Walk-In Total
+ * + Other Sales
+ * + Delivery Payments Received
+ *
+ * Expenses are displayed separately.
+ *
+ * =========================================================
+ */
 
-$closingResultUpper = strtoupper(
-    $closingResult
-);
-
-$status = strtoupper(
-    (string) (
-        $daily['status'] ?? ''
-    )
+$netProfit = round(
+    $walkInTotal
+    + $otherSales
+    + $paymentTotal,
+    2
 );
 
 
@@ -453,10 +630,8 @@ $status = strtoupper(
  */
 
 $currentPage = 'daily-records';
-
 $pageRoot = '../';
 $assetRoot = '../../';
-
 
 ?>
 
@@ -473,7 +648,7 @@ $assetRoot = '../../';
     >
 
     <title>
-        Daily Record #<?= (int) $dailyId ?> | Marcid Blue
+        Daily Record | Marcid Blue Binangonan
     </title>
 
     <link
@@ -527,7 +702,9 @@ $assetRoot = '../../';
             background: #ffffff;
             border: 1px solid #e5e7eb;
             border-radius: 10px;
-            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+            box-shadow:
+                0 8px 30px
+                rgba(15, 23, 42, 0.08);
             overflow: hidden;
         }
 
@@ -537,7 +714,7 @@ $assetRoot = '../../';
            ========================================================= */
 
         .report-header {
-            padding: 34px 40px 28px;
+            padding: 30px 40px 26px;
             border-bottom: 3px solid #1687c9;
         }
 
@@ -545,11 +722,30 @@ $assetRoot = '../../';
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 20px;
+            gap: 24px;
+        }
+
+        .report-brand-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .report-logo {
+            width: 58px;
+            height: 58px;
+            object-fit: contain;
+            flex: 0 0 58px;
+        }
+
+        .report-brand-text {
+            min-width: 0;
         }
 
         .report-brand-name {
             font-size: 24px;
+            line-height: 1.2;
             font-weight: 700;
             color: #1687c9;
             letter-spacing: 0.2px;
@@ -561,7 +757,15 @@ $assetRoot = '../../';
             color: #6b7280;
         }
 
+        .report-brand-date {
+            margin-top: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+        }
+
         .report-document-title {
+            flex-shrink: 0;
             text-align: right;
         }
 
@@ -576,70 +780,6 @@ $assetRoot = '../../';
             margin: 5px 0 0;
             font-size: 12px;
             color: #6b7280;
-        }
-
-
-        /* =========================================================
-           REPORT META
-           ========================================================= */
-
-        .report-meta {
-            display: grid;
-            grid-template-columns:
-                repeat(4, minmax(0, 1fr));
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .report-meta-item {
-            padding: 18px 24px;
-            border-right: 1px solid #e5e7eb;
-        }
-
-        .report-meta-item:last-child {
-            border-right: 0;
-        }
-
-        .report-meta-label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: #6b7280;
-        }
-
-        .report-meta-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: #111827;
-        }
-
-
-        /* =========================================================
-           STATUS
-           ========================================================= */
-
-        .report-status {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 9px;
-            border-radius: 999px;
-            background: #ecfdf5;
-            color: #047857;
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        .report-result {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 9px;
-            border-radius: 999px;
-            background: #f3f4f6;
-            color: #4b5563;
-            font-size: 11px;
-            font-weight: 700;
         }
 
 
@@ -685,13 +825,12 @@ $assetRoot = '../../';
 
 
         /* =========================================================
-           WALK-IN SUMMARY
+           SUMMARY
            ========================================================= */
 
         .walkin-grid {
             display: grid;
-            grid-template-columns:
-                repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             border: 1px solid #e5e7eb;
             border-radius: 7px;
             overflow: hidden;
@@ -721,50 +860,100 @@ $assetRoot = '../../';
 
 
         /* =========================================================
-           TABLE
+            SHARED TABLE
+            ========================================================= */
+
+            .report-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .report-table th {
+                padding: 8px 6px;
+                background: #f8fafc;
+                border-top: 1px solid #e5e7eb;
+                border-bottom: 1px solid #e5e7eb;
+                text-align: left;
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+                color: #64748b;
+            }
+
+            .report-table td {
+                padding: 8px 6px;
+                border-bottom: 1px solid #edf0f2;
+                color: #374151;
+                vertical-align: middle;
+            }
+
+            .report-table tbody tr:last-child td {
+                border-bottom: 1px solid #e5e7eb;
+            }
+
+            .report-table .number {
+                text-align: right;
+            }
+
+            .report-table .center {
+                text-align: center;
+            }
+
+            .report-table .strong {
+                font-weight: 600;
+                color: #111827;
+            }
+
+
+        /* =========================================================
+           DELIVERY + PAYMENT TABLE
            ========================================================= */
 
-        .report-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
+        .delivery-payment-table th:first-child,
+        .delivery-payment-table td:first-child {
+            width: 40%;
         }
 
-        .report-table th {
-            padding: 10px 12px;
-            background: #f8fafc;
-            border-top: 1px solid #e5e7eb;
-            border-bottom: 1px solid #e5e7eb;
+        .delivery-payment-table th:nth-child(2),
+        .delivery-payment-table td:nth-child(2),
+        .delivery-payment-table th:nth-child(3),
+        .delivery-payment-table td:nth-child(3),
+        .delivery-payment-table th:nth-child(4),
+        .delivery-payment-table td:nth-child(4) {
+            width: 20%;
+        }
+
+
+        /* =========================================================
+           DEBT + CREDIT TABLE
+           ========================================================= */
+
+        .debt-credit-table th,
+        .debt-credit-table td {
+            width: 20%;
+        }
+
+        .debt-credit-table th:nth-child(-n + 2),
+        .debt-credit-table td:nth-child(-n + 2) {
             text-align: left;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            color: #64748b;
         }
 
-        .report-table td {
-            padding: 12px;
-            border-bottom: 1px solid #edf0f2;
-            color: #374151;
-            vertical-align: middle;
-        }
-
-        .report-table tbody tr:last-child td {
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .report-table .number {
+        .debt-credit-table th:nth-child(n + 3),
+        .debt-credit-table td:nth-child(n + 3) {
             text-align: right;
         }
 
-        .report-table .center {
-            text-align: center;
-        }
 
-        .report-table .strong {
-            font-weight: 600;
-            color: #111827;
+        /* =========================================================
+           EXPENSES TABLE
+           ========================================================= */
+
+        .expenses-table th,
+        .expenses-table td {
+            width: 25%;
         }
 
 
@@ -775,37 +964,40 @@ $assetRoot = '../../';
         .report-total-row {
             display: flex;
             justify-content: flex-end;
-            margin-top: 12px;
+            margin-top: 8px;
         }
 
         .report-total {
             display: flex;
             align-items: center;
-            gap: 30px;
-            min-width: 230px;
-            padding: 12px 14px;
+            justify-content: space-between;
+            gap: 16px;
+            min-width: 210px;
+            padding: 9px 12px;
             background: #f8fafc;
             border: 1px solid #e5e7eb;
             border-radius: 6px;
         }
 
         .report-total-label {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
             color: #64748b;
             text-transform: uppercase;
+            white-space: nowrap;
         }
 
         .report-total-value {
-            margin-left: auto;
-            font-size: 15px;
+            margin-left: 0;
+            font-size: 14px;
             font-weight: 700;
             color: #111827;
+            white-space: nowrap;
         }
 
 
         /* =========================================================
-           DEBT
+           DEBT TOTAL
            ========================================================= */
 
         .debt-total {
@@ -813,12 +1005,24 @@ $assetRoot = '../../';
             border-color: #fed7aa;
         }
 
-        .debt-total .report-total-label {
-            color: #9a3412;
-        }
-
+        .debt-total .report-total-label,
         .debt-total .report-total-value {
             color: #c2410c;
+        }
+
+
+        /* =========================================================
+           CREDIT TOTAL
+           ========================================================= */
+
+        .credit-total {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+        }
+
+        .credit-total .report-total-label,
+        .credit-total .report-total-value {
+            color: #047857;
         }
 
 
@@ -855,12 +1059,6 @@ $assetRoot = '../../';
             color: #6b7280;
         }
 
-        .report-footer-id {
-            text-align: right;
-            font-size: 10px;
-            color: #9ca3af;
-        }
-
 
         /* =========================================================
            RESPONSIVE
@@ -872,6 +1070,11 @@ $assetRoot = '../../';
                 padding: 20px;
             }
 
+            .record-toolbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
             .report-header {
                 padding: 26px 24px 22px;
             }
@@ -881,17 +1084,12 @@ $assetRoot = '../../';
                 align-items: flex-start;
             }
 
+            .report-brand-left {
+                width: 100%;
+            }
+
             .report-document-title {
                 text-align: left;
-            }
-
-            .report-meta {
-                grid-template-columns:
-                    repeat(2, minmax(0, 1fr));
-            }
-
-            .report-meta-item:nth-child(2) {
-                border-right: 0;
             }
 
             .report-body {
@@ -918,12 +1116,33 @@ $assetRoot = '../../';
             .report-footer {
                 padding: 20px 24px;
             }
+        }
 
-            .record-toolbar {
-                align-items: flex-start;
-                flex-direction: column;
+
+        /* =========================================================
+           SMALL MOBILE
+           ========================================================= */
+
+        @media (max-width: 520px) {
+
+            .report-brand-left {
+                gap: 10px;
             }
 
+            .report-logo {
+                width: 48px;
+                height: 48px;
+                flex-basis: 48px;
+            }
+
+            .report-brand-name {
+                font-size: 20px;
+            }
+
+            .report-brand-subtitle,
+            .report-brand-date {
+                font-size: 11px;
+            }
         }
 
 
@@ -938,25 +1157,19 @@ $assetRoot = '../../';
             margin: 12mm;
         }
 
-
-        /* =========================================================
-        BASIC PRINT RESET
-        ========================================================= */
-
         body {
             background: #ffffff !important;
         }
 
         .sidebar,
         .topbar,
-        .record-toolbar,
-        .no-print {
+        .record-toolbar {
             display: none !important;
         }
 
         .main {
-            margin-left: 0 !important;
-            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         .record-page {
@@ -971,127 +1184,49 @@ $assetRoot = '../../';
         }
 
         .report-header {
-            padding-top: 0;
+            padding: 0 0 18px;
         }
 
-
-        /* =========================================================
-        MULTI-PAGE REPORT FLOW
-        ========================================================= */
-
         .report-body {
-            break-inside: auto;
-            page-break-inside: auto;
+            padding: 20px 0 0;
         }
 
         .report-section {
-            /*
-            * Allow long sections to continue naturally
-            * across multiple A4 pages.
-            */
-            break-inside: auto;
-            page-break-inside: auto;
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
-
-
-        /* =========================================================
-        KEEP SECTION HEADERS WITH THEIR CONTENT
-        ========================================================= */
-
-        .report-section-header {
-            break-after: avoid;
-            page-break-after: avoid;
-        }
-
-
-        /* =========================================================
-        TABLES
-        ========================================================= */
 
         .report-table {
-            width: 100%;
-            break-inside: auto;
-            page-break-inside: auto;
+            min-width: 0;
         }
 
-
-        /*
-        * Repeat the table header whenever the table
-        * continues onto another printed page.
-        */
-        .report-table thead {
-            display: table-header-group;
-        }
-
-
-        /*
-        * Keep the table body as a normal table body.
-        */
-        .report-table tbody {
-            display: table-row-group;
-        }
-
-
-        /*
-        * Never split an individual customer/payment/
-        * debt/expense row across two pages.
-        */
-        .report-table tr {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-
-        /*
-        * Keep individual cells together as well.
-        */
-        .report-table td,
-        .report-table th {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-
-        /* =========================================================
-        TOTALS
-        ========================================================= */
-
-        .report-total-row {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        .report-total {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-
-        /* =========================================================
-        WALK-IN SUMMARY
-        ========================================================= */
-
+        /* Keep summary cards side-by-side when printing */
         .walkin-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            width: 100% !important;
+
             break-inside: avoid;
             page-break-inside: avoid;
         }
 
-
-        /* =========================================================
-        FOOTER
-        ========================================================= */
+        .walkin-card {
+            width: auto !important;
+            min-width: 0 !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
 
         .report-footer {
-            break-inside: avoid;
-            page-break-inside: avoid;
+            padding: 18px 0 0;
+            background: #ffffff;
         }
-
     }
 
     </style>
 
 </head>
-
 
 <body>
 
@@ -1099,17 +1234,31 @@ $assetRoot = '../../';
 
     <?php require_once '../../includes/sidebar.php'; ?>
 
-
     <main class="main">
 
-        <div class="record-page">
+        <header class="topbar">
 
+            <div class="topbar-title">
+                Daily Record
+            </div>
+
+            <div class="topbar-user">
+                👤
+                <?= DailyRecordFormatter::escape(
+                    $_SESSION['full_name'] ?? 'Admin'
+                ) ?>
+            </div>
+
+        </header>
+
+
+        <div class="record-page">
 
             <!-- =====================================================
                  TOOLBAR
                  ===================================================== -->
 
-            <div class="record-toolbar no-print">
+            <div class="record-toolbar">
 
                 <div class="record-toolbar-left">
 
@@ -1118,12 +1267,10 @@ $assetRoot = '../../';
                     </h2>
 
                     <p>
-                        Read-only record for Daily ID
-                        #<?= (int) $dailyId ?>
+                        Detailed view of saved daily operations.
                     </p>
 
                 </div>
-
 
                 <div class="record-toolbar-actions">
 
@@ -1131,7 +1278,7 @@ $assetRoot = '../../';
                         href="../daily-records.php"
                         class="btn btn-outline"
                     >
-                        Back
+                        Back to Daily Records
                     </a>
 
                     <button
@@ -1139,7 +1286,7 @@ $assetRoot = '../../';
                         class="btn btn-primary"
                         onclick="window.print()"
                     >
-                        Print Record
+                        Print
                     </button>
 
                 </div>
@@ -1153,7 +1300,6 @@ $assetRoot = '../../';
 
             <div class="daily-record-paper">
 
-
                 <!-- =================================================
                      REPORT HEADER
                      ================================================= -->
@@ -1162,27 +1308,44 @@ $assetRoot = '../../';
 
                     <div class="report-brand">
 
-                        <div>
+                        <div class="report-brand-left">
 
-                            <div class="report-brand-name">
-                                MARCID BLUE
-                            </div>
+                            <img
+                                src="../../assets/images/mb-logo.png"
+                                alt="Marcid Blue Logo"
+                                class="report-logo"
+                            >
 
-                            <div class="report-brand-subtitle">
-                                Water Station
+                            <div class="report-brand-text">
+
+                                <div class="report-brand-name">
+                                    Marcid Blue Binangonan
+                                </div>
+
+                                <div class="report-brand-subtitle">
+                                    Water Station
+                                </div>
+
+                                <div class="report-brand-date">
+                                    <?= DailyRecordFormatter::escape(
+                                        DailyRecordFormatter::date(
+                                            $daily['business_date']
+                                        )
+                                    ) ?>
+                                </div>
+
                             </div>
 
                         </div>
 
-
                         <div class="report-document-title">
 
                             <h1>
-                                DAILY RECORD
+                                Daily Record
                             </h1>
 
                             <p>
-                                Daily Operations Report
+                                Official Daily Operations Record
                             </p>
 
                         </div>
@@ -1193,71 +1356,6 @@ $assetRoot = '../../';
 
 
                 <!-- =================================================
-                     REPORT META
-                     ================================================= -->
-
-                <div class="report-meta">
-
-
-                    <div class="report-meta-item">
-
-                        <span class="report-meta-label">
-                            Date
-                        </span>
-
-                        <span class="report-meta-value">
-                            <?= escapeHtml(
-                                formatDate(
-                                    $daily['business_date']
-                                )
-                            ) ?>
-                        </span>
-
-                    </div>
-
-
-                    <div class="report-meta-item">
-
-                        <span class="report-meta-label">
-                            Daily ID
-                        </span>
-
-                        <span class="report-meta-value">
-                            #<?= (int) $dailyId ?>
-                        </span>
-
-                    </div>
-
-
-                    <div class="report-meta-item">
-
-                        <span class="report-meta-label">
-                            Status
-                        </span>
-
-                        <span class="report-status">
-                            <?= escapeHtml($status) ?>
-                        </span>
-
-                    </div>
-
-
-                    <div class="report-meta-item">
-
-                        <span class="report-meta-label">
-                            Closing Result
-                        </span>
-
-                        <span class="report-result">
-                            <?= escapeHtml($closingResultUpper) ?>
-                        </span>
-
-                    </div>
-
-                </div>
-
-
-                <!-- =================================================
                      REPORT BODY
                      ================================================= -->
 
@@ -1265,7 +1363,7 @@ $assetRoot = '../../';
 
 
                     <!-- =================================================
-                         WALK-IN SALES
+                         SUMMARY
                          ================================================= -->
 
                     <section class="report-section">
@@ -1273,123 +1371,62 @@ $assetRoot = '../../';
                         <div class="report-section-header">
 
                             <h3>
-                                Walk-in Sales
+                                Daily Summary
                             </h3>
-
-                            <span>
-                                Station
-                            </span>
 
                         </div>
 
-
                         <div class="walkin-grid">
-
 
                             <div class="walkin-item">
 
                                 <span class="walkin-label">
-                                    Customers
+                                    Walk-In Gallons
                                 </span>
 
                                 <span class="walkin-value">
                                     <?= number_format(
-                                        $walkInCustomers
+                                        $walkInGallons
                                     ) ?>
                                 </span>
 
                             </div>
 
-
                             <div class="walkin-item">
 
                                 <span class="walkin-label">
-                                    Price per Customer
+                                    Deliveries
                                 </span>
 
                                 <span class="walkin-value">
-                                    <?= money(
-                                        $walkInCustomers > 0
-                                            ? (
-                                                $walkInTotal /
-                                                $walkInCustomers
-                                            )
-                                            : 30
+                                    <?= number_format(
+                                        $deliveryTotalQuantity
                                     ) ?>
                                 </span>
 
                             </div>
 
-
                             <div class="walkin-item">
 
                                 <span class="walkin-label">
-                                    Total Sales
+                                    Net Profit
                                 </span>
 
                                 <span class="walkin-value">
-                                    <?= money($walkInTotal) ?>
+                                    <?= DailyRecordFormatter::money(
+                                        $netProfit
+                                    ) ?>
                                 </span>
 
                             </div>
-
 
                         </div>
-
-
-                        <?php if (
-                            $otherShopPayment > 0 ||
-                            $otherSales > 0
-                        ): ?>
-
-                            <div
-                                style="
-                                    margin-top:12px;
-                                    font-size:12px;
-                                    color:#6b7280;
-                                "
-                            >
-
-                                <?php if ($otherShopPayment > 0): ?>
-
-                                    Other Shop Payment:
-                                    <strong>
-                                        <?= money(
-                                            $otherShopPayment
-                                        ) ?>
-                                    </strong>
-
-                                <?php endif; ?>
-
-
-                                <?php if (
-                                    $otherShopPayment > 0 &&
-                                    $otherSales > 0
-                                ): ?>
-
-                                    &nbsp;•&nbsp;
-
-                                <?php endif; ?>
-
-
-                                <?php if ($otherSales > 0): ?>
-
-                                    Other Sales:
-                                    <strong>
-                                        <?= money($otherSales) ?>
-                                    </strong>
-
-                                <?php endif; ?>
-
-                            </div>
-
-                        <?php endif; ?>
 
                     </section>
 
 
                     <!-- =================================================
-                         DELIVERIES
+                         DELIVERIES & PAYMENTS
                          ================================================= -->
 
                     <section class="report-section">
@@ -1397,15 +1434,13 @@ $assetRoot = '../../';
                         <div class="report-section-header">
 
                             <h3>
-                                Deliveries
+                                Deliveries &amp; Payments
                             </h3>
 
                             <span>
-                                <?= count($deliveries) ?>
-                                <?= count($deliveries) === 1
-                                    ? 'record'
-                                    : 'records'
-                                ?>
+                                <?= DailyRecordFormatter::recordLabel(
+                                    count($deliveries)
+                                ) ?>
                             </span>
 
                         </div>
@@ -1419,249 +1454,51 @@ $assetRoot = '../../';
 
                         <?php else: ?>
 
-                            <table class="report-table">
+                            <table class="report-table delivery-payment-table">
 
                                 <thead>
 
                                     <tr>
-
-                                        <th>
-                                            Customer
-                                        </th>
-
-                                        <th class="center">
-                                            Slim
-                                        </th>
-
-                                        <th class="center">
-                                            Round
-                                        </th>
-
-                                        <th class="number">
-                                            Price / Gallon
-                                        </th>
-
-                                        <th class="number">
-                                            Amount Due
-                                        </th>
-
+                                        <th>Customer</th>
+                                        <th class="center">Slim</th>
+                                        <th class="center">Round</th>
+                                        <th class="number">Amount</th>
                                     </tr>
 
                                 </thead>
 
-
                                 <tbody>
 
-                                    <?php foreach (
-                                        $deliveries
-                                        as $delivery
-                                    ): ?>
+                                    <?php foreach ($deliveries as $delivery): ?>
 
                                         <tr>
 
                                             <td class="strong">
-
-                                                <?= escapeHtml(
-                                                    $delivery[
-                                                        'customer_name'
-                                                    ] ?? 'Unknown Customer'
+                                                <?= DailyRecordFormatter::escape(
+                                                    $delivery['customer_name']
+                                                        ?? 'Unknown Customer'
                                                 ) ?>
-
                                             </td>
 
                                             <td class="center">
-
                                                 <?= (int) (
-                                                    $delivery[
-                                                        'slim_quantity'
-                                                    ] ?? 0
+                                                    $delivery['slim_quantity']
+                                                    ?? 0
                                                 ) ?>
-
                                             </td>
 
                                             <td class="center">
-
                                                 <?= (int) (
-                                                    $delivery[
-                                                        'round_quantity'
-                                                    ] ?? 0
+                                                    $delivery['round_quantity']
+                                                    ?? 0
                                                 ) ?>
-
-                                            </td>
-
-                                            <td class="number">
-
-                                                <?= money(
-                                                    $delivery[
-                                                        'price_per_gallon'
-                                                    ] ?? 0
-                                                ) ?>
-
                                             </td>
 
                                             <td class="number strong">
-
-                                                <?= money(
-                                                    $delivery[
-                                                        'amount_due'
-                                                    ] ?? 0
+                                                <?= DailyRecordFormatter::money(
+                                                    $delivery['amount_received']
+                                                        ?? 0
                                                 ) ?>
-
-                                            </td>
-
-                                        </tr>
-
-                                    <?php endforeach; ?>
-
-                                </tbody>
-
-                            </table>
-
-
-                            <div class="report-total-row">
-
-                                <div class="report-total">
-
-                                    <span class="report-total-label">
-                                        Total Due
-                                    </span>
-
-                                    <span class="report-total-value">
-                                        <?= money(
-                                            $deliveryTotal
-                                        ) ?>
-                                    </span>
-
-                                </div>
-
-                            </div>
-
-                        <?php endif; ?>
-
-                    </section>
-
-
-                    <!-- =================================================
-                         PAYMENTS
-                         ================================================= -->
-
-                    <section class="report-section">
-
-                        <div class="report-section-header">
-
-                            <h3>
-                                Payments Received
-                            </h3>
-
-                            <span>
-                                <?= count($payments) ?>
-                                <?= count($payments) === 1
-                                    ? 'record'
-                                    : 'records'
-                                ?>
-                            </span>
-
-                        </div>
-
-
-                        <?php if (empty($payments)): ?>
-
-                            <div class="report-empty">
-                                No payments recorded for this day.
-                            </div>
-
-                        <?php else: ?>
-
-                            <table class="report-table">
-
-                                <thead>
-
-                                    <tr>
-
-                                        <th>
-                                            Customer
-                                        </th>
-
-                                        <th class="number">
-                                            Amount
-                                        </th>
-
-                                        <th>
-                                            Method
-                                        </th>
-
-                                        <th>
-                                            Location
-                                        </th>
-
-                                        <th>
-                                            Payment Date
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
-
-
-                                <tbody>
-
-                                    <?php foreach (
-                                        $payments
-                                        as $payment
-                                    ): ?>
-
-                                        <tr>
-
-                                            <td class="strong">
-
-                                                <?= escapeHtml(
-                                                    $payment[
-                                                        'customer_name'
-                                                    ] ?? 'Unknown Customer'
-                                                ) ?>
-
-                                            </td>
-
-                                            <td class="number strong">
-
-                                                <?= money(
-                                                    $payment[
-                                                        'amount'
-                                                    ] ?? 0
-                                                ) ?>
-
-                                            </td>
-
-                                            <td>
-
-                                                <?= escapeHtml(
-                                                    $payment[
-                                                        'payment_method'
-                                                    ] ?? '—'
-                                                ) ?>
-
-                                            </td>
-
-                                            <td>
-
-                                                <?= escapeHtml(
-                                                    $payment[
-                                                        'collection_location'
-                                                    ] ?? '—'
-                                                ) ?>
-
-                                            </td>
-
-                                            <td>
-
-                                                <?= escapeHtml(
-                                                    formatDate(
-                                                        $payment[
-                                                            'payment_date'
-                                                        ] ?? null
-                                                    )
-                                                ) ?>
-
                                             </td>
 
                                         </tr>
@@ -1682,7 +1519,7 @@ $assetRoot = '../../';
                                     </span>
 
                                     <span class="report-total-value">
-                                        <?= money(
+                                        <?= DailyRecordFormatter::money(
                                             $paymentTotal
                                         ) ?>
                                     </span>
@@ -1697,7 +1534,7 @@ $assetRoot = '../../';
 
 
                     <!-- =================================================
-                         DEBT CREATED
+                         DEBT CREATED / CREDIT
                          ================================================= -->
 
                     <section class="report-section">
@@ -1705,125 +1542,125 @@ $assetRoot = '../../';
                         <div class="report-section-header">
 
                             <h3>
-                                Debt Created
+                                Debt Created / Credit
                             </h3>
 
                             <span>
-                                <?= count($debts) ?>
-                                <?= count($debts) === 1
-                                    ? 'record'
-                                    : 'records'
-                                ?>
+                                <?= DailyRecordFormatter::recordLabel(
+                                    count($debts) + count($credits)
+                                ) ?>
                             </span>
 
                         </div>
 
 
-                        <?php if (empty($debts)): ?>
+                        <?php if (
+                            empty($debts) &&
+                            empty($credits)
+                        ): ?>
 
                             <div class="report-empty">
-                                No debt created from deliveries on this day.
+                                No debt or credit recorded for this day.
                             </div>
 
                         <?php else: ?>
 
-                            <table class="report-table">
+                            <table class="report-table debt-credit-table">
 
                                 <thead>
 
                                     <tr>
-
-                                        <th>
-                                            Customer
-                                        </th>
-
-                                        <th>
-                                            Delivery
-                                        </th>
-
-                                        <th class="number">
-                                            Amount Due
-                                        </th>
-
-                                        <th class="number">
-                                            Paid
-                                        </th>
-
-                                        <th class="number">
-                                            Remaining
-                                        </th>
-
+                                        <th>Customer</th>
+                                        <th>Delivery</th>
+                                        <th class="number">Amount Due</th>
+                                        <th class="number">Paid</th>
+                                        <th class="number">Remaining</th>
                                     </tr>
 
                                 </thead>
 
-
                                 <tbody>
 
-                                    <?php foreach (
-                                        $debts
-                                        as $debt
-                                    ): ?>
+                                    <?php foreach ($debts as $debt): ?>
 
                                         <tr>
 
                                             <td class="strong">
-
-                                                <?= escapeHtml(
-                                                    $debt[
-                                                        'customer_name'
-                                                    ] ?? 'Unknown Customer'
+                                                <?= DailyRecordFormatter::escape(
+                                                    $debt['customer_name']
+                                                        ?? 'Unknown Customer'
                                                 ) ?>
-
                                             </td>
 
                                             <td>
-
-                                                <?= escapeHtml(
-                                                    deliveryDescription(
+                                                <?= DailyRecordFormatter::escape(
+                                                    DailyRecordFormatter::deliveryDescription(
                                                         (int) (
-                                                            $debt[
-                                                                'slim_quantity'
-                                                            ] ?? 0
+                                                            $debt['slim_quantity']
+                                                            ?? 0
                                                         ),
                                                         (int) (
-                                                            $debt[
-                                                                'round_quantity'
-                                                            ] ?? 0
+                                                            $debt['round_quantity']
+                                                            ?? 0
                                                         )
                                                     )
                                                 ) ?>
-
                                             </td>
 
                                             <td class="number">
-
-                                                <?= money(
-                                                    $debt[
-                                                        'amount_due'
-                                                    ] ?? 0
+                                                <?= DailyRecordFormatter::money(
+                                                    $debt['amount_due']
+                                                        ?? 0
                                                 ) ?>
-
                                             </td>
 
                                             <td class="number">
-
-                                                <?= money(
-                                                    $debt[
-                                                        'amount_paid'
-                                                    ] ?? 0
+                                                <?= DailyRecordFormatter::money(
+                                                    $debt['amount_paid']
+                                                        ?? 0
                                                 ) ?>
-
                                             </td>
 
                                             <td class="number strong">
-
-                                                <?= money(
-                                                    $debt[
-                                                        'remaining_balance'
-                                                    ] ?? 0
+                                                <?= DailyRecordFormatter::money(
+                                                    $debt['remaining_balance']
+                                                        ?? 0
                                                 ) ?>
+                                            </td>
 
+                                        </tr>
+
+                                    <?php endforeach; ?>
+
+
+                                    <?php foreach ($credits as $credit): ?>
+
+                                        <tr>
+
+                                            <td class="strong">
+                                                <?= DailyRecordFormatter::escape(
+                                                    $credit['customer_name']
+                                                        ?? 'Unknown Customer'
+                                                ) ?>
+                                            </td>
+
+                                            <td class="strong">
+                                                Credit
+                                            </td>
+
+                                            <td class="number">
+                                                —
+                                            </td>
+
+                                            <td class="number">
+                                                —
+                                            </td>
+
+                                            <td class="number strong">
+                                                <?= DailyRecordFormatter::money(
+                                                    $credit['credit_amount']
+                                                        ?? 0
+                                                ) ?>
                                             </td>
 
                                         </tr>
@@ -1835,23 +1672,50 @@ $assetRoot = '../../';
                             </table>
 
 
-                            <div class="report-total-row">
+                            <?php if ($debtCreatedTotal > 0): ?>
 
-                                <div class="report-total debt-total">
+                                <div class="report-total-row">
 
-                                    <span class="report-total-label">
-                                        Debt Created
-                                    </span>
+                                    <div class="report-total debt-total">
 
-                                    <span class="report-total-value">
-                                        <?= money(
-                                            $debtCreatedTotal
-                                        ) ?>
-                                    </span>
+                                        <span class="report-total-label">
+                                            Total Debt
+                                        </span>
+
+                                        <span class="report-total-value">
+                                            <?= DailyRecordFormatter::money(
+                                                $debtCreatedTotal
+                                            ) ?>
+                                        </span>
+
+                                    </div>
 
                                 </div>
 
-                            </div>
+                            <?php endif; ?>
+
+
+                            <?php if ($creditTotal > 0): ?>
+
+                                <div class="report-total-row">
+
+                                    <div class="report-total credit-total">
+
+                                        <span class="report-total-label">
+                                            Total Credit
+                                        </span>
+
+                                        <span class="report-total-value">
+                                            <?= DailyRecordFormatter::money(
+                                                $creditTotal
+                                            ) ?>
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+                            <?php endif; ?>
 
                         <?php endif; ?>
 
@@ -1871,11 +1735,9 @@ $assetRoot = '../../';
                             </h3>
 
                             <span>
-                                <?= count($expenses) ?>
-                                <?= count($expenses) === 1
-                                    ? 'record'
-                                    : 'records'
-                                ?>
+                                <?= DailyRecordFormatter::recordLabel(
+                                    count($expenses)
+                                ) ?>
                             </span>
 
                         </div>
@@ -1889,80 +1751,51 @@ $assetRoot = '../../';
 
                         <?php else: ?>
 
-                            <table class="report-table">
+                            <table class="report-table expenses-table">
 
                                 <thead>
 
                                     <tr>
-
-                                        <th>
-                                            Category
-                                        </th>
-
-                                        <th>
-                                            Description
-                                        </th>
-
-                                        <th>
-                                            Location
-                                        </th>
-
-                                        <th class="number">
-                                            Amount
-                                        </th>
-
+                                        <th>Category</th>
+                                        <th>Description</th>
+                                        <th>Location</th>
+                                        <th class="number">Amount</th>
                                     </tr>
 
                                 </thead>
 
-
                                 <tbody>
 
-                                    <?php foreach (
-                                        $expenses
-                                        as $expense
-                                    ): ?>
+                                    <?php foreach ($expenses as $expense): ?>
 
                                         <tr>
 
                                             <td class="strong">
-
-                                                <?= escapeHtml(
-                                                    $expense[
-                                                        'category'
-                                                    ] ?? '—'
+                                                <?= DailyRecordFormatter::escape(
+                                                    $expense['category']
+                                                        ?? '—'
                                                 ) ?>
-
                                             </td>
 
                                             <td>
-
-                                                <?= escapeHtml(
-                                                    $expense[
-                                                        'description'
-                                                    ] ?? '—'
+                                                <?= DailyRecordFormatter::escape(
+                                                    $expense['description']
+                                                        ?? '—'
                                                 ) ?>
-
                                             </td>
 
                                             <td>
-
-                                                <?= escapeHtml(
-                                                    $expense[
-                                                        'expense_location'
-                                                    ] ?? '—'
+                                                <?= DailyRecordFormatter::escape(
+                                                    $expense['expense_location']
+                                                        ?? '—'
                                                 ) ?>
-
                                             </td>
 
                                             <td class="number strong">
-
-                                                <?= money(
-                                                    $expense[
-                                                        'amount'
-                                                    ] ?? 0
+                                                <?= DailyRecordFormatter::money(
+                                                    $expense['amount']
+                                                        ?? 0
                                                 ) ?>
-
                                             </td>
 
                                         </tr>
@@ -1983,7 +1816,7 @@ $assetRoot = '../../';
                                     </span>
 
                                     <span class="report-total-value">
-                                        <?= money(
+                                        <?= DailyRecordFormatter::money(
                                             $expenseTotal
                                         ) ?>
                                     </span>
@@ -2017,23 +1850,7 @@ $assetRoot = '../../';
 
                     </div>
 
-
-                    <div class="report-footer-id">
-
-                        Daily Record #<?= (int) $dailyId ?>
-
-                        <br>
-
-                        <?= escapeHtml(
-                            formatDate(
-                                $daily['business_date']
-                            )
-                        ) ?>
-
-                    </div>
-
                 </footer>
-
 
             </div>
 
