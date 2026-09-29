@@ -10,15 +10,17 @@
 
         window.marcidBlueDailyClosingCalculationsInitialized = true;
 
-        const WALK_IN_PRICE =
+       let WALK_IN_PRICE =
             Number(
                 window.MARCID_BLUE_WALK_IN_PRICE
-            ) > 0
-                ? Number(
-                    window.MARCID_BLUE_WALK_IN_PRICE
-                )
-                : 30.00;
+            );
 
+        if (
+            !Number.isFinite(WALK_IN_PRICE) ||
+            WALK_IN_PRICE <= 0
+        ) {
+            WALK_IN_PRICE = 30.00;
+        }
         const MONEY_TOLERANCE = 0.005;
 
 

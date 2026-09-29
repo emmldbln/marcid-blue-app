@@ -559,23 +559,26 @@ $currentPage = 'settings';
 
                 <div class="settings-card-header">
 
-                    <h2>
-                        User Management
-                    </h2>
-
-                    <p>
-                        Manage the accounts that can access Marcid Blue.
-                    </p>
-
-                </div>
-
-
-                <div class="settings-card-body">
-
                     <div
-                        class="settings-actions"
-                        style="margin-bottom:15px;"
+                        style="
+                            display:flex;
+                            align-items:center;
+                            justify-content:space-between;
+                            gap:20px;
+                        "
                     >
+
+                        <div>
+
+                            <h2>
+                                User Management
+                            </h2>
+
+                            <p>
+                                Manage the accounts that can access Marcid Blue.
+                            </p>
+
+                        </div>
 
                         <button
                             type="button"
@@ -587,6 +590,10 @@ $currentPage = 'settings';
 
                     </div>
 
+                </div>
+
+
+                <div class="settings-card-body">
 
                     <div
                         class="settings-table-wrapper"
