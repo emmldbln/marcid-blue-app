@@ -42,7 +42,7 @@ $navItems = [
     ],
 
     'customers' => [
-        'href' => '#',
+        'href' => $pageRoot . 'customers.php',
         'icon' => '👥',
         'label' => 'Customers'
     ],
