@@ -120,6 +120,92 @@ $walkInSales = 0.00;
 
 $walkInOtherSales = 0.00;
 
+    /*
+    * =========================================================
+    * PAYMENT METHODS
+    * =========================================================
+    *
+    * Payment methods are managed from Settings.
+    *
+    * Only active payment methods are available for
+    * new Daily Closing entries.
+    *
+    * If the Settings table is unavailable, fall back
+    * to the original default methods so Daily Closing
+    * remains functional.
+    */
+
+    $paymentMethods = [];
+
+    try {
+
+        $stmt = $pdo->query(
+            "SELECT
+                method_id,
+                method_name,
+                is_active,
+                sort_order
+            FROM payment_methods
+            WHERE is_active = 1
+            ORDER BY
+                sort_order ASC,
+                method_id ASC"
+        );
+
+        $paymentMethods =
+            $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    } catch (Throwable $e) {
+
+        $paymentMethods = [];
+    }
+
+
+    /*
+    * Safety fallback.
+    */
+
+    if (empty($paymentMethods)) {
+
+        $paymentMethods = [
+            [
+                'method_id' => 0,
+                'method_name' => 'Cash',
+                'is_active' => 1,
+                'sort_order' => 1
+            ]
+        ];
+    }
+
+
+    /*
+    * First active method becomes the default
+    * for newly created payment rows.
+    */
+
+    $defaultPaymentMethod =
+        (string) $paymentMethods[0]['method_name'];
+
+
+    /*
+    * Make the configured payment methods available
+    * to the Daily Closing JavaScript.
+    */
+
+    $paymentMethodsJs =
+        json_encode(
+            $paymentMethods,
+            JSON_UNESCAPED_UNICODE |
+            JSON_UNESCAPED_SLASHES
+        );
+
+    $defaultPaymentMethodJs =
+        json_encode(
+            $defaultPaymentMethod,
+            JSON_UNESCAPED_UNICODE |
+            JSON_UNESCAPED_SLASHES
+        );
+
 ?>
 
 <!DOCTYPE html>
@@ -4339,7 +4425,9 @@ class ShopDeliveryPaymentController
             );
 
         if (method) {
-            method.value = 'Cash';
+            method.value =
+                window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD ||
+                'Cash';
         }
 
 
@@ -5180,7 +5268,9 @@ class DriverDeliveryPaymentController
 
 
         if (method) {
-            method.value = 'Cash';
+            method.value =
+                window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD ||
+                'Cash';
         }
 
 
@@ -5239,16 +5329,128 @@ class DriverDeliveryPaymentController
 }
 
 
-/*
- * =========================================================
- * DAILY CLOSING UI APPLICATION
- * =========================================================
- *
- * Main OOP controller.
- *
- * This initializes every UI controller once.
- * =========================================================
- */
+    /*
+    * =========================================================
+    * DAILY CLOSING UI APPLICATION
+    * =========================================================
+    *
+    * Main OOP controller.
+    *
+    * This initializes every UI controller once.
+    * =========================================================
+    */
+    /*
+    * =========================================================
+    * PAYMENT METHOD CONFIGURATION
+    * =========================================================
+    *
+    * Populate every Daily Closing payment-method select
+    * from the active methods configured in Settings.
+    *
+    * This runs before the Daily Closing controllers are
+    * initialized, so newly created rows inherit the same
+    * configured options.
+    * =========================================================
+    */
+
+    function initializePaymentMethods() {
+
+        const methods =
+            Array.isArray(
+                window.MARCID_BLUE_PAYMENT_METHODS
+            )
+                ? window.MARCID_BLUE_PAYMENT_METHODS
+                : [];
+
+
+        const defaultMethod =
+            window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD ||
+            'Cash';
+
+
+        const selects =
+            document.querySelectorAll(
+                '.delivery-method, .driver-delivery-method'
+            );
+
+
+        if (!selects.length) {
+            return;
+        }
+
+
+        selects.forEach(
+            select => {
+
+                const currentValue =
+                    select.value;
+
+
+                select.innerHTML =
+                    '';
+
+
+                methods.forEach(
+                    method => {
+
+                        const option =
+                            document.createElement(
+                                'option'
+                            );
+
+
+                        option.value =
+                            method.method_name;
+
+
+                        option.textContent =
+                            method.method_name;
+
+
+                        option.dataset.methodId =
+                            method.method_id;
+
+
+                        option.selected =
+                            method.method_name ===
+                            (
+                                currentValue ||
+                                defaultMethod
+                            );
+
+
+                        select.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+
+                /*
+                * If the current value no longer exists
+                * in Settings, use the first active method.
+                */
+
+                if (
+                    !Array.from(
+                        select.options
+                    ).some(
+                        option =>
+                            option.value ===
+                            currentValue
+                    )
+                ) {
+
+                    select.value =
+                        defaultMethod;
+
+                }
+
+            }
+        );
+    }
+
 
 class DailyClosingUI {
 
@@ -5303,6 +5505,14 @@ document.addEventListener(
     'DOMContentLoaded',
     () => {
 
+        /*
+         * Load payment methods from Settings
+         * before initializing Daily Closing.
+         */
+
+        initializePaymentMethods();
+
+
         const app =
             new DailyClosingUI();
 
@@ -5316,6 +5526,12 @@ document.addEventListener(
 <script>
     window.MARCID_BLUE_WALK_IN_PRICE =
         <?= $walkInPriceJs ?>;
+
+    window.MARCID_BLUE_PAYMENT_METHODS =
+        <?= $paymentMethodsJs ?>;
+
+    window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD =
+        <?= $defaultPaymentMethodJs ?>;
 </script>
 
 <!-- =========================================================

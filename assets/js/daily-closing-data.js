@@ -130,8 +130,12 @@
 
                 let value = data[key];
 
-                // Payment methods default to Cash
-                // when the saved draft has no method.
+                /*
+                * Payment methods default to the first active
+                * method configured in Settings when the saved
+                * draft has no method.
+                */
+
                 if (
                     key === 'method' &&
                     (
@@ -140,7 +144,10 @@
                         String(value).trim() === ''
                     )
                 ) {
-                    value = 'Cash';
+
+                    value =
+                        window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD ||
+                        'Cash';
                 }
 
                 setInputValue(

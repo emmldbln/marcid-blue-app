@@ -61,7 +61,7 @@ $currentPage = 'settings';
 
 
         /* =========================================================
-           SETTINGS GRID
+           GRID
         ========================================================= */
 
         .settings-grid {
@@ -69,7 +69,6 @@ $currentPage = 'settings';
             grid-template-columns:
                 minmax(0, 1fr)
                 minmax(0, 1fr);
-
             gap: 20px;
         }
 
@@ -88,6 +87,13 @@ $currentPage = 'settings';
         .settings-card-header {
             padding: 18px 20px;
             border-bottom: 1px solid var(--border);
+        }
+
+        .settings-card-header-flex {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
         }
 
         .settings-card-header h2 {
@@ -116,7 +122,6 @@ $currentPage = 'settings';
             grid-template-columns:
                 minmax(0, 1fr)
                 auto;
-
             gap: 20px;
             align-items: end;
         }
@@ -179,7 +184,7 @@ $currentPage = 'settings';
 
 
         /* =========================================================
-           USER STATUS
+           USER
         ========================================================= */
 
         .user-name {
@@ -211,6 +216,11 @@ $currentPage = 'settings';
             background: var(--secondary-light);
             color: var(--secondary-dark);
         }
+
+
+        /* =========================================================
+           STATUS
+        ========================================================= */
 
         .status-active {
             color: var(--success);
@@ -492,6 +502,14 @@ $currentPage = 'settings';
             .settings-form-row {
                 grid-template-columns: 1fr;
             }
+
+            .settings-card-header-flex {
+                align-items: flex-start;
+            }
+
+            .settings-card-header-flex > button {
+                flex-shrink: 0;
+            }
         }
 
     </style>
@@ -559,14 +577,7 @@ $currentPage = 'settings';
 
                 <div class="settings-card-header">
 
-                    <div
-                        style="
-                            display:flex;
-                            align-items:center;
-                            justify-content:space-between;
-                            gap:20px;
-                        "
-                    >
+                    <div class="settings-card-header-flex">
 
                         <div>
 
@@ -579,6 +590,7 @@ $currentPage = 'settings';
                             </p>
 
                         </div>
+
 
                         <button
                             type="button"
@@ -693,6 +705,60 @@ $currentPage = 'settings';
 
                         <div class="settings-empty">
                             Loading price history...
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </article>
+
+
+            <!-- =================================================
+                 PAYMENT METHODS
+            ================================================== -->
+
+            <article class="settings-card full-width">
+
+                <div class="settings-card-header">
+
+                    <div class="settings-card-header-flex">
+
+                        <div>
+
+                            <h2>
+                                Payment Methods
+                            </h2>
+
+                            <p>
+                                Manage the payment methods available for transactions.
+                            </p>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            id="addPaymentMethodButton"
+                        >
+                            + Add Method
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <div class="settings-card-body">
+
+                    <div
+                        class="settings-table-wrapper"
+                        id="paymentMethodsContainer"
+                    >
+
+                        <div class="settings-empty">
+                            Loading payment methods...
                         </div>
 
                     </div>
@@ -1023,6 +1089,105 @@ $currentPage = 'settings';
 </div>
 
 
+<!-- =========================================================
+     PAYMENT METHOD MODAL
+========================================================= -->
+
+<div
+    class="settings-modal"
+    id="paymentMethodModal"
+>
+
+    <div class="settings-modal-card">
+
+        <div class="settings-modal-header">
+
+            <h3 id="paymentMethodModalTitle">
+                Add Payment Method
+            </h3>
+
+            <button
+                type="button"
+                class="modal-close"
+                id="closePaymentMethodModal"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <form id="paymentMethodForm">
+
+            <div class="settings-modal-body">
+
+                <input
+                    type="hidden"
+                    id="paymentMethodId"
+                    name="method_id"
+                    value=""
+                >
+
+
+                <div class="settings-form-group">
+
+                    <label
+                        class="settings-form-label"
+                        for="paymentMethodName"
+                    >
+                        Payment Method Name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="paymentMethodName"
+                        name="method_name"
+                        class="settings-form-input"
+                        placeholder="e.g. Maya"
+                        maxlength="100"
+                        autocomplete="off"
+                        required
+                    >
+
+                    <div class="settings-form-help">
+
+                        Enter the name exactly as it should appear
+                        when recording a payment.
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="settings-modal-footer">
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    id="cancelPaymentMethodButton"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="submit"
+                    class="btn btn-primary"
+                    id="savePaymentMethodButton"
+                >
+                    Save Method
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
 <div
     class="settings-toast"
     id="settingsToast"
@@ -1088,6 +1253,7 @@ async function requestSettings(
                 key,
                 value
             );
+
         }
     );
 
@@ -1118,6 +1284,7 @@ async function requestSettings(
             json.message ||
             'Unable to complete settings request.'
         );
+
     }
 
 
@@ -1190,6 +1357,17 @@ async function loadSettings() {
         );
 
 
+        renderPaymentMethods(
+            data.payment_methods || []
+        );
+
+
+        document.getElementById(
+            'settingsError'
+        ).style.display =
+            'none';
+
+
     } catch (error) {
 
         console.error(error);
@@ -1207,6 +1385,7 @@ async function loadSettings() {
 
         errorBox.style.display =
             'block';
+
     }
 }
 
@@ -1402,6 +1581,7 @@ function renderUsers(users) {
                 '</td>' +
 
                 '</tr>';
+
         }
     );
 
@@ -1512,6 +1692,148 @@ function renderPriceHistory(history) {
                 '</td>' +
 
                 '</tr>';
+
+        }
+    );
+
+
+    html +=
+        '</tbody>' +
+        '</table>';
+
+
+    container.innerHTML =
+        html;
+}
+
+
+/* =========================================================
+   PAYMENT METHODS
+========================================================= */
+
+function renderPaymentMethods(methods) {
+
+    const container =
+        document.getElementById(
+            'paymentMethodsContainer'
+        );
+
+
+    if (!methods.length) {
+
+        container.innerHTML =
+            '<div class="settings-empty">' +
+            'No payment methods configured.' +
+            '</div>';
+
+        return;
+    }
+
+
+    let html =
+        '<table class="settings-table">' +
+
+        '<thead>' +
+
+        '<tr>' +
+
+        '<th>Method</th>' +
+        '<th>Status</th>' +
+        '<th>Action</th>' +
+
+        '</tr>' +
+
+        '</thead>' +
+
+        '<tbody>';
+
+
+    methods.forEach(
+        method => {
+
+            const isActive =
+                Number(
+                    method.is_active
+                ) === 1;
+
+
+            html +=
+
+                '<tr>' +
+
+                '<td>' +
+
+                '<span class="user-name">' +
+                escapeHtml(
+                    method.method_name
+                ) +
+                '</span>' +
+
+                '</td>' +
+
+                '<td>' +
+
+                (
+                    isActive
+
+                        ? '<span class="status-active">' +
+                          'Active' +
+                          '</span>'
+
+                        : '<span class="status-inactive">' +
+                          'Inactive' +
+                          '</span>'
+                ) +
+
+                '</td>' +
+
+                '<td>' +
+
+                '<div class="settings-actions">' +
+
+                '<button ' +
+                'type="button" ' +
+                'class="btn btn-secondary btn-small" ' +
+                'onclick="editPaymentMethod(' +
+                Number(
+                    method.method_id
+                ) +
+                ')">' +
+                'Edit' +
+                '</button>' +
+
+                (
+                    isActive
+
+                        ? '<button ' +
+                          'type="button" ' +
+                          'class="btn btn-danger btn-small" ' +
+                          'onclick="changePaymentMethodStatus(' +
+                          Number(
+                              method.method_id
+                          ) +
+                          ', false)">' +
+                          'Deactivate' +
+                          '</button>'
+
+                        : '<button ' +
+                          'type="button" ' +
+                          'class="btn btn-primary btn-small" ' +
+                          'onclick="changePaymentMethodStatus(' +
+                          Number(
+                              method.method_id
+                          ) +
+                          ', true)">' +
+                          'Activate' +
+                          '</button>'
+                ) +
+
+                '</div>' +
+
+                '</td>' +
+
+                '</tr>';
+
         }
     );
 
@@ -1775,10 +2097,12 @@ document.getElementById(
                     json.message ||
                     'Unable to save user.'
                 );
+
             }
 
 
             closeUserModal();
+
 
             showToast(
                 json.message
@@ -1804,7 +2128,9 @@ document.getElementById(
                 userId
                     ? 'Save Changes'
                     : 'Save User';
+
         }
+
     }
 );
 
@@ -1861,6 +2187,7 @@ async function changeUserStatus(
             error.message,
             'error'
         );
+
     }
 }
 
@@ -1979,6 +2306,7 @@ document.getElementById(
                     json.message ||
                     'Unable to save price.'
                 );
+
             }
 
 
@@ -2007,9 +2335,278 @@ document.getElementById(
 
             button.textContent =
                 'Save Price';
+
         }
+
     }
 );
+
+
+/* =========================================================
+   PAYMENT METHOD MODAL
+========================================================= */
+
+function openAddPaymentMethod() {
+
+    document.getElementById(
+        'paymentMethodModalTitle'
+    ).textContent =
+        'Add Payment Method';
+
+
+    document.getElementById(
+        'paymentMethodId'
+    ).value =
+        '';
+
+
+    document.getElementById(
+        'paymentMethodName'
+    ).value =
+        '';
+
+
+    document.getElementById(
+        'savePaymentMethodButton'
+    ).textContent =
+        'Save Method';
+
+
+    document.getElementById(
+        'paymentMethodModal'
+    ).classList.add(
+        'show'
+    );
+}
+
+
+function editPaymentMethod(
+    methodId
+) {
+
+    const method =
+        (settingsData.payment_methods || [])
+            .find(
+                item =>
+                    Number(
+                        item.method_id
+                    ) ===
+                    Number(methodId)
+            );
+
+
+    if (!method) {
+        return;
+    }
+
+
+    document.getElementById(
+        'paymentMethodModalTitle'
+    ).textContent =
+        'Edit Payment Method';
+
+
+    document.getElementById(
+        'paymentMethodId'
+    ).value =
+        method.method_id;
+
+
+    document.getElementById(
+        'paymentMethodName'
+    ).value =
+        method.method_name || '';
+
+
+    document.getElementById(
+        'savePaymentMethodButton'
+    ).textContent =
+        'Save Changes';
+
+
+    document.getElementById(
+        'paymentMethodModal'
+    ).classList.add(
+        'show'
+    );
+}
+
+
+function closePaymentMethodModal() {
+
+    document.getElementById(
+        'paymentMethodModal'
+    ).classList.remove(
+        'show'
+    );
+}
+
+
+/* =========================================================
+   PAYMENT METHOD FORM
+========================================================= */
+
+document.getElementById(
+    'paymentMethodForm'
+).addEventListener(
+    'submit',
+    async event => {
+
+        event.preventDefault();
+
+
+        const methodId =
+            document.getElementById(
+                'paymentMethodId'
+            ).value;
+
+
+        const action =
+            methodId
+                ? 'update_payment_method'
+                : 'add_payment_method';
+
+
+        const form =
+            new FormData(
+                event.target
+            );
+
+
+        form.append(
+            'action',
+            action
+        );
+
+
+        const button =
+            document.getElementById(
+                'savePaymentMethodButton'
+            );
+
+
+        button.disabled =
+            true;
+
+
+        button.textContent =
+            'Saving...';
+
+
+        try {
+
+            const response =
+                await fetch(
+                    SETTINGS_URL,
+                    {
+                        method: 'POST',
+                        body: form
+                    }
+                );
+
+
+            const json =
+                await response.json();
+
+
+            if (!json.success) {
+
+                throw new Error(
+                    json.message ||
+                    'Unable to save payment method.'
+                );
+
+            }
+
+
+            closePaymentMethodModal();
+
+
+            showToast(
+                json.message
+            );
+
+
+            await loadSettings();
+
+
+        } catch (error) {
+
+            showToast(
+                error.message,
+                'error'
+            );
+
+        } finally {
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                methodId
+                    ? 'Save Changes'
+                    : 'Save Method';
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   PAYMENT METHOD STATUS
+========================================================= */
+
+async function changePaymentMethodStatus(
+    methodId,
+    activate
+) {
+
+    const message =
+        activate
+            ? 'Activate this payment method?'
+            : 'Deactivate this payment method?';
+
+
+    if (!confirm(message)) {
+        return;
+    }
+
+
+    try {
+
+        const response =
+            await requestSettings(
+                'change_payment_method_status',
+                {
+                    method_id:
+                        methodId,
+
+                    activate:
+                        activate
+                            ? '1'
+                            : '0'
+                }
+            );
+
+
+        showToast(
+            response.message
+        );
+
+
+        await loadSettings();
+
+
+    } catch (error) {
+
+        showToast(
+            error.message,
+            'error'
+        );
+
+    }
+}
 
 
 /* =========================================================
@@ -2064,6 +2661,30 @@ document.getElementById(
 );
 
 
+document.getElementById(
+    'addPaymentMethodButton'
+).addEventListener(
+    'click',
+    openAddPaymentMethod
+);
+
+
+document.getElementById(
+    'closePaymentMethodModal'
+).addEventListener(
+    'click',
+    closePaymentMethodModal
+);
+
+
+document.getElementById(
+    'cancelPaymentMethodButton'
+).addEventListener(
+    'click',
+    closePaymentMethodModal
+);
+
+
 /* =========================================================
    MODAL BACKDROP
 ========================================================= */
@@ -2080,7 +2701,9 @@ document.getElementById(
         ) {
 
             closeUserModal();
+
         }
+
     }
 );
 
@@ -2097,7 +2720,28 @@ document.getElementById(
         ) {
 
             closePriceModal();
+
         }
+
+    }
+);
+
+
+document.getElementById(
+    'paymentMethodModal'
+).addEventListener(
+    'click',
+    event => {
+
+        if (
+            event.target.id ===
+            'paymentMethodModal'
+        ) {
+
+            closePaymentMethodModal();
+
+        }
+
     }
 );
 
@@ -2113,3 +2757,4 @@ loadSettings();
 </body>
 
 </html>
+

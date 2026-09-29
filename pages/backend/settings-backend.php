@@ -130,7 +130,7 @@ function ensureSettingsSchema(PDO $pdo): void
 
 
     /*
-     * Price history.
+     * Walk-in price history.
      *
      * This is intentionally separate from app_settings
      * so historical transactions remain understandable
@@ -229,6 +229,97 @@ function ensureSettingsSchema(PDO $pdo): void
             date('Y-m-d')
         ]);
     }
+
+
+    /*
+     * Payment methods.
+     *
+     * These are configurable from Settings.
+     * Existing transaction records continue to store
+     * their original payment method text.
+     */
+
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS payment_methods (
+
+            method_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            method_name VARCHAR(100) NOT NULL,
+
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+
+            sort_order INT NOT NULL DEFAULT 0,
+
+            created_at DATETIME NOT NULL
+                DEFAULT CURRENT_TIMESTAMP,
+
+            updated_at DATETIME NOT NULL
+                DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (method_id),
+
+            UNIQUE KEY unique_payment_method_name
+                (method_name),
+
+            INDEX idx_payment_method_active
+                (is_active),
+
+            INDEX idx_payment_method_sort
+                (sort_order)
+
+        ) ENGINE=InnoDB
+          DEFAULT CHARSET=utf8mb4
+          COLLATE=utf8mb4_unicode_ci"
+    );
+
+
+    /*
+     * Seed the original Marcid Blue payment methods.
+     *
+     * INSERT IGNORE prevents duplicates when the backend
+     * is loaded multiple times.
+     */
+
+    $seedPaymentMethods = [
+        [
+            'Cash',
+            1
+        ],
+        [
+            'GCash',
+            2
+        ],
+        [
+            'Bank Transfer',
+            3
+        ],
+        [
+            'Other',
+            4
+        ]
+    ];
+
+
+    $insertPaymentMethod = $pdo->prepare(
+        "INSERT IGNORE INTO payment_methods
+            (
+                method_name,
+                is_active,
+                sort_order
+            )
+         VALUES
+            (?, 1, ?)"
+    );
+
+
+    foreach ($seedPaymentMethods as $paymentMethod) {
+
+        $insertPaymentMethod->execute([
+            $paymentMethod[0],
+            $paymentMethod[1]
+        ]);
+    }
 }
 
 
@@ -255,7 +346,9 @@ function actionGetSettings(PDO $pdo): void
 
          FROM app_settings
 
-         ORDER BY setting_group, setting_key"
+         ORDER BY
+            setting_group,
+            setting_key"
     );
 
 
@@ -320,7 +413,9 @@ function actionGetSettings(PDO $pdo): void
                 'full_name'
             )
         ) {
+
             $select[] = 'full_name';
+
         } elseif (
             columnExists(
                 $pdo,
@@ -328,6 +423,7 @@ function actionGetSettings(PDO $pdo): void
                 'name'
             )
         ) {
+
             $select[] = 'name';
         }
 
@@ -339,6 +435,7 @@ function actionGetSettings(PDO $pdo): void
                 'created_at'
             )
         ) {
+
             $select[] = 'created_at';
         }
 
@@ -350,6 +447,7 @@ function actionGetSettings(PDO $pdo): void
                 'last_login'
             )
         ) {
+
             $select[] = 'last_login';
         }
 
@@ -401,10 +499,48 @@ function actionGetSettings(PDO $pdo): void
             price_history_id DESC"
     );
 
+
     $priceHistory =
         $stmt->fetchAll(
             PDO::FETCH_ASSOC
         );
+
+
+    /*
+     * Payment methods.
+     */
+
+    $paymentMethods = [];
+
+    if (
+        tableExists(
+            $pdo,
+            'payment_methods'
+        )
+    ) {
+
+        $stmt = $pdo->query(
+            "SELECT
+                method_id,
+                method_name,
+                is_active,
+                sort_order,
+                created_at,
+                updated_at
+
+             FROM payment_methods
+
+             ORDER BY
+                sort_order ASC,
+                method_id ASC"
+        );
+
+
+        $paymentMethods =
+            $stmt->fetchAll(
+                PDO::FETCH_ASSOC
+            );
+    }
 
 
     respond([
@@ -417,7 +553,10 @@ function actionGetSettings(PDO $pdo): void
             $users,
 
         'walk_in_price_history' =>
-            $priceHistory
+            $priceHistory,
+
+        'payment_methods' =>
+            $paymentMethods
     ]);
 }
 
@@ -486,9 +625,11 @@ function actionSaveWalkInPrice(PDO $pdo): void
          LIMIT 1"
     );
 
+
     $stmt->execute([
         'walk_in_price'
     ]);
+
 
     $oldPrice =
         (float)$stmt->fetchColumn();
@@ -517,21 +658,25 @@ function actionSaveWalkInPrice(PDO $pdo): void
                 VALUES(setting_group)"
     );
 
+
     $stmt->execute([
         'walk_in_price',
+
         number_format(
             $price,
             2,
             '.',
             ''
         ),
+
         'pricing'
     ]);
 
 
     /*
-     * Add a history record only when the price actually
-     * changes or when the effective date is new.
+     * Add a history record only when the same
+     * price/effective-date combination does not
+     * already exist.
      */
 
     $stmt = $pdo->prepare(
@@ -540,6 +685,7 @@ function actionSaveWalkInPrice(PDO $pdo): void
          WHERE price = ?
            AND effective_date = ?"
     );
+
 
     $stmt->execute([
         $price,
@@ -562,6 +708,7 @@ function actionSaveWalkInPrice(PDO $pdo): void
              VALUES
                 (?, ?)"
         );
+
 
         $stmt->execute([
             $price,
@@ -597,13 +744,399 @@ function actionSaveWalkInPrice(PDO $pdo): void
 
 /*
 |--------------------------------------------------------------------------
+| Add Payment Method
+|--------------------------------------------------------------------------
+*/
+
+function actionAddPaymentMethod(PDO $pdo): void
+{
+    ensureSettingsSchema($pdo);
+
+
+    if (
+        !tableExists(
+            $pdo,
+            'payment_methods'
+        )
+    ) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment methods table does not exist.'
+        ], 500);
+    }
+
+
+    $methodName =
+        postString(
+            'method_name'
+        );
+
+
+    if ($methodName === '') {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method name is required.'
+        ], 400);
+    }
+
+
+    if (strlen($methodName) > 100) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method name is too long.'
+        ], 400);
+    }
+
+
+    /*
+     * Prevent duplicate names.
+     */
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM payment_methods
+         WHERE LOWER(method_name) = LOWER(?)"
+    );
+
+
+    $stmt->execute([
+        $methodName
+    ]);
+
+
+    if (
+        (int)$stmt->fetchColumn() > 0
+    ) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'That payment method already exists.'
+        ], 400);
+    }
+
+
+    /*
+     * Put the new method after the current
+     * last payment method.
+     */
+
+    $stmt = $pdo->query(
+        "SELECT COALESCE(
+            MAX(sort_order),
+            0
+        )
+        FROM payment_methods"
+    );
+
+
+    $sortOrder =
+        (int)$stmt->fetchColumn() + 1;
+
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO payment_methods
+            (
+                method_name,
+                is_active,
+                sort_order
+            )
+         VALUES
+            (?, 1, ?)"
+    );
+
+
+    $stmt->execute([
+        $methodName,
+        $sortOrder
+    ]);
+
+
+    respond([
+        'success' => true,
+
+        'message' =>
+            'Payment method added successfully.'
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Update Payment Method
+|--------------------------------------------------------------------------
+*/
+
+function actionUpdatePaymentMethod(PDO $pdo): void
+{
+    $methodId =
+        postInt(
+            'method_id'
+        );
+
+
+    $methodName =
+        postString(
+            'method_name'
+        );
+
+
+    if ($methodId <= 0) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Invalid payment method.'
+        ], 400);
+    }
+
+
+    if ($methodName === '') {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method name is required.'
+        ], 400);
+    }
+
+
+    if (strlen($methodName) > 100) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method name is too long.'
+        ], 400);
+    }
+
+
+    /*
+     * Check that the method exists.
+     */
+
+    $stmt = $pdo->prepare(
+        "SELECT
+            method_id
+         FROM payment_methods
+         WHERE method_id = ?
+         LIMIT 1"
+    );
+
+
+    $stmt->execute([
+        $methodId
+    ]);
+
+
+    if (!$stmt->fetchColumn()) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method not found.'
+        ], 404);
+    }
+
+
+    /*
+     * Prevent duplicate names.
+     */
+
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM payment_methods
+         WHERE LOWER(method_name) = LOWER(?)
+           AND method_id <> ?"
+    );
+
+
+    $stmt->execute([
+        $methodName,
+        $methodId
+    ]);
+
+
+    if (
+        (int)$stmt->fetchColumn() > 0
+    ) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'That payment method already exists.'
+        ], 400);
+    }
+
+
+    $stmt = $pdo->prepare(
+        "UPDATE payment_methods
+         SET method_name = ?
+         WHERE method_id = ?"
+    );
+
+
+    $stmt->execute([
+        $methodName,
+        $methodId
+    ]);
+
+
+    respond([
+        'success' => true,
+
+        'message' =>
+            'Payment method updated successfully.'
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Change Payment Method Status
+|--------------------------------------------------------------------------
+*/
+
+function actionChangePaymentMethodStatus(
+    PDO $pdo
+): void {
+
+    $methodId =
+        postInt(
+            'method_id'
+        );
+
+
+    $activate =
+        (int)(
+            $_POST['activate'] ?? 0
+        );
+
+
+    if ($methodId <= 0) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Invalid payment method.'
+        ], 400);
+    }
+
+
+    /*
+     * Make sure the payment method exists.
+     */
+
+    $stmt = $pdo->prepare(
+        "SELECT
+            method_id,
+            is_active
+         FROM payment_methods
+         WHERE method_id = ?
+         LIMIT 1"
+    );
+
+
+    $stmt->execute([
+        $methodId
+    ]);
+
+
+    $method =
+        $stmt->fetch(
+            PDO::FETCH_ASSOC
+        );
+
+
+    if (!$method) {
+
+        respond([
+            'success' => false,
+            'message' =>
+                'Payment method not found.'
+        ], 404);
+    }
+
+
+    /*
+     * Do not allow all payment methods to be
+     * deactivated.
+     *
+     * At least one active payment method must
+     * always remain available.
+     */
+
+    if ($activate !== 1) {
+
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM payment_methods
+             WHERE is_active = 1"
+        );
+
+
+        $activeCount =
+            (int)$stmt->fetchColumn();
+
+
+        if (
+            (int)$method['is_active'] === 1 &&
+            $activeCount <= 1
+        ) {
+
+            respond([
+                'success' => false,
+                'message' =>
+                    'At least one payment method must remain active.'
+            ], 400);
+        }
+    }
+
+
+    $stmt = $pdo->prepare(
+        "UPDATE payment_methods
+         SET is_active = ?
+         WHERE method_id = ?"
+    );
+
+
+    $stmt->execute([
+        $activate === 1 ? 1 : 0,
+        $methodId
+    ]);
+
+
+    respond([
+        'success' => true,
+
+        'message' =>
+            $activate === 1
+                ? 'Payment method activated.'
+                : 'Payment method deactivated.'
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
 | Add User
 |--------------------------------------------------------------------------
 */
 
 function actionAddUser(PDO $pdo): void
 {
-    if (!tableExists($pdo, 'users')) {
+    if (
+        !tableExists(
+            $pdo,
+            'users'
+        )
+    ) {
 
         respond([
             'success' => false,
@@ -614,10 +1147,16 @@ function actionAddUser(PDO $pdo): void
 
 
     $username =
-        postString('username');
+        postString(
+            'username'
+        );
+
 
     $password =
-        (string)($_POST['password'] ?? '');
+        (string)(
+            $_POST['password'] ?? ''
+        );
+
 
     $role =
         postString(
@@ -625,8 +1164,11 @@ function actionAddUser(PDO $pdo): void
             'Staff'
         );
 
+
     $name =
-        postString('name');
+        postString(
+            'name'
+        );
 
 
     if ($username === '') {
@@ -652,7 +1194,10 @@ function actionAddUser(PDO $pdo): void
     if (
         !in_array(
             $role,
-            ['Admin', 'Staff'],
+            [
+                'Admin',
+                'Staff'
+            ],
             true
         )
     ) {
@@ -691,6 +1236,7 @@ function actionAddUser(PDO $pdo): void
          WHERE username = ?"
     );
 
+
     $stmt->execute([
         $username
     ]);
@@ -709,13 +1255,14 @@ function actionAddUser(PDO $pdo): void
 
 
     /*
-     * Build INSERT dynamically so this remains compatible
-     * with the existing users table.
+     * Build INSERT dynamically so this remains
+     * compatible with the existing users table.
      */
 
     $columns = [
         'username'
     ];
+
 
     $values = [
         $username
@@ -723,7 +1270,8 @@ function actionAddUser(PDO $pdo): void
 
 
     /*
-     * Existing authentication should use password_hash().
+     * Existing authentication should use
+     * password_hash().
      */
 
     $passwordHash =
@@ -741,8 +1289,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'password';
-        $values[] = $passwordHash;
+        $columns[] =
+            'password';
+
+        $values[] =
+            $passwordHash;
 
     } elseif (
         columnExists(
@@ -752,8 +1303,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'password_hash';
-        $values[] = $passwordHash;
+        $columns[] =
+            'password_hash';
+
+        $values[] =
+            $passwordHash;
 
     } else {
 
@@ -773,8 +1327,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'role';
-        $values[] = $role;
+        $columns[] =
+            'role';
+
+        $values[] =
+            $role;
     }
 
 
@@ -786,8 +1343,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'is_active';
-        $values[] = 1;
+        $columns[] =
+            'is_active';
+
+        $values[] =
+            1;
     }
 
 
@@ -800,8 +1360,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'full_name';
-        $values[] = $name;
+        $columns[] =
+            'full_name';
+
+        $values[] =
+            $name;
 
     } elseif (
         $name !== '' &&
@@ -812,8 +1375,11 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'name';
-        $values[] = $name;
+        $columns[] =
+            'name';
+
+        $values[] =
+            $name;
     }
 
 
@@ -825,10 +1391,13 @@ function actionAddUser(PDO $pdo): void
         )
     ) {
 
-        $columns[] = 'created_at';
+        $columns[] =
+            'created_at';
 
         $values[] =
-            date('Y-m-d H:i:s');
+            date(
+                'Y-m-d H:i:s'
+            );
     }
 
 
@@ -858,9 +1427,14 @@ function actionAddUser(PDO $pdo): void
 
 
     $stmt =
-        $pdo->prepare($sql);
+        $pdo->prepare(
+            $sql
+        );
 
-    $stmt->execute($values);
+
+    $stmt->execute(
+        $values
+    );
 
 
     respond([
@@ -881,7 +1455,9 @@ function actionAddUser(PDO $pdo): void
 function actionUpdateUser(PDO $pdo): void
 {
     $userId =
-        postInt('user_id');
+        postInt(
+            'user_id'
+        );
 
 
     if ($userId <= 0) {
@@ -895,10 +1471,16 @@ function actionUpdateUser(PDO $pdo): void
 
 
     $username =
-        postString('username');
+        postString(
+            'username'
+        );
+
 
     $password =
-        (string)($_POST['password'] ?? '');
+        (string)(
+            $_POST['password'] ?? ''
+        );
+
 
     $role =
         postString(
@@ -906,11 +1488,17 @@ function actionUpdateUser(PDO $pdo): void
             'Staff'
         );
 
+
     $name =
-        postString('name');
+        postString(
+            'name'
+        );
+
 
     $isActive =
-        isset($_POST['is_active'])
+        isset(
+            $_POST['is_active']
+        )
             ? (int)$_POST['is_active']
             : 1;
 
@@ -928,7 +1516,10 @@ function actionUpdateUser(PDO $pdo): void
     if (
         !in_array(
             $role,
-            ['Admin', 'Staff'],
+            [
+                'Admin',
+                'Staff'
+            ],
             true
         )
     ) {
@@ -951,6 +1542,7 @@ function actionUpdateUser(PDO $pdo): void
          WHERE username = ?
            AND user_id <> ?"
     );
+
 
     $stmt->execute([
         $username,
@@ -987,6 +1579,7 @@ function actionUpdateUser(PDO $pdo): void
                AND user_id <> ?"
         );
 
+
         $stmt->execute([
             $userId
         ]);
@@ -1002,6 +1595,7 @@ function actionUpdateUser(PDO $pdo): void
              WHERE user_id = ?
              LIMIT 1"
         );
+
 
         $stmt->execute([
             $userId
@@ -1031,6 +1625,7 @@ function actionUpdateUser(PDO $pdo): void
      */
 
     $sets = [];
+
     $values = [];
 
 
@@ -1042,8 +1637,11 @@ function actionUpdateUser(PDO $pdo): void
         )
     ) {
 
-        $sets[] = 'username = ?';
-        $values[] = $username;
+        $sets[] =
+            'username = ?';
+
+        $values[] =
+            $username;
     }
 
 
@@ -1055,8 +1653,11 @@ function actionUpdateUser(PDO $pdo): void
         )
     ) {
 
-        $sets[] = 'role = ?';
-        $values[] = $role;
+        $sets[] =
+            'role = ?';
+
+        $values[] =
+            $role;
     }
 
 
@@ -1068,8 +1669,11 @@ function actionUpdateUser(PDO $pdo): void
         )
     ) {
 
-        $sets[] = 'is_active = ?';
-        $values[] = $isActive;
+        $sets[] =
+            'is_active = ?';
+
+        $values[] =
+            $isActive;
     }
 
 
@@ -1081,8 +1685,11 @@ function actionUpdateUser(PDO $pdo): void
         )
     ) {
 
-        $sets[] = 'full_name = ?';
-        $values[] = $name;
+        $sets[] =
+            'full_name = ?';
+
+        $values[] =
+            $name;
 
     } elseif (
         columnExists(
@@ -1092,8 +1699,11 @@ function actionUpdateUser(PDO $pdo): void
         )
     ) {
 
-        $sets[] = 'name = ?';
-        $values[] = $name;
+        $sets[] =
+            'name = ?';
+
+        $values[] =
+            $name;
     }
 
 
@@ -1189,7 +1799,7 @@ function actionUpdateUser(PDO $pdo): void
 
 /*
 |--------------------------------------------------------------------------
-| Delete User
+| Deactivate User
 |--------------------------------------------------------------------------
 |
 | We don't actually delete the account.
@@ -1200,7 +1810,9 @@ function actionUpdateUser(PDO $pdo): void
 function actionDeactivateUser(PDO $pdo): void
 {
     $userId =
-        postInt('user_id');
+        postInt(
+            'user_id'
+        );
 
 
     if ($userId <= 0) {
@@ -1223,6 +1835,7 @@ function actionDeactivateUser(PDO $pdo): void
          WHERE user_id = ?
          LIMIT 1"
     );
+
 
     $stmt->execute([
         $userId
@@ -1288,7 +1901,9 @@ function actionDeactivateUser(PDO $pdo): void
 function actionReactivateUser(PDO $pdo): void
 {
     $userId =
-        postInt('user_id');
+        postInt(
+            'user_id'
+        );
 
 
     if ($userId <= 0) {
@@ -1352,6 +1967,35 @@ try {
 
             break;
 
+
+        /*
+         * Payment Methods
+         */
+
+        case 'add_payment_method':
+
+            actionAddPaymentMethod($pdo);
+
+            break;
+
+
+        case 'update_payment_method':
+
+            actionUpdatePaymentMethod($pdo);
+
+            break;
+
+
+        case 'change_payment_method_status':
+
+            actionChangePaymentMethodStatus($pdo);
+
+            break;
+
+
+        /*
+         * Users
+         */
 
         case 'add_user':
 
