@@ -33,6 +33,7 @@
 date_default_timezone_set('Asia/Manila');
 
 require_once '../auth/auth.php';
+require_once '../config/database.php';
 
 requireAdmin();
 
@@ -49,8 +50,72 @@ $currentPage = 'daily-closing';
 
 $walkInCustomers = 0;
 
+/*
+ * =========================================================
+ * WALK-IN PRICE
+ * =========================================================
+ *
+ * The current walk-in price is managed from Settings.
+ *
+ * Settings source:
+ *     app_settings.walk_in_price
+ *
+ * This keeps Daily Closing synchronized with the
+ * configurable business price.
+ */
+
 $walkInPrice = 30.00;
 
+    try {
+
+        $stmt = $pdo->prepare(
+            "SELECT setting_value
+            FROM app_settings
+            WHERE setting_key = 'walk_in_price'
+            LIMIT 1"
+        );
+
+        $stmt->execute();
+
+        $settingValue =
+            $stmt->fetchColumn();
+
+        if (
+            $settingValue !== false &&
+            is_numeric($settingValue) &&
+            (float) $settingValue > 0
+        ) {
+
+            $walkInPrice =
+                round(
+                    (float) $settingValue,
+                    2
+                );
+        }
+
+    } catch (Throwable $e) {
+
+        /*
+        * Keep the page functional if the settings table
+        * has not been created yet.
+        *
+        * The Settings page creates this table automatically.
+        */
+
+        $walkInPrice = 30.00;
+    }
+    
+    /*
+    * Make the current Settings price available to
+    * the central Daily Closing calculation JavaScript.
+    */
+
+    $walkInPriceJs =
+        json_encode(
+            $walkInPrice,
+            JSON_UNESCAPED_UNICODE |
+            JSON_UNESCAPED_SLASHES
+        );
 $walkInSales = 0.00;
 
 $walkInOtherSales = 0.00;
@@ -5248,6 +5313,10 @@ document.addEventListener(
 
 </script>
 
+<script>
+    window.MARCID_BLUE_WALK_IN_PRICE =
+        <?= $walkInPriceJs ?>;
+</script>
 
 <!-- =========================================================
      CENTRAL DAILY CLOSING CALCULATION SCRIPT

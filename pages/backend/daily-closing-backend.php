@@ -98,6 +98,53 @@ final class DailyClosingService
         return $amount;
     }
 
+    /*
+    * ---------------------------------------------------------
+    * WALK-IN PRICE
+    * ---------------------------------------------------------
+    *
+    * Reads the current walk-in price from Settings.
+    */
+
+    private function getWalkInPrice(): float
+    {
+        try {
+
+            $stmt = $this->pdo->prepare(
+                "SELECT setting_value
+                FROM app_settings
+                WHERE setting_key = 'walk_in_price'
+                LIMIT 1"
+            );
+
+            $stmt->execute();
+
+            $value =
+                $stmt->fetchColumn();
+
+            if (
+                $value !== false &&
+                is_numeric($value) &&
+                (float) $value > 0
+            ) {
+
+                return round(
+                    (float) $value,
+                    2
+                );
+            }
+
+        } catch (Throwable $e) {
+
+            /*
+            * Keep the existing ₱30 default if the
+            * Settings table/value is unavailable.
+            */
+        }
+
+        return 30.00;
+    }
+
 
     /*
      * ---------------------------------------------------------
@@ -2871,7 +2918,7 @@ final class DailyClosingService
                 );
 
             $walkInPrice =
-                30.00;
+                $this->getWalkInPrice();
 
             $walkInSales =
                 round(

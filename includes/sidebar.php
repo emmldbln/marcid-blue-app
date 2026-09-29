@@ -27,7 +27,8 @@ $validPages = [
     'home',
     'customers',
     'daily-records',
-    'daily-closing'
+    'daily-closing',
+    'settings'
 ];
 
 if (!in_array($currentPage, $validPages, true)) {
@@ -57,6 +58,12 @@ $navItems = [
         'href' => $pageRoot . 'daily-closing.php',
         'icon' => '🧾',
         'label' => 'Daily Closing'
+    ],
+
+    'settings' => [
+        'href' => $pageRoot . 'settings.php',
+        'icon' => '⚙️',
+        'label' => 'Settings'
     ]
 ];
 
@@ -87,6 +94,8 @@ $navItems = [
 
         <?php foreach ($navItems as $key => $item): ?>
 
+            <?php if ($key === 'settings') continue; ?>
+
             <a
                 href="<?= htmlspecialchars($item['href']) ?>"
                 class="nav-item<?= $currentPage === $key ? ' active' : '' ?>"
@@ -111,7 +120,10 @@ $navItems = [
         </div>
 
 
-        <a href="#" class="nav-item">
+        <a
+            href="<?= htmlspecialchars($navItems['settings']['href']) ?>"
+            class="nav-item<?= $currentPage === 'settings' ? ' active' : '' ?>"
+        >
 
             ⚙️
 
@@ -122,7 +134,10 @@ $navItems = [
         </a>
 
 
-        <a href="#" class="nav-item">
+        <a
+            href="#"
+            class="nav-item"
+        >
 
             🚪
 
