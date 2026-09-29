@@ -37,6 +37,8 @@ final class DailyRecordRepository
                 status,
                 closing_result,
                 actual_station_cash,
+                driver_remittance_status,
+                driver_remittance_difference,
                 created_at,
                 updated_at,
                 saved_at,
@@ -478,12 +480,48 @@ final class DailyRecordFormatter
     }
 
 
-    public static function recordLabel(
+        public static function recordLabel(
         int $count
     ): string {
 
         return $count . ' ' .
             ($count === 1 ? 'record' : 'records');
+    }
+
+
+    public static function driverRemittance(
+        ?string $status,
+        mixed $difference
+    ): string {
+
+        $status = trim(
+            (string) ($status ?? '')
+        );
+
+        if ($status === '') {
+            return '—';
+        }
+
+        $difference = round(
+            (float) ($difference ?? 0),
+            2
+        );
+
+        if ($status === 'Balanced') {
+            return 'Balanced';
+        }
+
+        if ($status === 'Short') {
+            return 'Short ' .
+                self::money(abs($difference));
+        }
+
+        if ($status === 'Over') {
+            return 'Over ' .
+                self::money(abs($difference));
+        }
+
+        return self::escape($status);
     }
 }
 
@@ -792,7 +830,7 @@ $assetRoot = '../../';
         }
 
         .report-section {
-            margin-bottom: 32px;
+            margin-bottom: 26px;
         }
 
         .report-section:last-child {
@@ -830,7 +868,7 @@ $assetRoot = '../../';
 
         .walkin-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             border: 1px solid #e5e7eb;
             border-radius: 7px;
             overflow: hidden;
@@ -856,6 +894,22 @@ $assetRoot = '../../';
             font-size: 19px;
             font-weight: 700;
             color: #111827;
+        }
+
+                .driver-remittance-value {
+            white-space: nowrap;
+        }
+
+        .driver-remittance-balanced {
+            color: #15803d;
+        }
+
+        .driver-remittance-short {
+            color: #c2410c;
+        }
+
+        .driver-remittance-over {
+            color: #1687c9;
         }
 
 
@@ -914,16 +968,24 @@ $assetRoot = '../../';
 
         .delivery-payment-table th:first-child,
         .delivery-payment-table td:first-child {
-            width: 40%;
+            width: 36%;
         }
 
         .delivery-payment-table th:nth-child(2),
         .delivery-payment-table td:nth-child(2),
         .delivery-payment-table th:nth-child(3),
-        .delivery-payment-table td:nth-child(3),
+        .delivery-payment-table td:nth-child(3) {
+            width: 10%;
+        }
+
         .delivery-payment-table th:nth-child(4),
         .delivery-payment-table td:nth-child(4) {
-            width: 20%;
+            width: 18%;
+        }
+
+        .delivery-payment-table th:nth-child(5),
+        .delivery-payment-table td:nth-child(5) {
+            width: 26%;
         }
 
 
@@ -1097,7 +1159,7 @@ $assetRoot = '../../';
             }
 
             .walkin-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .walkin-item {
@@ -1142,6 +1204,14 @@ $assetRoot = '../../';
             .report-brand-subtitle,
             .report-brand-date {
                 font-size: 11px;
+            }
+
+            .walkin-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .walkin-item {
+                border-right: 0;
             }
         }
 
@@ -1203,7 +1273,7 @@ $assetRoot = '../../';
         /* Keep summary cards side-by-side when printing */
         .walkin-grid {
             display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
             gap: 10px !important;
             width: 100% !important;
 
@@ -1420,6 +1490,41 @@ $assetRoot = '../../';
 
                             </div>
 
+                                <div class="walkin-item">
+
+                                <span class="walkin-label">
+                                    Driver Remittance
+                                </span>
+
+                                <span
+                                    class="walkin-value driver-remittance-value
+                                    <?php
+                                        if (
+                                            ($daily['driver_remittance_status'] ?? '')
+                                            === 'Balanced'
+                                        ) {
+                                            echo ' driver-remittance-balanced';
+                                        } elseif (
+                                            ($daily['driver_remittance_status'] ?? '')
+                                            === 'Short'
+                                        ) {
+                                            echo ' driver-remittance-short';
+                                        } elseif (
+                                            ($daily['driver_remittance_status'] ?? '')
+                                            === 'Over'
+                                        ) {
+                                            echo ' driver-remittance-over';
+                                        }
+                                    ?>"
+                                >
+                                    <?= DailyRecordFormatter::driverRemittance(
+                                        $daily['driver_remittance_status'] ?? null,
+                                        $daily['driver_remittance_difference'] ?? null
+                                    ) ?>
+                                </span>
+
+                            </div>
+
                         </div>
 
                     </section>
@@ -1462,6 +1567,7 @@ $assetRoot = '../../';
                                         <th>Customer</th>
                                         <th class="center">Slim</th>
                                         <th class="center">Round</th>
+                                        <th class="number">Price/Gal</th>
                                         <th class="number">Amount</th>
                                     </tr>
 
@@ -1491,6 +1597,13 @@ $assetRoot = '../../';
                                                 <?= (int) (
                                                     $delivery['round_quantity']
                                                     ?? 0
+                                                ) ?>
+                                            </td>
+
+                                            <td class="number">
+                                                <?= DailyRecordFormatter::money(
+                                                    $delivery['price_per_gallon']
+                                                        ?? 0
                                                 ) ?>
                                             </td>
 

@@ -2575,6 +2575,148 @@ final class DailyClosingService
                 ? $driver['expenses']
                 : [];
 
+        /*
+        * -----------------------------------------------------
+        * DRIVER REMITTANCE
+        * -----------------------------------------------------
+        *
+        * Match the existing Daily Closing calculation:
+        *
+        * Effective received:
+        *
+        *   Driver Money Received
+        * + Driver Expenses
+        * + Shop Delivery Payments
+        *
+        * Expected:
+        *
+        *   Shop Delivery Payments
+        * + Driver Delivery Payments
+        *
+        * Positive = Over
+        * Negative = Short
+        * Zero     = Balanced
+        */
+
+        $driverMoneyReceived =
+            $this->money(
+                $driver['money_received']
+                    ?? 0
+            );
+
+
+        $driverExpensesTotal =
+            round(
+                array_sum(
+                    array_map(
+                        function ($expense): float {
+
+                            return $this->money(
+                                $expense['amount']
+                                    ?? 0
+                            );
+
+                        },
+                        $driverExpenses
+                    )
+                ),
+                2
+            );
+
+
+        $shopDeliveryPaymentsTotal =
+            round(
+                array_sum(
+                    array_map(
+                        function ($delivery): float {
+
+                            return $this->money(
+                                $delivery['payment']
+                                    ?? 0
+                            );
+
+                        },
+                        $shopDeliveries
+                    )
+                ),
+                2
+            );
+
+
+        $driverDeliveryPaymentsTotal =
+            round(
+                array_sum(
+                    array_map(
+                        function ($delivery): float {
+
+                            return $this->money(
+                                $delivery['payment']
+                                    ?? 0
+                            );
+
+                        },
+                        $driverDeliveries
+                    )
+                ),
+                2
+            );
+
+
+        $effectiveReceived =
+            round(
+                $driverMoneyReceived
+                + $driverExpensesTotal
+                + $shopDeliveryPaymentsTotal,
+                2
+            );
+
+
+        $expectedDriverRemittance =
+            round(
+                $shopDeliveryPaymentsTotal
+                + $driverDeliveryPaymentsTotal,
+                2
+            );
+
+
+        $driverRemittanceDifference =
+            round(
+                $effectiveReceived
+                - $expectedDriverRemittance,
+                2
+            );
+
+
+        if (
+            abs($effectiveReceived)
+                <= self::MONEY_TOLERANCE
+            &&
+            abs($expectedDriverRemittance)
+                <= self::MONEY_TOLERANCE
+        ) {
+
+            $driverRemittanceStatus = null;
+
+        } elseif (
+            abs($driverRemittanceDifference)
+                <= self::MONEY_TOLERANCE
+        ) {
+
+            $driverRemittanceStatus =
+                'Balanced';
+
+        } elseif (
+            $driverRemittanceDifference < 0
+        ) {
+
+            $driverRemittanceStatus =
+                'Short';
+
+        } else {
+
+            $driverRemittanceStatus =
+                'Over';
+        }
 
         /*
          * -----------------------------------------------------
@@ -3522,16 +3664,20 @@ final class DailyClosingService
                         status = 'Saved',
                         closing_result = ?,
                         actual_station_cash = ?,
+                        driver_remittance_status = ?,
+                        driver_remittance_difference = ?,
                         saved_at = NOW(),
                         saved_by = ?,
                         updated_at = CURRENT_TIMESTAMP
-                     WHERE daily_id = ?
-                       AND status = 'Open'"
+                        WHERE daily_id = ?
+                        AND status = 'Open'"
                 );
 
             $stmt->execute([
                 $closingResult,
                 $actualStationCash,
+                $driverRemittanceStatus,
+                $driverRemittanceDifference,
                 $savedBy,
                 $dailyId
             ]);
@@ -3583,6 +3729,10 @@ final class DailyClosingService
                     $closingResult,
                 'actual_station_cash' =>
                     $actualStationCash,
+                'driver_remittance_status' =>
+                    $driverRemittanceStatus,
+                'driver_remittance_difference' =>
+                    $driverRemittanceDifference,
                 'saved_at' =>
                     date('Y-m-d H:i:s'),
                 'saved_by' =>
