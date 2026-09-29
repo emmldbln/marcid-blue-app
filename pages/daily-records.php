@@ -114,32 +114,37 @@ $currentPage = 'daily-records';
 
         .records-table th:nth-child(1),
         .records-table td:nth-child(1) {
-            width: 15%;
+            width: 14%;
         }
 
         .records-table th:nth-child(2),
         .records-table td:nth-child(2) {
-            width: 10%;
+            width: 9%;
         }
 
         .records-table th:nth-child(3),
         .records-table td:nth-child(3) {
-            width: 16%;
+            width: 15%;
         }
 
         .records-table th:nth-child(4),
         .records-table td:nth-child(4) {
-            width: 12%;
+            width: 15%;
         }
 
         .records-table th:nth-child(5),
         .records-table td:nth-child(5) {
-            width: 25%;
+            width: 11%;
         }
 
         .records-table th:nth-child(6),
         .records-table td:nth-child(6) {
-            width: 22%;
+            width: 18%;
+        }
+
+        .records-table th:nth-child(7),
+        .records-table td:nth-child(7) {
+            width: 18%;
         }
 
         .record-date {
@@ -154,11 +159,11 @@ $currentPage = 'daily-records';
 
         /* ---------- Record Actions ---------- */
 
-        .records-table td:nth-child(6) {
+        .records-table td:nth-child(7) {
             white-space: nowrap;
         }
 
-        .records-table td:nth-child(6) .btn {
+        .records-table td:nth-child(7) .btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -198,6 +203,40 @@ $currentPage = 'daily-records';
         }
 
         .closing-result-pending {
+            background: var(--background);
+            color: var(--text-muted);
+        }
+
+        /* ---------- Driver Remittance ---------- */
+
+        .driver-remittance {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 90px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .driver-remittance-balanced {
+            background: var(--success-light);
+            color: var(--success);
+        }
+
+        .driver-remittance-short {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .driver-remittance-over {
+            background: var(--warning-light);
+            color: var(--warning);
+        }
+
+        .driver-remittance-none {
             background: var(--background);
             color: var(--text-muted);
         }
@@ -474,6 +513,10 @@ $currentPage = 'daily-records';
                                     </th>
 
                                     <th>
+                                        Driver Remittance
+                                    </th>
+
+                                    <th>
                                         Status
                                     </th>
 
@@ -668,36 +711,36 @@ $currentPage = 'daily-records';
        CLOSING RESULT CLASS
        ========================================================= */
 
-    function closingResultClass(result) {
+        function closingResultClass(result) {
+
+            const normalized =
+                String(result || '').toLowerCase();
+
+            if (normalized === 'balanced') {
+                return 'closing-result-balanced';
+            }
+
+            if (normalized === 'short') {
+                return 'closing-result-short';
+            }
+
+            if (normalized === 'over') {
+                return 'closing-result-over';
+            }
+
+            return 'closing-result-pending';
+
+        }
+
+
+        /* =========================================================
+        CLOSING RESULT LABEL
+        ========================================================= */
+
+        function closingResultLabel(result) {
 
         const normalized =
-            String(result || '').toLowerCase();
-
-        if (normalized === 'balanced') {
-            return 'closing-result-balanced';
-        }
-
-        if (normalized === 'short') {
-            return 'closing-result-short';
-        }
-
-        if (normalized === 'over') {
-            return 'closing-result-over';
-        }
-
-        return 'closing-result-pending';
-
-    }
-
-
-    /* =========================================================
-       CLOSING RESULT LABEL
-       ========================================================= */
-
-    function closingResultLabel(result) {
-
-        const normalized =
-            String(result || '').toLowerCase();
+            String(result || '').trim().toLowerCase();
 
         if (normalized === 'balanced') {
             return 'Balanced';
@@ -712,6 +755,54 @@ $currentPage = 'daily-records';
         }
 
         return 'Pending';
+
+    }
+
+
+    /* =========================================================
+    DRIVER REMITTANCE
+    ========================================================= */
+
+    function driverRemittanceClass(status) {
+
+        const normalized =
+            String(status || '').trim().toLowerCase();
+
+        if (normalized === 'balanced') {
+            return 'driver-remittance-balanced';
+        }
+
+        if (normalized === 'short') {
+            return 'driver-remittance-short';
+        }
+
+        if (normalized === 'over') {
+            return 'driver-remittance-over';
+        }
+
+        return 'driver-remittance-none';
+
+    }
+
+
+    function driverRemittanceLabel(status) {
+
+        const normalized =
+            String(status || '').trim().toLowerCase();
+
+        if (normalized === 'balanced') {
+            return 'Balanced';
+        }
+
+        if (normalized === 'short') {
+            return 'Short';
+        }
+
+        if (normalized === 'over') {
+            return 'Over';
+        }
+
+        return '—';
 
     }
 
@@ -979,14 +1070,17 @@ $currentPage = 'daily-records';
 
 
                     /*
-                     * Closing Result is not currently returned
-                     * by the backend, so existing records will
-                     * temporarily show Pending.
+                     * Closing Result
                      */
 
                     const closingResult =
                         closingResultLabel(
                             record.closing_result
+                        );
+                    
+                    const driverRemittance =
+                        driverRemittanceLabel(
+                            record.driver_remittance_status
                         );
 
 
@@ -1059,6 +1153,25 @@ $currentPage = 'daily-records';
 
                                 escapeHtml(
                                     closingResult
+                                ) +
+
+                            '</span>' +
+
+                        '</td>' +
+
+
+                        '<td>' +
+
+                            '<span class="driver-remittance ' +
+
+                                driverRemittanceClass(
+                                    driverRemittance
+                                ) +
+
+                            '">' +
+
+                                escapeHtml(
+                                    driverRemittance
                                 ) +
 
                             '</span>' +

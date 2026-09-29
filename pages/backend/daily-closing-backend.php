@@ -2660,7 +2660,12 @@ final class DailyClosingService
                 ),
                 2
             );
-
+        
+        $driverMoneyReceived =
+            $this->money(
+                $_POST['driver_money_received']
+                    ?? 0
+            );
 
         $effectiveReceived =
             round(

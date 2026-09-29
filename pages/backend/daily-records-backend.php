@@ -216,6 +216,8 @@ try {
                     business_date,
                     status,
                     closing_result,
+                    driver_remittance_status,
+                    driver_remittance_difference,
                     COALESCE(
                         updated_at,
                         created_at,
@@ -304,6 +306,8 @@ try {
                     business_date,
                     status,
                     closing_result,
+                    driver_remittance_status,
+                    driver_remittance_difference,
                     actual_station_cash,
                     created_at,
                     updated_at,
