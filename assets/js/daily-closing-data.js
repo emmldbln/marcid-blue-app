@@ -28,20 +28,11 @@
 
     let autosaveTimer = null;
 
-    let autosaveInterval = null;
-
-    let hasUnsavedChanges = false;
-
     let isRestoring = false;
-
-    const LOCAL_DRAFT_KEY_PREFIX =
-        'marcidBlueDailyClosingDraft:';
 
     let isSaving = false;
 
     let saveQueued = false;
-
-    let savePromise = null;
 
     let currentDebtRefreshTimer = null;
 
@@ -3825,7 +3816,8 @@
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
-            }
+            },
+            true
         );
 
 
@@ -3846,7 +3838,8 @@
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
-            }
+            },
+            true
         );
 
 
