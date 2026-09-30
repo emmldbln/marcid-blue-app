@@ -3826,38 +3826,20 @@ final class DailyClosingService
 
 
                 /*
-                * Daily rate is taken from the saved draft
-                * so the finalized record preserves the rate
-                * that was being used for that Daily Closing.
+                * Daily Rate is no longer part of the Payroll UI.
+                *
+                * The database column is retained for schema/history
+                * compatibility, but it is populated from the employee
+                * record only. It is not used to calculate payroll.
                 */
-
-                $dailyRateRaw =
-                    $payrollEntry['daily_rate']
-                    ?? 0;
-
-                if (
-                    !is_numeric($dailyRateRaw)
-                ) {
-
-                    throw new InvalidArgumentException(
-                        'Invalid daily rate for employee #' .
-                        $employeeId .
-                        '.'
-                    );
-                }
 
                 $dailyRate =
                     round(
-                        (float) $dailyRateRaw,
+                        (float) (
+                            $employee['daily_rate'] ?? 0
+                        ),
                         2
                     );
-
-                if ($dailyRate < 0) {
-
-                    throw new InvalidArgumentException(
-                        'Daily rate cannot be negative.'
-                    );
-                }
 
 
                 /*
