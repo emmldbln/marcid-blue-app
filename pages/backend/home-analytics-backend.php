@@ -1780,13 +1780,8 @@ function saveManualExpense(PDO $pdo): void
     $periodId =
         postInt('period_id');
 
-    /*
-     * Manual Analytics Expenses are assigned to the selected
-     * accounting period only. The legacy end_period_id column
-     * remains in the database for compatibility, but is no
-     * longer used by the dashboard.
-     */
-    $endPeriodId = null;
+    $endPeriodId =
+        postInt('end_period_id');
 
     $category =
         postString('category');
@@ -1800,13 +1795,11 @@ function saveManualExpense(PDO $pdo): void
     $expenseDate =
         postString('expense_date');
 
-    /*
-     * A manual analytics expense is recorded on one actual
-     * expense date. Keep the legacy end-date/notes columns
-     * empty for new dashboard entries.
-     */
-    $expenseEndDate = '';
-    $notes = '';
+    $expenseEndDate =
+        postString('expense_end_date');
+
+    $notes =
+        postString('notes');
 
     if ($periodId <= 0) {
         respond([
@@ -1815,10 +1808,20 @@ function saveManualExpense(PDO $pdo): void
         ], 400);
     }
 
-    $period = getPeriod(
+    getPeriod(
         $pdo,
         $periodId
     );
+
+    if ($endPeriodId > 0) {
+
+        getPeriod(
+            $pdo,
+            $endPeriodId
+        );
+    } else {
+        $endPeriodId = null;
+    }
 
     if ($category === '') {
         respond([
@@ -1848,18 +1851,17 @@ function saveManualExpense(PDO $pdo): void
         ], 400);
     }
 
-    $period = getPeriod($pdo, $periodId);
-
-    if (
-        $expenseDate < $period['period_start'] ||
-        $expenseDate > $period['period_end']
-    ) {
-        respond([
-            'success' => false,
-            'message' => 'Expense date must be inside the selected accounting period.'
-        ], 400);
+    if ($expenseEndDate === '') {
+        $expenseEndDate =
+            $expenseDate;
     }
 
+    if (!validDate($expenseEndDate)) {
+        respond([
+            'success' => false,
+            'message' => 'Please enter a valid expense end date.'
+        ], 400);
+    }
 
     if ($expenseEndDate < $expenseDate) {
         respond([
@@ -1872,6 +1874,33 @@ function saveManualExpense(PDO $pdo): void
      * If a second accounting period is selected,
      * its start must not be before Period 1.
      */
+    if ($endPeriodId !== null) {
+
+        $period1 =
+            getPeriod(
+                $pdo,
+                $periodId
+            );
+
+        $period2 =
+            getPeriod(
+                $pdo,
+                $endPeriodId
+            );
+
+        if (
+            $period2['period_start']
+            <
+            $period1['period_start']
+        ) {
+            respond([
+                'success' => false,
+                'message' =>
+                    'Accounting Period 2 must be the same as or later than Accounting Period 1.'
+            ], 400);
+        }
+    }
+
     if ($expenseId > 0) {
 
         $stmt = $pdo->prepare(

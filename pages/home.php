@@ -203,18 +203,11 @@ $currentPage = 'home';
 
         .dashboard-chart-grid {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns:
+                minmax(0, 2fr)
+                minmax(300px, 1fr);
             gap: 18px;
             margin-bottom: 22px;
-        }
-
-        .historical-closing-section,
-        .revenue-expenses-section {
-            margin-bottom: 22px;
-        }
-
-        .historical-table .amount {
-            white-space: nowrap;
         }
 
         .dashboard-card {
@@ -869,70 +862,74 @@ $currentPage = 'home';
 
 
         <!-- =====================================================
-             HISTORICAL DAILY CLOSING
+             CHARTS
         ====================================================== -->
 
-        <section class="dashboard-card historical-closing-section">
+        <section class="dashboard-chart-grid">
 
-            <div class="dashboard-card-header">
+            <article class="dashboard-card">
 
-                <div>
-                    <h3 class="dashboard-card-title">
-                        Historical Daily Closing
-                    </h3>
+                <div class="dashboard-card-header">
 
-                    <p class="dashboard-card-subtitle">
-                        Day-to-day revenue and expenses recorded through Daily Closing.
-                    </p>
-                </div>
+                    <div>
 
-            </div>
+                        <h3 class="dashboard-card-title">
+                            Revenue vs Expenses
+                        </h3>
 
-            <div class="dashboard-card-body">
+                        <p
+                            class="dashboard-card-subtitle"
+                            id="revenueChartSubtitle"
+                        >
+                            Daily performance for the selected accounting period
+                        </p>
 
-                <div id="historicalClosingContainer">
-
-                    <div class="empty-state">
-                        Loading...
                     </div>
 
                 </div>
 
-            </div>
+                <div class="dashboard-card-body">
 
-        </section>
+                    <div class="chart-wrapper">
 
+                        <canvas id="revenueChart"></canvas>
 
-        <!-- =====================================================
-             REVENUE VS EXPENSES
-        ====================================================== -->
+                    </div>
 
-        <section class="dashboard-card revenue-expenses-section">
-
-            <div class="dashboard-card-header">
-
-                <div>
-                    <h3 class="dashboard-card-title">
-                        Revenue vs Expenses
-                    </h3>
-
-                    <p
-                        class="dashboard-card-subtitle"
-                        id="revenueChartSubtitle"
-                    >
-                        Daily financial performance for the selected accounting period
-                    </p>
                 </div>
 
-            </div>
+            </article>
 
-            <div class="dashboard-card-body">
 
-                <div class="chart-wrapper">
-                    <canvas id="revenueChart"></canvas>
+            <article class="dashboard-card">
+
+                <div class="dashboard-card-header">
+
+                    <div>
+
+                        <h3 class="dashboard-card-title">
+                            Gallons Sold
+                        </h3>
+
+                        <p class="dashboard-card-subtitle">
+                            Slim vs Round for this accounting period
+                        </p>
+
+                    </div>
+
                 </div>
 
-            </div>
+                <div class="dashboard-card-body">
+
+                    <div class="chart-wrapper small">
+
+                        <canvas id="gallonsChart"></canvas>
+
+                    </div>
+
+                </div>
+
+            </article>
 
         </section>
 
@@ -1002,49 +999,24 @@ $currentPage = 'home';
 
 
                     <div class="form-field">
+
                         <label
                             class="form-label"
-                            for="expenseCategory"
+                            for="expenseEndDate"
                         >
-                            Category
+                            Expense End Date
                         </label>
 
-                        <select
-                            id="expenseCategory"
-                            name="category"
-                            class="expense-select"
-                            required
+                        <input
+                            type="date"
+                            id="expenseEndDate"
+                            name="expense_end_date"
+                            class="expense-input"
                         >
 
-                            <option value="">
-                                Select category
-                            </option>
-
-                            <option value="Water Bill">
-                                Water Bill
-                            </option>
-
-                            <option value="Electricity Bill">
-                                Electricity Bill
-                            </option>
-
-                            <option value="Rent">
-                                Rent
-                            </option>
-
-                            <option value="Permits">
-                                Permits
-                            </option>
-
-                            <option value="Maintenance">
-                                Maintenance
-                            </option>
-
-                            <option value="Other">
-                                Other
-                            </option>
-
-                        </select>
+                        <span class="form-help">
+                            Optional. Use this when the bill covers a duration.
+                        </span>
 
                     </div>
 
@@ -1053,7 +1025,7 @@ $currentPage = 'home';
 
                         <label
                             class="form-label"
-                            for="expenseDescription"
+                            for="expenseCategory"
                         >
                             Category
                         </label>
@@ -1166,7 +1138,60 @@ $currentPage = 'home';
                     </div>
 
 
+                    <div class="form-field">
 
+                        <label
+                            class="form-label"
+                            for="expensePeriod2"
+                        >
+                            Accounting Period 2
+                        </label>
+
+                        <select
+                            id="expensePeriod2"
+                            name="end_period_id"
+                            class="expense-select"
+                        >
+                            <option value="">
+                                None
+                            </option>
+                        </select>
+
+                        <span class="form-help">
+                            Optional. Use when the expense spans two accounting periods.
+                        </span>
+
+                    </div>
+
+
+                    <div class="form-field expense-form-full">
+
+                        <label
+                            class="form-label"
+                            for="expenseNotes"
+                        >
+                            Notes
+                        </label>
+
+                        <textarea
+                            id="expenseNotes"
+                            name="notes"
+                            class="expense-textarea"
+                            placeholder="Optional notes"
+                        ></textarea>
+
+                    </div>
+
+
+                    <div class="expense-form-full">
+
+                        <div class="expense-period-note">
+                            If an expense covers more than one accounting period,
+                            the backend allocates the amount across the selected
+                            period range so the same expense is not counted twice.
+                        </div>
+
+                    </div>
 
                 </div>
 
@@ -1342,6 +1367,7 @@ const ANALYTICS_URL =
     'backend/home-analytics-backend.php';
 
 let revenueChart = null;
+let gallonsChart = null;
 
 let accountingPeriods = [];
 let selectedPeriodId = null;
@@ -1674,7 +1700,7 @@ function updatePeriodSubtitle(period) {
     document.getElementById('dashboardSubtitle').textContent = range;
 
     document.getElementById('revenueChartSubtitle').textContent =
-        `Daily financial performance from ${range}`;
+        `Daily performance from ${range}`;
 }
 
 
@@ -1842,11 +1868,24 @@ async function loadPeriods() {
         );
 
 
+    const expensePeriod2 =
+        document.getElementById(
+            'expensePeriod2'
+        );
+
+
     select.innerHTML = '';
 
 
     expensePeriod1.innerHTML =
-        '<option value="">Select period</option>';    accountingPeriods.forEach(
+        '<option value="">Select period</option>';
+
+
+    expensePeriod2.innerHTML =
+        '<option value="">None</option>';
+
+
+    accountingPeriods.forEach(
         period => {
 
             const label =
@@ -1891,6 +1930,27 @@ async function loadPeriods() {
             expensePeriod1.appendChild(
                 option1
             );
+
+
+            const option2 =
+                document.createElement(
+                    'option'
+                );
+
+
+            option2.value =
+                period.period_id;
+
+
+            option2.textContent =
+                label;
+
+
+            expensePeriod2.appendChild(
+                option2
+            );
+
+        }
     );
 
 
@@ -2015,199 +2075,302 @@ function renderSummary(analytics) {
 function renderRevenueChart(days) {
 
     if (revenueChart) {
+
         revenueChart.destroy();
+
         revenueChart = null;
     }
 
-    const canvas = document.getElementById('revenueChart');
+
+    const canvas =
+        document.getElementById(
+            'revenueChart'
+        );
+
 
     if (!days || !days.length) {
-        canvas.style.display = 'none';
+
+        canvas.style.display =
+            'none';
+
         return;
     }
 
-    canvas.style.display = 'block';
 
-    const labels = days.map(day =>
-        day.label || formatDate(day.date)
-    );
+    canvas.style.display =
+        'block';
 
-    const revenue = days.map(day =>
-        Number(day.revenue || 0)
-    );
 
-    const expenses = days.map(day =>
-        Number(day.expenses || 0)
-    );
+    const labels =
+        days.map(
+            day =>
+                day.label ||
+                formatDate(
+                    day.date
+                )
+        );
 
-    const net = days.map(day =>
-        Number(day.net_revenue || 0)
-    );
 
-    revenueChart = new Chart(canvas, {
-        data: {
-            labels,
-            datasets: [
-                {
-                    type: 'bar',
-                    label: 'Revenue',
-                    data: revenue,
-                    borderWidth: 0,
-                    borderRadius: 5
-                },
-                {
-                    type: 'bar',
-                    label: 'Expenses',
-                    data: expenses,
-                    borderWidth: 0,
-                    borderRadius: 5
-                },
-                {
-                    type: 'line',
-                    label: 'Net Revenue',
-                    data: net,
-                    borderWidth: 2,
-                    tension: .25,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
-                    fill: false
-                }
-            ]
-        },
+    const revenue =
+        days.map(
+            day =>
+                Number(
+                    day.revenue || 0
+                )
+        );
 
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
 
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
+    const expenses =
+        days.map(
+            day =>
+                Number(
+                    day.expenses || 0
+                )
+        );
 
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        boxWidth: 10,
-                        usePointStyle: true
-                    }
-                },
 
-                tooltip: {
-                    callbacks: {
-                        label(context) {
-                            return (
-                                context.dataset.label +
-                                ': ' +
-                                formatMoney(context.raw)
-                            );
+    revenueChart =
+        new Chart(
+            canvas,
+            {
+                type: 'line',
+
+                data: {
+
+                    labels,
+
+                    datasets: [
+
+                        {
+                            label: 'Revenue',
+
+                            data: revenue,
+
+                            tension: .35,
+
+                            borderWidth: 2,
+
+                            fill: false,
+
+                            pointRadius: 2,
+
+                            pointHoverRadius: 5
+                        },
+
+                        {
+                            label: 'Expenses',
+
+                            data: expenses,
+
+                            tension: .35,
+
+                            borderWidth: 2,
+
+                            fill: false,
+
+                            pointRadius: 2,
+
+                            pointHoverRadius: 5
                         }
-                    }
-                }
-            },
 
-            scales: {
-                y: {
-                    beginAtZero: true,
+                    ]
 
-                    ticks: {
-                        callback(value) {
-                            return '₱' +
-                                Number(value).toLocaleString('en-PH');
-                        }
-                    }
                 },
 
-                x: {
-                    stacked: false,
+                options: {
 
-                    grid: {
-                        display: false
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
                     },
 
-                    ticks: {
-                        maxRotation: 45,
-                        minRotation: 0
+                    plugins: {
+
+                        legend: {
+                            position: 'top',
+
+                            labels: {
+                                boxWidth: 10,
+                                usePointStyle: true
+                            }
+                        },
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label(context) {
+
+                                    return (
+                                        context.dataset.label +
+                                        ': ' +
+                                        formatMoney(
+                                            context.raw
+                                        )
+                                    );
+                                }
+
+                            }
+
+                        }
+
+                    },
+
+                    scales: {
+
+                        y: {
+
+                            beginAtZero: true,
+
+                            ticks: {
+
+                                callback(value) {
+
+                                    return '₱' +
+                                        Number(value)
+                                            .toLocaleString(
+                                                'en-PH'
+                                            );
+                                }
+
+                            }
+
+                        },
+
+                        x: {
+
+                            grid: {
+                                display: false
+                            },
+
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 0
+                            }
+
+                        }
+
                     }
+
                 }
+
             }
-        }
-    });
+        );
 }
 
 
 /* =========================================================
-   HISTORICAL DAILY CLOSING
+   GALLONS CHART
 ========================================================= */
 
-function renderHistoricalClosing(days) {
+function renderGallonsChart(analytics) {
 
-    const container =
-        document.getElementById('historicalClosingContainer');
+    if (gallonsChart) {
 
-    if (!days || !days.length) {
-        container.innerHTML =
-            '<div class="empty-state">' +
-            'No Daily Closing records found for this accounting period.' +
-            '</div>';
-        return;
+        gallonsChart.destroy();
+
+        gallonsChart = null;
     }
 
-    let html =
-        '<div class="table-wrapper historical-table">' +
-        '<table class="dashboard-table">' +
-        '<thead>' +
-        '<tr>' +
-        '<th>Date</th>' +
-        '<th class="amount">Walk-in</th>' +
-        '<th class="amount">Delivery</th>' +
-        '<th class="amount">Revenue</th>' +
-        '<th class="amount">Expenses</th>' +
-        '<th class="amount">Net</th>' +
-        '</tr>' +
-        '</thead>' +
-        '<tbody>';
 
-    days.forEach(day => {
+    const canvas =
+        document.getElementById(
+            'gallonsChart'
+        );
 
-        const revenue =
-            Number(day.revenue || 0);
 
-        const closingExpenses =
-            Number(day.daily_closing_expenses || 0);
+    const slim =
+        Number(
+            analytics.slim_gallons || 0
+        );
 
-        const closingNet =
-            revenue - closingExpenses;
 
-        html +=
-            '<tr>' +
-            '<td>' +
-            escapeHtml(formatDate(day.date)) +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(day.walk_in_revenue) +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(day.delivery_revenue) +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(revenue) +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(closingExpenses) +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(closingNet) +
-            '</td>' +
-            '</tr>';
-    });
+    const round =
+        Number(
+            analytics.round_gallons || 0
+        );
 
-    html +=
-        '</tbody>' +
-        '</table>' +
-        '</div>';
 
-    container.innerHTML = html;
+    gallonsChart =
+        new Chart(
+            canvas,
+            {
+                type: 'doughnut',
+
+                data: {
+
+                    labels: [
+                        'Slim',
+                        'Round'
+                    ],
+
+                    datasets: [
+
+                        {
+                            data: [
+                                slim,
+                                round
+                            ],
+
+                            borderWidth: 0
+                        }
+
+                    ]
+
+                },
+
+                options: {
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    cutout: '68%',
+
+                    plugins: {
+
+                        legend: {
+
+                            position: 'bottom',
+
+                            labels: {
+                                boxWidth: 10,
+                                usePointStyle: true,
+                                padding: 18
+                            }
+
+                        },
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label(context) {
+
+                                    return (
+                                        context.label +
+                                        ': ' +
+                                        formatNumber(
+                                            context.raw
+                                        ) +
+                                        ' gal'
+                                    );
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+        );
 }
 
 
@@ -2380,15 +2543,21 @@ function renderOutstandingBalances(
 function renderManualExpenses(expenses) {
 
     const container =
-        document.getElementById('manualExpensesContainer');
+        document.getElementById(
+            'manualExpensesContainer'
+        );
+
 
     if (!expenses || !expenses.length) {
+
         container.innerHTML =
             '<div class="empty-state">' +
-            'No manual analytics expenses have been recorded for this accounting period.' +
+            'No manual analytics expenses have been recorded.' +
             '</div>';
+
         return;
     }
+
 
     let html =
         '<div class="table-wrapper">' +
@@ -2398,64 +2567,144 @@ function renderManualExpenses(expenses) {
         '<th>Date</th>' +
         '<th>Category</th>' +
         '<th>Description</th>' +
+        '<th>Period</th>' +
         '<th class="amount">Amount</th>' +
         '<th></th>' +
         '</tr>' +
         '</thead>' +
         '<tbody>';
 
-    expenses.forEach(expense => {
 
-        html +=
-            '<tr>' +
-            '<td>' +
-            escapeHtml(formatDate(expense.expense_date)) +
-            (
-                expense.expense_end_date &&
-                expense.expense_end_date !== expense.expense_date
-                    ? '<span class="customer-secondary">to ' +
-                      escapeHtml(formatDate(expense.expense_end_date)) +
-                      '</span>'
-                    : ''
-            ) +
-            '</td>' +
-            '<td>' +
-            escapeHtml(expense.category) +
-            '</td>' +
-            '<td>' +
-            '<span class="customer-name">' +
-            escapeHtml(expense.description) +
-            '</span>' +
-            '</td>' +
-            '<td class="amount">' +
-            formatMoney(
-                expense.allocated_amount !== undefined
-                    ? expense.allocated_amount
-                    : expense.amount
-            ) +
-            '</td>' +
-            '<td>' +
-            '<button type="button" class="expense-action" data-expense-id="' +
-            escapeHtml(expense.expense_id) +
-            '">Delete</button>' +
-            '</td>' +
-            '</tr>';
-    });
+    expenses.forEach(
+        expense => {
+
+            html +=
+                '<tr>' +
+
+                '<td>' +
+                escapeHtml(
+                    formatDate(
+                        expense.expense_date
+                    )
+                ) +
+
+                (
+                    expense.expense_end_date
+                        ? '<span class="customer-secondary">to ' +
+                          escapeHtml(
+                              formatDate(
+                                  expense.expense_end_date
+                              )
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
+                '</td>' +
+
+                '<td>' +
+                escapeHtml(
+                    expense.category
+                ) +
+                '</td>' +
+
+                '<td>' +
+
+                '<span class="customer-name">' +
+                escapeHtml(
+                    expense.description
+                ) +
+                '</span>' +
+
+                (
+                    expense.notes
+                        ? '<span class="customer-secondary">' +
+                          escapeHtml(
+                              expense.notes
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
+                '</td>' +
+
+                '<td>' +
+                escapeHtml(
+                    expense.period_label ||
+                    ''
+                ) +
+
+                (
+                    expense.end_period_label
+                        ? '<span class="customer-secondary">' +
+                          'to ' +
+                          escapeHtml(
+                              expense.end_period_label
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
+                '</td>' +
+
+                '<td class="amount">' +
+                formatMoney(
+                    expense.amount
+                ) +
+                '</td>' +
+
+                '<td>' +
+
+                '<button' +
+                ' type="button"' +
+                ' class="expense-action"' +
+                ' data-expense-id="' +
+                escapeHtml(
+                    expense.expense_id
+                ) +
+                '"' +
+                '>' +
+                'Delete' +
+                '</button>' +
+
+                '</td>' +
+
+                '</tr>';
+
+        }
+    );
+
 
     html +=
         '</tbody>' +
         '</table>' +
         '</div>';
 
-    container.innerHTML = html;
+
+    container.innerHTML =
+        html;
+
 
     container
-        .querySelectorAll('.expense-action')
-        .forEach(button => {
-            button.addEventListener('click', () => {
-                deleteManualExpense(button.dataset.expenseId);
-            });
-        });
+        .querySelectorAll(
+            '.expense-action'
+        )
+        .forEach(
+            button => {
+
+                button.addEventListener(
+                    'click',
+                    () => {
+
+                        deleteManualExpense(
+                            button.dataset.expenseId
+                        );
+
+                    }
+                );
+
+            }
+        );
 }
 
 
@@ -2634,13 +2883,13 @@ async function loadDashboard() {
         );
 
 
-        renderHistoricalClosing(
+        renderRevenueChart(
             daily.days || []
         );
 
 
-        renderRevenueChart(
-            daily.days || []
+        renderGallonsChart(
+            dashboard.analytics
         );
 
 
@@ -2672,9 +2921,13 @@ async function loadDashboard() {
             period
         );
 
+
         document.getElementById(
             'expensePeriod1'
-        ).value = selectedPeriodId;
+        ).value =
+            selectedPeriodId;
+
+
     } catch (error) {
 
         console.error(error);
@@ -2834,25 +3087,23 @@ function openExpenseForm() {
     );
 
 
-    const expenseDateInput =
-        document.getElementById('expenseDate');
+    document.getElementById(
+        'expenseDate'
+    ).focus();
+
 
     const period =
         getSelectedPeriod();
 
+
     if (period) {
-        document.getElementById('expensePeriod1').value =
+
+        document.getElementById(
+            'expensePeriod1'
+        ).value =
             period.period_id;
 
-        if (!expenseDateInput.value) {
-            expenseDateInput.value =
-                period.period_end;
-        }
     }
-
-    expenseDateInput.focus();
-
-
 }
 
 
@@ -2887,27 +3138,66 @@ function closeExpenseForm() {
 }
 
 
-async function saveManualExpense(event) {
+async function saveManualExpense(
+    event
+) {
 
     event.preventDefault();
 
+
     const saveButton =
-        document.getElementById('saveExpenseButton');
+        document.getElementById(
+            'saveExpenseButton'
+        );
+
 
     const expenseDate =
-        document.getElementById('expenseDate').value;
+        document.getElementById(
+            'expenseDate'
+        ).value;
+
+
+    const expenseEndDate =
+        document.getElementById(
+            'expenseEndDate'
+        ).value;
+
 
     const category =
-        document.getElementById('expenseCategory').value;
+        document.getElementById(
+            'expenseCategory'
+        ).value;
+
 
     const description =
-        document.getElementById('expenseDescription').value.trim();
+        document.getElementById(
+            'expenseDescription'
+        ).value.trim();
+
 
     const amount =
-        document.getElementById('expenseAmount').value;
+        document.getElementById(
+            'expenseAmount'
+        ).value;
+
 
     const periodId =
-        document.getElementById('expensePeriod1').value;
+        document.getElementById(
+            'expensePeriod1'
+        ).value;
+
+
+    const endPeriodId =
+        document.getElementById(
+            'expensePeriod2'
+        ).value;
+
+
+    const notes =
+        document.getElementById(
+            'expenseNotes'
+        ).value.trim();
+
 
     if (
         !expenseDate ||
@@ -2916,57 +3206,105 @@ async function saveManualExpense(event) {
         !amount ||
         !periodId
     ) {
+
         showError(
             'Please complete all required expense fields.'
         );
+
         return;
     }
 
-    const period = getSelectedPeriod();
 
     if (
-        period &&
-        (
-            expenseDate < period.period_start ||
-            expenseDate > period.period_end
-        )
+        expenseEndDate &&
+        expenseEndDate < expenseDate
     ) {
+
         showError(
-            'The expense date must be inside the selected accounting period.'
+            'Expense end date cannot be earlier than expense date.'
         );
+
         return;
     }
 
-    saveButton.disabled = true;
-    saveButton.textContent = 'Saving...';
+
+    if (
+        endPeriodId &&
+        Number(endPeriodId) <
+        Number(periodId)
+    ) {
+
+        showError(
+            'Accounting Period 2 must not be earlier than Accounting Period 1.'
+        );
+
+        return;
+    }
+
+
+    saveButton.disabled =
+        true;
+
+
+    saveButton.textContent =
+        'Saving...';
+
 
     hideError();
+
 
     try {
 
         await requestAnalytics(
             'save_manual_expense',
             {
-                period_id: periodId,
-                category,
-                description,
-                amount,
-                expense_date: expenseDate
+                period_id:
+                    periodId,
+
+                end_period_id:
+                    endPeriodId,
+
+                category:
+                    category,
+
+                description:
+                    description,
+
+                amount:
+                    amount,
+
+                expense_date:
+                    expenseDate,
+
+                expense_end_date:
+                    expenseEndDate,
+
+                notes:
+                    notes
             }
         );
 
+
         closeExpenseForm();
+
 
         await loadDashboard();
 
+
     } catch (error) {
 
-        showError(error.message);
+        showError(
+            error.message
+        );
 
     } finally {
 
-        saveButton.disabled = false;
-        saveButton.textContent = 'Save Expense';
+        saveButton.disabled =
+            false;
+
+
+        saveButton.textContent =
+            'Save Expense';
     }
 }
 
