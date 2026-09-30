@@ -474,75 +474,6 @@
 
 
 
-    function getPayrollState() {
-
-        return payrollEmployees.map(
-            employee => {
-
-                const employeeId =
-                    Number(
-                        employee.employee_id
-                    ) || 0;
-
-                const input =
-                    getPayrollAmountInput(
-                        employeeId
-                    );
-
-                const defaultAmount =
-                    Number(
-                        employee.daily_rate
-                    ) || 0;
-
-                const value =
-                    input
-                        ? input.value
-                        : String(defaultAmount);
-
-                return {
-
-                    employee_id:
-                        employeeId,
-
-                    full_name:
-                        employee.full_name || '',
-
-                    position:
-                        employee.position || '',
-
-                    daily_rate:
-                        defaultAmount,
-
-                    amount:
-                        value
-
-                };
-
-            }
-        );
-
-    }
-
-
-    function getPayrollTotal() {
-
-    let total = 0;
-
-    document
-        .querySelectorAll('.payroll-amount-input')
-        .forEach(
-            input => {
-
-                total +=
-                    Number(input.value) || 0;
-
-            }
-        );
-
-    return total;
-
-}
-
 
     /*
      * ---------------------------------------------------------
@@ -975,74 +906,91 @@
      * ---------------------------------------------------------
      */
 
-        function restorePayrollState(state) {
+    function restorePayrollState(state) {
 
-            if (!Array.isArray(state)) {
-
-                return;
-
-            }
+        if (!Array.isArray(state)) {
+            return;
+        }
 
 
-            state.forEach(
-                payroll => {
+        state.forEach(
+            payroll => {
 
-                    const employeeId =
-                        Number(
-                            payroll.employee_id
-                        ) || 0;
-
-
-                    if (employeeId <= 0) {
-
-                        return;
-
-                    }
+                const employeeId =
+                    Number(
+                        payroll.employee_id
+                    ) || 0;
 
 
-                    const input =
-                        getPayrollAmountInput(
-                            employeeId
+                if (employeeId <= 0) {
+                    return;
+                }
+
+
+                const input =
+                    getPayrollAmountInput(
+                        employeeId
+                    );
+
+
+                if (!input) {
+                    return;
+                }
+
+
+                /*
+                 * Payroll Amount is the actual amount saved
+                 * for this Daily Closing.
+                 *
+                 * Daily Rate is never used as a fallback.
+                 */
+                const savedAmount =
+                    payroll.amount !== undefined &&
+                    payroll.amount !== null
+                        ? payroll.amount
+                        : '0.00';
+
+
+                input.value =
+                    String(
+                        savedAmount
+                    );
+
+
+                /*
+                 * Keep the large amount shown in the employee
+                 * header synchronized with the restored input.
+                 */
+                const item =
+                    input.closest(
+                        '.payroll-item'
+                    );
+
+
+                const amountDisplay =
+                    item
+                        ? item.querySelector(
+                            '.payroll-item-amount'
+                        )
+                        : null;
+
+
+                if (amountDisplay) {
+
+                    amountDisplay.textContent =
+                        formatPayrollMoney(
+                            savedAmount
                         );
 
-
-                    if (!input) {
-
-                        return;
-
-                    }
-
-
-                    /*
-                    * Restore ONLY the saved Payroll Amount.
-                    *
-                    * Do not use daily_rate here.
-                    *
-                    * A saved amount of 0 is valid and must remain 0.
-                    */
-
-                    if (
-                        payroll.amount !== undefined &&
-                        payroll.amount !== null
-                    ) {
-
-                        input.value =
-                            payroll.amount;
-
-                    } else {
-
-                        input.value =
-                            '0.00';
-
-                    }
-
                 }
-            );
+
+            }
+        );
 
 
-            updatePayrollTotal();
+        updatePayrollTotal();
 
-        }
+    }
 
     /*
      * ---------------------------------------------------------
@@ -3574,7 +3522,24 @@
             }
 
 
-            await loadPayrollEmployees();
+            /*
+             * Employees are already loaded during startup.
+             *
+             * Do not render them again every time the Payroll
+             * drawer is opened because rendering creates new
+             * inputs initialized to 0.00.
+             *
+             * Re-render only if the employee list has not been
+             * loaded yet.
+             */
+            if (
+                !Array.isArray(payrollEmployees) ||
+                payrollEmployees.length === 0
+            ) {
+
+                await loadPayrollEmployees();
+
+            }
 
         }
 
