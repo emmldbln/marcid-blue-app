@@ -4260,6 +4260,15 @@ class ExpenseController extends BaseRowController {
 
                     }
 
+                    if (
+                        typeof window.marcidBlueUpdatePayrollTotal ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollTotal();
+
+                    }
+
                 }
 
             }
@@ -4288,6 +4297,15 @@ class ExpenseController extends BaseRowController {
 
                     }
 
+                    if (
+                        typeof window.marcidBlueUpdatePayrollTotal ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollTotal();
+
+                    }
+
                 }
 
             }
@@ -4310,6 +4328,15 @@ class ExpenseController extends BaseRowController {
                     ) {
 
                         window.marcidBlueUpdatePayrollCashAdvances();
+
+                    }
+
+                    if (
+                        typeof window.marcidBlueUpdatePayrollTotal ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollTotal();
 
                     }
 
@@ -5188,6 +5215,35 @@ class DriverExpenseController
             row => this.updateRow(row)
         );
 
+        window.marcidBlueDriverExpenseControllerUpdateRow =
+            (row, restoring = false) => {
+
+                if (
+                    restoring &&
+                    row
+                ) {
+
+                    const field =
+                        row.querySelector(
+                            '.driver-expense-name'
+                        );
+
+                    if (field) {
+
+                        field.dataset.selectedEmployeeId =
+                            field.value || '';
+
+                        field.dataset.description =
+                            field.value || '';
+
+                    }
+
+                }
+
+                this.updateRow(row);
+
+            };
+
     }
 
 
@@ -5263,7 +5319,7 @@ class DriverExpenseController
                 '.driver-expense-category'
             );
 
-        const name =
+        let name =
             row.querySelector(
                 '.driver-expense-name'
             );
@@ -5287,9 +5343,145 @@ class DriverExpenseController
             category.value === 'Cash Advance' ||
             category.value === 'Others';
 
+        if (
+            category.value === 'Cash Advance'
+        ) {
+
+            const selectedEmployeeId =
+                name.dataset.selectedEmployeeId ||
+                name.value ||
+                '';
+
+            if (name.tagName !== 'SELECT') {
+
+                const select =
+                    document.createElement('select');
+
+                select.className =
+                    name.className;
+
+                select.name =
+                    name.name;
+
+                select.required =
+                    true;
+
+                select.dataset.selectedEmployeeId =
+                    selectedEmployeeId;
+
+                const placeholder =
+                    document.createElement('option');
+
+                placeholder.value = '';
+
+                placeholder.textContent =
+                    'Select employee';
+
+                select.appendChild(
+                    placeholder
+                );
+
+                const employees =
+                    Array.isArray(
+                        window.marcidBluePayrollEmployees
+                    )
+                        ? window.marcidBluePayrollEmployees
+                        : [];
+
+                employees.forEach(
+                    employee => {
+
+                        const option =
+                            document.createElement('option');
+
+                        option.value =
+                            String(
+                                employee.employee_id
+                            );
+
+                        option.textContent =
+                            employee.full_name ||
+                            'Unnamed Employee';
+
+                        option.selected =
+                            String(
+                                employee.employee_id
+                            ) ===
+                            String(
+                                selectedEmployeeId
+                            );
+
+                        select.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+                name.replaceWith(select);
+                name = select;
+
+            } else {
+
+                const currentValue =
+                    name.value ||
+                    selectedEmployeeId;
+
+                name.innerHTML = '';
+
+                const placeholder =
+                    document.createElement('option');
+
+                placeholder.value = '';
+
+                placeholder.textContent =
+                    'Select employee';
+
+                name.appendChild(placeholder);
+
+                const employees =
+                    Array.isArray(
+                        window.marcidBluePayrollEmployees
+                    )
+                        ? window.marcidBluePayrollEmployees
+                        : [];
+
+                employees.forEach(
+                    employee => {
+
+                        const option =
+                            document.createElement('option');
+
+                        option.value =
+                            String(
+                                employee.employee_id
+                            );
+
+                        option.textContent =
+                            employee.full_name ||
+                            'Unnamed Employee';
+
+                        option.selected =
+                            String(
+                                employee.employee_id
+                            ) ===
+                            String(
+                                currentValue
+                            );
+
+                        name.appendChild(option);
+
+                    }
+                );
+
+            }
+
+        }
 
         name.disabled =
-            !needsName;
+            category.value === 'Cash Advance'
+                ? false
+                : !needsName;
 
         name.required =
             needsName;
