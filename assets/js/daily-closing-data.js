@@ -251,19 +251,83 @@
             getRows(
                 '.expense-row'
             ).map(
-                row => getRowData(
-                    row,
-                    {
-                        category:
-                            '.expense-category',
+                row => {
 
-                        name:
-                            '.expense-name',
+                    const category =
+                        row.querySelector(
+                            '.expense-category'
+                        );
+
+                    const nameField =
+                        row.querySelector(
+                            '.expense-name'
+                        );
+
+                    const amount =
+                        row.querySelector(
+                            '.expense-amount'
+                        );
+
+                    const isCashAdvance =
+                        category &&
+                        category.value ===
+                            'Cash Advance';
+
+                    let name = '';
+                    let employeeId = '';
+
+                    if (isCashAdvance) {
+
+                        employeeId =
+                            nameField
+                                ? String(
+                                    nameField.value || ''
+                                )
+                                : '';
+
+                        const selectedOption =
+                            nameField &&
+                            nameField.options
+                                ? nameField.options[
+                                    nameField.selectedIndex
+                                ]
+                                : null;
+
+                        name =
+                            selectedOption &&
+                            selectedOption.value
+                                ? selectedOption.textContent.trim()
+                                : '';
+
+                    } else {
+
+                        name =
+                            nameField
+                                ? String(
+                                    nameField.value || ''
+                                )
+                                : '';
+
+                    }
+
+                    return {
+                        category:
+                            category
+                                ? category.value
+                                : '',
+
+                        name,
+
+                        employee_id:
+                            employeeId,
 
                         amount:
-                            '.expense-amount'
-                    }
-                )
+                            amount
+                                ? amount.value
+                                : ''
+                    };
+
+                }
             );
 
 
@@ -444,6 +508,88 @@
         );
 
     }
+
+
+    function getEmployeeCashAdvance(employeeId) {
+
+        const targetId =
+            String(employeeId);
+
+        let total = 0;
+
+        getRows(
+            '.expense-row'
+        ).forEach(
+            row => {
+
+                const category =
+                    row.querySelector(
+                        '.expense-category'
+                    );
+
+                const employee =
+                    row.querySelector(
+                        '.expense-name'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.expense-amount'
+                    );
+
+                if (
+                    !category ||
+                    category.value !==
+                        'Cash Advance' ||
+                    !employee ||
+                    String(employee.value) !==
+                        targetId
+                ) {
+                    return;
+                }
+
+                total +=
+                    Number(
+                        amount
+                            ? amount.value
+                            : 0
+                    ) || 0;
+
+            }
+        );
+
+        return total;
+
+    }
+
+
+    function updatePayrollCashAdvances() {
+
+        document
+            .querySelectorAll(
+                '.payroll-cash-advance-value'
+            )
+            .forEach(
+                element => {
+
+                    const employeeId =
+                        element.dataset.employeeId;
+
+                    element.textContent =
+                        formatPayrollMoney(
+                            getEmployeeCashAdvance(
+                                employeeId
+                            )
+                        );
+
+                }
+            );
+
+    }
+
+
+    window.marcidBlueUpdatePayrollCashAdvances =
+        updatePayrollCashAdvances;
 
 
     function getPayrollTotal() {
@@ -736,23 +882,91 @@
         expenses.forEach(
             (data, index) => {
 
-                setRowData(
-                    expenseRows[index],
-                    {
-                        category:
-                            '.expense-category',
+                const row =
+                    expenseRows[index];
 
-                        name:
-                            '.expense-name',
+                if (!row) {
+                    return;
+                }
 
-                        amount:
-                            '.expense-amount'
-                    },
-                    data
-                );
+                const category =
+                    row.querySelector(
+                        '.expense-category'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.expense-amount'
+                    );
+
+                if (category) {
+                    category.value =
+                        data.category || '';
+                }
+
+                /*
+                 * Rebuild the Cash Advance / Others
+                 * field before restoring its saved value.
+                 */
+                if (
+                    typeof window.marcidBlueExpenseControllerUpdateRow ===
+                    'function'
+                ) {
+
+                    window.marcidBlueExpenseControllerUpdateRow(
+                        row,
+                        true
+                    );
+
+                }
+
+                if (amount) {
+                    amount.value =
+                        data.amount ?? '';
+                }
+
+                const nameField =
+                    row.querySelector(
+                        '.expense-name'
+                    );
+
+                if (!nameField) {
+                    return;
+                }
+
+                if (
+                    data.category ===
+                    'Cash Advance'
+                ) {
+
+                    nameField.value =
+                        data.employee_id !==
+                            undefined &&
+                        data.employee_id !==
+                            null
+                            ? String(
+                                data.employee_id
+                            )
+                            : '';
+
+                } else {
+
+                    nameField.value =
+                        data.name ?? '';
+
+                }
 
             }
         );
+
+        if (
+            typeof window.marcidBlueUpdatePayrollCashAdvances ===
+            'function'
+        ) {
+
+            window.marcidBlueUpdatePayrollCashAdvances();
+
+        }
 
 
         const deliveryRows =
@@ -1345,6 +1559,68 @@
 
                 /*
                 * -------------------------------------------------
+                * CASH ADVANCE
+                * -------------------------------------------------
+                *
+                * This is shown separately from Payroll Amount.
+                * It is sourced from the explicitly recorded
+                * Station Expense -> Cash Advance entry.
+                * -------------------------------------------------
+                */
+
+                const cashAdvanceDetail =
+                    document.createElement(
+                        'div'
+                    );
+
+                cashAdvanceDetail.className =
+                    'payroll-detail';
+
+
+                const cashAdvanceLabel =
+                    document.createElement(
+                        'div'
+                    );
+
+                cashAdvanceLabel.className =
+                    'payroll-detail-label';
+
+                cashAdvanceLabel.textContent =
+                    'Cash Advance';
+
+
+                const cashAdvanceValue =
+                    document.createElement(
+                        'div'
+                    );
+
+                cashAdvanceValue.className =
+                    'payroll-detail-value payroll-cash-advance-value';
+
+                cashAdvanceValue.dataset.employeeId =
+                    String(
+                        employee.employee_id
+                    );
+
+                cashAdvanceValue.textContent =
+                    formatPayrollMoney(
+                        getEmployeeCashAdvance(
+                            employee.employee_id
+                        )
+                    );
+
+
+                cashAdvanceDetail.appendChild(
+                    cashAdvanceLabel
+                );
+
+                cashAdvanceDetail.appendChild(
+                    cashAdvanceValue
+                );
+
+
+                /*
+                * -------------------------------------------------
                 * PAYROLL AMOUNT
                 * -------------------------------------------------
                 */
@@ -1520,6 +1796,10 @@
                 );
 
                 details.appendChild(
+                    cashAdvanceDetail
+                );
+
+                details.appendChild(
                     payrollDetail
                 );
 
@@ -1543,6 +1823,8 @@
         */
 
         updatePayrollTotal();
+
+        updatePayrollCashAdvances();
 
     }
 
@@ -1639,7 +1921,13 @@
                     : [];
 
 
+            window.marcidBluePayrollEmployees =
+                payrollEmployees;
+
+
             renderPayrollEmployees();
+
+            updatePayrollCashAdvances();
 
 
             console.info(
