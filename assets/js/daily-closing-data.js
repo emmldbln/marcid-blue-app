@@ -1949,6 +1949,27 @@
 
             renderPayrollEmployees();
 
+            document
+                .querySelectorAll(
+                    '.expense-row'
+                )
+                .forEach(
+                    row => {
+
+                        if (
+                            typeof window.marcidBlueExpenseControllerUpdateRow ===
+                            'function'
+                        ) {
+
+                            window.marcidBlueExpenseControllerUpdateRow(
+                                row
+                            );
+
+                        }
+
+                    }
+                );
+
             updatePayrollCashAdvances();
 
 
