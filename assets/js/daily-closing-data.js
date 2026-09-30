@@ -678,15 +678,62 @@
                     const employeeId =
                         element.dataset.employeeId;
 
+                    const total =
+                        getEmployeeCashAdvance(
+                            employeeId
+                        );
+
                     element.textContent =
                         formatPayrollMoney(
-                            getEmployeeCashAdvance(
-                                employeeId
-                            )
+                            total
                         );
+
+                    /*
+                     * Keep the Payroll header amount synchronized
+                     * with Cash Advance + Remaining Salary.
+                     */
+                    const item =
+                        element.closest(
+                            '.payroll-item'
+                        );
+
+                    if (item) {
+
+                        const amountInput =
+                            item.querySelector(
+                                '.payroll-amount-input'
+                            );
+
+                        const amountDisplay =
+                            item.querySelector(
+                                '.payroll-item-amount'
+                            );
+
+                        if (
+                            amountDisplay
+                        ) {
+
+                            const remaining =
+                                Number(
+                                    amountInput
+                                        ? amountInput.value
+                                        : 0
+                                ) || 0;
+
+                            amountDisplay.textContent =
+                                formatPayrollMoney(
+                                    remaining +
+                                    total
+                                );
+
+                        }
+
+                    }
 
                 }
             );
+
+        updatePayrollTotal();
 
     }
 
@@ -3990,6 +4037,16 @@
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
+                if (
+                    event.target.closest(
+                        '.expense-row, .driver-expense-row'
+                    )
+                ) {
+
+                    updatePayrollCashAdvances();
+
+                }
+
             },
             true
         );
@@ -4011,6 +4068,16 @@
 
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
+
+                if (
+                    event.target.closest(
+                        '.expense-row, .driver-expense-row'
+                    )
+                ) {
+
+                    updatePayrollCashAdvances();
+
+                }
 
             },
             true
