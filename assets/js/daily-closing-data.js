@@ -35,6 +35,9 @@
 
     let isRestoring = false;
 
+    const LOCAL_DRAFT_KEY_PREFIX =
+        'marcidBlueDailyClosingDraft:';
+
     let isSaving = false;
 
     let saveQueued = false;
@@ -3123,6 +3126,18 @@
 
         const draft =
             collectDraft();
+
+        try {
+            localStorage.setItem(
+                LOCAL_DRAFT_KEY_PREFIX + String(dailyId),
+                JSON.stringify(draft)
+            );
+        } catch (error) {
+            console.warn(
+                'Marcid Blue: unable to cache draft locally.',
+                error
+            );
+        }
 
 
         const body =
