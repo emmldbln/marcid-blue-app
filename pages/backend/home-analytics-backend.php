@@ -1815,20 +1815,10 @@ function saveManualExpense(PDO $pdo): void
         ], 400);
     }
 
-    getPeriod(
+    $period = getPeriod(
         $pdo,
         $periodId
     );
-
-    if ($endPeriodId > 0) {
-
-        getPeriod(
-            $pdo,
-            $endPeriodId
-        );
-    } else {
-        $endPeriodId = null;
-    }
 
     if ($category === '') {
         respond([
@@ -1870,14 +1860,6 @@ function saveManualExpense(PDO $pdo): void
         ], 400);
     }
 
-    $expenseEndDate = $expenseDate;
-
-    if (!validDate($expenseEndDate)) {
-        respond([
-            'success' => false,
-            'message' => 'Please enter a valid expense end date.'
-        ], 400);
-    }
 
     if ($expenseEndDate < $expenseDate) {
         respond([
