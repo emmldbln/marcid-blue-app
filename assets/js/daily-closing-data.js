@@ -494,11 +494,6 @@
                     position:
                         employee.position || '',
 
-                    daily_rate:
-                        Number(
-                            employee.daily_rate
-                        ) || 0,
-
                     amount:
                         value
 
@@ -604,10 +599,19 @@
             .forEach(
                 input => {
 
-                    total +=
+                    const employeeId =
+                        input.dataset.payrollAmount;
+
+                    const remainingSalary =
                         Number(
                             input.value
                         ) || 0;
+
+                    total +=
+                        remainingSalary +
+                        getEmployeeCashAdvance(
+                            employeeId
+                        );
 
                 }
             );
@@ -1215,7 +1219,14 @@
 
                     amountDisplay.textContent =
                         formatPayrollMoney(
-                            savedAmount
+                            (
+                                Number(
+                                    savedAmount
+                                ) || 0
+                            ) +
+                            getEmployeeCashAdvance(
+                                employeeId
+                            )
                         );
 
                 }
@@ -1472,11 +1483,10 @@
                 *
                 * IMPORTANT:
                 *
-                * This is the actual Payroll Amount.
+                * This is the total payroll shown in the header.
                 *
-                * It starts at ZERO for a new Daily Closing.
-                *
-                * Do NOT use employee.daily_rate here.
+                * It includes Cash Advance plus the remaining
+                * salary entered below.
                 * -------------------------------------------------
                 */
 
@@ -1490,7 +1500,9 @@
 
                 amountDisplay.textContent =
                     formatPayrollMoney(
-                        0
+                        getEmployeeCashAdvance(
+                            employee.employee_id
+                        )
                     );
 
 
@@ -1521,62 +1533,6 @@
 
                 details.className =
                     'payroll-item-details';
-
-
-                /*
-                * -------------------------------------------------
-                * DAILY RATE
-                * -------------------------------------------------
-                *
-                * This is display-only reference information.
-                * It does NOT populate Payroll Amount.
-                * -------------------------------------------------
-                */
-
-                const rateDetail =
-                    document.createElement(
-                        'div'
-                    );
-
-                rateDetail.className =
-                    'payroll-detail';
-
-
-                const rateLabel =
-                    document.createElement(
-                        'div'
-                    );
-
-                rateLabel.className =
-                    'payroll-detail-label';
-
-                rateLabel.textContent =
-                    'Daily Rate';
-
-
-                const rateValue =
-                    document.createElement(
-                        'div'
-                    );
-
-                rateValue.className =
-                    'payroll-detail-value';
-
-                rateValue.textContent =
-                    formatPayrollMoney(
-                        Number(
-                            employee.daily_rate
-                        ) || 0
-                    );
-
-
-                rateDetail.appendChild(
-                    rateLabel
-                );
-
-                rateDetail.appendChild(
-                    rateValue
-                );
 
 
                 /*
@@ -1665,7 +1621,7 @@
                     'payroll-detail-label';
 
                 payrollLabel.textContent =
-                    'Payroll Amount';
+                    'Payroll Amount (Remaining)';
 
 
                 const amountInput =
@@ -1700,9 +1656,7 @@
                 * IMPORTANT
                 * -------------------------------------------------
                 *
-                * New Payroll Amount = 0.
-                *
-                * Daily Rate is deliberately NOT used here.
+                * New Remaining Payroll Amount = 0.
                 *
                 * A saved draft will overwrite this value later
                 * through restorePayrollState().
@@ -1768,6 +1722,18 @@
 
                         updatePayrollTotal();
 
+                    amountDisplay.textContent =
+                        formatPayrollMoney(
+                            (
+                                Number(
+                                    amountInput.value
+                                ) || 0
+                            ) +
+                            getEmployeeCashAdvance(
+                                employee.employee_id
+                            )
+                        );
+
                         scheduleAutosave();
 
                     }
@@ -1812,10 +1778,6 @@
                     amountInput
                 );
 
-
-                details.appendChild(
-                    rateDetail
-                );
 
                 details.appendChild(
                     cashAdvanceDetail
