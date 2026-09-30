@@ -10,16 +10,13 @@ requireAdmin();
 
 $currentPage = 'home';
 
-$currentYear = (int)date('Y');
-$currentMonth = (int)date('n');
-
-$monthName = date('F Y');
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -37,7 +34,7 @@ $monthName = date('F Y');
     <style>
 
         /* =========================================================
-           HOME DASHBOARD
+           DASHBOARD
         ========================================================= */
 
         .dashboard-page {
@@ -49,7 +46,7 @@ $monthName = date('F Y');
             align-items: flex-start;
             justify-content: space-between;
             gap: 24px;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
         }
 
         .dashboard-heading h1 {
@@ -69,10 +66,11 @@ $monthName = date('F Y');
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
-        .dashboard-month-select {
-            min-width: 180px;
+        .dashboard-period-select {
+            min-width: 310px;
             height: 42px;
             padding: 0 14px;
             border: 1px solid var(--border);
@@ -83,30 +81,69 @@ $monthName = date('F Y');
             outline: none;
         }
 
-        .dashboard-month-select:focus {
+        .dashboard-period-select:focus,
+        .period-date-input:focus,
+        .expense-input:focus,
+        .expense-select:focus,
+        .expense-textarea:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(22, 135, 201, .10);
         }
 
-        .dashboard-refresh {
+        .dashboard-button {
             height: 42px;
             padding: 0 16px;
             border: 0;
             border-radius: 8px;
-            background: var(--primary);
-            color: #ffffff;
             font-weight: 600;
             cursor: pointer;
             transition: .2s ease;
         }
 
-        .dashboard-refresh:hover {
+        .dashboard-button.primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .dashboard-button.primary:hover {
             background: var(--primary-dark);
         }
 
-        .dashboard-refresh:disabled {
+        .dashboard-button.secondary {
+            background: var(--background);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .dashboard-button.secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .dashboard-button.danger {
+            color: var(--danger);
+            background: transparent;
+            border: 1px solid var(--border);
+        }
+
+        .dashboard-button:disabled {
             opacity: .6;
             cursor: not-allowed;
+        }
+
+        /* =========================================================
+           ERROR
+        ========================================================= */
+
+        .dashboard-error {
+            display: none;
+            margin-bottom: 20px;
+            padding: 13px 15px;
+            border: 1px solid #f1c2c0;
+            border-radius: 8px;
+            background: #fff4f3;
+            color: var(--danger);
+            font-size: 13px;
         }
 
         /* =========================================================
@@ -115,8 +152,7 @@ $monthName = date('F Y');
 
         .dashboard-summary-grid {
             display: grid;
-            grid-template-columns:
-                repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 18px;
             margin-bottom: 22px;
         }
@@ -149,24 +185,16 @@ $monthName = date('F Y');
             color: var(--text-muted);
         }
 
-        .dashboard-stat-card.revenue
-        .dashboard-stat-value {
+        .dashboard-stat-card.revenue .dashboard-stat-value {
             color: var(--primary);
         }
 
-        .dashboard-stat-card.net
-        .dashboard-stat-value {
+        .dashboard-stat-card.net .dashboard-stat-value {
             color: var(--secondary);
         }
 
-        .dashboard-stat-card.expenses
-        .dashboard-stat-value {
+        .dashboard-stat-card.expenses .dashboard-stat-value {
             color: var(--danger);
-        }
-
-        .dashboard-stat-card.gallons
-        .dashboard-stat-value {
-            color: var(--text);
         }
 
         /* =========================================================
@@ -219,11 +247,11 @@ $monthName = date('F Y');
         .chart-wrapper {
             position: relative;
             width: 100%;
-            height: 310px;
+            height: 320px;
         }
 
         .chart-wrapper.small {
-            height: 310px;
+            height: 320px;
         }
 
         .chart-empty {
@@ -233,6 +261,74 @@ $monthName = date('F Y');
             height: 100%;
             color: var(--text-muted);
             font-size: 13px;
+        }
+
+        /* =========================================================
+           PERIOD EDITOR
+        ========================================================= */
+
+        .period-editor {
+            display: none;
+            margin-bottom: 22px;
+        }
+
+        .period-editor.open {
+            display: block;
+        }
+
+        .period-editor-grid {
+            display: grid;
+            grid-template-columns:
+                minmax(0, 1fr)
+                minmax(0, 1fr)
+                auto;
+            align-items: start;
+            gap: 14px;
+        }
+
+        .period-editor-action {
+            display: flex;
+            align-items: flex-start;
+            padding-top: 29px;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-help {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .period-date-input,
+        .expense-input,
+        .expense-select,
+        .expense-textarea {
+            width: 100%;
+            box-sizing: border-box;
+            height: 42px;
+            padding: 0 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .expense-textarea {
+            height: 80px;
+            padding-top: 11px;
+            resize: vertical;
         }
 
         /* =========================================================
@@ -246,6 +342,14 @@ $monthName = date('F Y');
                 minmax(0, 1fr);
             gap: 18px;
             margin-bottom: 22px;
+        }
+
+        /* =========================================================
+           TABLES
+        ========================================================= */
+
+        .table-wrapper {
+            overflow-x: auto;
         }
 
         .dashboard-table {
@@ -262,6 +366,7 @@ $monthName = date('F Y');
             letter-spacing: .04em;
             color: var(--text-muted);
             border-bottom: 1px solid var(--border);
+            white-space: nowrap;
         }
 
         .dashboard-table td {
@@ -304,25 +409,70 @@ $monthName = date('F Y');
         }
 
         /* =========================================================
-           HISTORY
+           MANUAL EXPENSES
         ========================================================= */
 
-        .dashboard-history {
+        .manual-expenses-section {
             margin-bottom: 22px;
         }
 
-        .history-table-wrapper {
-            overflow-x: auto;
+        .manual-expense-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
         }
 
-        .trend-positive {
-            color: var(--secondary);
-            font-weight: 700;
+        .manual-expense-form {
+            display: none;
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--background);
         }
 
-        .trend-negative {
+        .manual-expense-form.open {
+            display: block;
+        }
+
+        .expense-form-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .expense-form-full {
+            grid-column: 1 / -1;
+        }
+
+        .expense-form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .expense-period-note {
+            padding: 10px 12px;
+            border-radius: 7px;
+            background: rgba(22, 135, 201, .07);
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .expense-action {
+            padding: 6px 9px;
+            border: 0;
+            background: transparent;
             color: var(--danger);
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .expense-action:hover {
+            text-decoration: underline;
         }
 
         /* =========================================================
@@ -360,26 +510,8 @@ $monthName = date('F Y');
         ========================================================= */
 
         .dashboard-loading {
-            position: relative;
-        }
-
-        .dashboard-loading::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 255, 255, .55);
+            opacity: .65;
             pointer-events: none;
-        }
-
-        .dashboard-error {
-            display: none;
-            margin-bottom: 20px;
-            padding: 13px 15px;
-            border: 1px solid #f1c2c0;
-            border-radius: 8px;
-            background: #fff4f3;
-            color: var(--danger);
-            font-size: 13px;
         }
 
         /* =========================================================
@@ -401,6 +533,12 @@ $monthName = date('F Y');
             .dashboard-chart-grid {
                 grid-template-columns: 1fr;
             }
+
+            .expense-form-grid {
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+            }
+
         }
 
         @media (max-width: 800px) {
@@ -418,13 +556,23 @@ $monthName = date('F Y');
                 width: 100%;
             }
 
-            .dashboard-month-select {
+            .dashboard-period-select {
                 flex: 1;
+                min-width: 0;
             }
 
             .dashboard-two-column {
                 grid-template-columns: 1fr;
             }
+
+            .period-editor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .period-editor-action {
+                padding-top: 0;
+            }
+
         }
 
         @media (max-width: 560px) {
@@ -437,24 +585,37 @@ $monthName = date('F Y');
                 grid-template-columns: 1fr;
             }
 
+            .expense-form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .expense-form-full {
+                grid-column: auto;
+            }
+
             .dashboard-heading h1 {
                 font-size: 24px;
             }
 
             .dashboard-controls {
-                flex-wrap: wrap;
+                flex-direction: column;
+                align-items: stretch;
             }
 
-            .dashboard-month-select {
+            .dashboard-period-select,
+            .dashboard-button {
                 width: 100%;
             }
 
-            .dashboard-refresh {
-                width: 100%;
+            .manual-expense-toolbar {
+                align-items: stretch;
+                flex-direction: column;
             }
+
         }
 
     </style>
+
 </head>
 
 <body>
@@ -466,7 +627,9 @@ $monthName = date('F Y');
     <header class="topbar">
 
         <div class="topbar-left">
+
             <h2>Dashboard</h2>
+
         </div>
 
     </header>
@@ -484,7 +647,7 @@ $monthName = date('F Y');
                 <h1>Business Overview</h1>
 
                 <p id="dashboardSubtitle">
-                    Monthly performance and business analytics
+                    Accounting period performance and analytics
                 </p>
 
             </div>
@@ -492,57 +655,26 @@ $monthName = date('F Y');
             <div class="dashboard-controls">
 
                 <select
-                    id="dashboardMonth"
-                    class="dashboard-month-select"
+                    id="dashboardPeriod"
+                    class="dashboard-period-select"
                 >
-                    <?php
-                    for ($i = 0; $i < 24; $i++) {
-
-                        $date = new DateTimeImmutable(
-                            'first day of this month'
-                        );
-
-                        $date = $date->modify("-{$i} months");
-
-                        $year =
-                            (int)$date->format('Y');
-
-                        $month =
-                            (int)$date->format('n');
-
-                        $selected =
-                            (
-                                $year === $currentYear &&
-                                $month === $currentMonth
-                            )
-                                ? 'selected'
-                                : '';
-
-                        echo '<option
-                                value="' .
-                                $year .
-                                '-' .
-                                str_pad(
-                                    (string)$month,
-                                    2,
-                                    '0',
-                                    STR_PAD_LEFT
-                                ) .
-                                '" ' .
-                                $selected .
-                                '>' .
-                                htmlspecialchars(
-                                    $date->format('F Y')
-                                ) .
-                                '</option>';
-                    }
-                    ?>
+                    <option value="">
+                        Loading accounting periods...
+                    </option>
                 </select>
 
                 <button
                     type="button"
+                    id="editPeriodButton"
+                    class="dashboard-button secondary"
+                >
+                    Edit Period
+                </button>
+
+                <button
+                    type="button"
                     id="dashboardRefresh"
-                    class="dashboard-refresh"
+                    class="dashboard-button primary"
                 >
                     Refresh
                 </button>
@@ -556,8 +688,93 @@ $monthName = date('F Y');
             class="dashboard-error"
         ></div>
 
+
         <!-- =====================================================
-             SUMMARY
+             PERIOD EDITOR
+        ====================================================== -->
+
+        <section
+            id="periodEditor"
+            class="dashboard-card period-editor"
+        >
+
+            <div class="dashboard-card-header">
+
+                <div>
+
+                    <h3 class="dashboard-card-title">
+                        Accounting Period
+                    </h3>
+
+                    <p class="dashboard-card-subtitle">
+                        Set the dates used to measure this accounting period.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="dashboard-card-body">
+
+                <div class="period-editor-grid">
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="periodStart"
+                        >
+                            Start Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="periodStart"
+                            class="period-date-input"
+                        >
+
+                        <span class="form-help">
+                            First date included in the period.
+                        </span>
+
+                    </div>
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="periodEnd"
+                        >
+                            End Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="periodEnd"
+                            class="period-date-input"
+                        >
+
+                        <span class="form-help">
+                            Last date included in the period.
+                        </span>
+
+                    </div>
+
+                    <div class="period-editor-action">
+                        <button type="button" id="savePeriodButton" class="dashboard-button primary">
+                            Save Period
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             SUMMARY CARDS
         ====================================================== -->
 
         <section class="dashboard-summary-grid">
@@ -581,6 +798,7 @@ $monthName = date('F Y');
 
             </article>
 
+
             <article class="dashboard-stat-card net">
 
                 <div class="dashboard-stat-label">
@@ -595,10 +813,11 @@ $monthName = date('F Y');
                 </div>
 
                 <div class="dashboard-stat-meta">
-                    Revenue after expenses
+                    Revenue after total expenses
                 </div>
 
             </article>
+
 
             <article class="dashboard-stat-card expenses">
 
@@ -614,34 +833,33 @@ $monthName = date('F Y');
                 </div>
 
                 <div class="dashboard-stat-meta">
-                    Recorded business expenses
+                    Daily Closing + manual expenses
                 </div>
 
             </article>
 
-            <article class="dashboard-stat-card gallons">
+
+            <article class="dashboard-stat-card">
 
                 <div class="dashboard-stat-label">
-                    Gallons Sold
+                    Manual Analytics Expenses
                 </div>
 
                 <div
                     class="dashboard-stat-value"
-                    id="totalGallons"
+                    id="manualExpenses"
                 >
-                    0
+                    ₱0.00
                 </div>
 
-                <div
-                    class="dashboard-stat-meta"
-                    id="gallonsBreakdown"
-                >
-                    Slim 0 · Round 0
+                <div class="dashboard-stat-meta">
+                    Water, electricity, rent and other bills
                 </div>
 
             </article>
 
         </section>
+
 
         <!-- =====================================================
              CHARTS
@@ -654,13 +872,18 @@ $monthName = date('F Y');
                 <div class="dashboard-card-header">
 
                     <div>
+
                         <h3 class="dashboard-card-title">
                             Revenue vs Expenses
                         </h3>
 
-                        <p class="dashboard-card-subtitle">
-                            Daily performance for the selected month
+                        <p
+                            class="dashboard-card-subtitle"
+                            id="revenueChartSubtitle"
+                        >
+                            Daily performance for the selected accounting period
                         </p>
+
                     </div>
 
                 </div>
@@ -669,9 +892,7 @@ $monthName = date('F Y');
 
                     <div class="chart-wrapper">
 
-                        <canvas
-                            id="revenueChart"
-                        ></canvas>
+                        <canvas id="revenueChart"></canvas>
 
                     </div>
 
@@ -679,18 +900,21 @@ $monthName = date('F Y');
 
             </article>
 
+
             <article class="dashboard-card">
 
                 <div class="dashboard-card-header">
 
                     <div>
+
                         <h3 class="dashboard-card-title">
                             Gallons Sold
                         </h3>
 
                         <p class="dashboard-card-subtitle">
-                            Slim vs Round
+                            Slim vs Round for this accounting period
                         </p>
+
                     </div>
 
                 </div>
@@ -699,9 +923,7 @@ $monthName = date('F Y');
 
                     <div class="chart-wrapper small">
 
-                        <canvas
-                            id="gallonsChart"
-                        ></canvas>
+                        <canvas id="gallonsChart"></canvas>
 
                     </div>
 
@@ -711,8 +933,311 @@ $monthName = date('F Y');
 
         </section>
 
+
         <!-- =====================================================
-             TOP CUSTOMERS / BALANCES
+             MANUAL ANALYTICS EXPENSES
+        ====================================================== -->
+
+        <section class="dashboard-card manual-expenses-section">
+
+            <div class="dashboard-card-header">
+
+                <div>
+
+                    <h3 class="dashboard-card-title">
+                        Manual Analytics Expenses
+                    </h3>
+
+                    <p class="dashboard-card-subtitle">
+                        Expenses outside Daily Closing, such as water, electricity, rent and other bills.
+                    </p>
+
+                </div>
+
+                <div class="manual-expense-toolbar">
+
+                    <button
+                        type="button"
+                        id="addExpenseButton"
+                        class="dashboard-button primary"
+                    >
+                        + Add Expense
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- FORM -->
+
+            <form
+                id="manualExpenseForm"
+                class="manual-expense-form"
+            >
+
+                <div class="expense-form-grid">
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expenseDate"
+                        >
+                            Expense Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="expenseDate"
+                            name="expense_date"
+                            class="expense-input"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expenseEndDate"
+                        >
+                            Expense End Date
+                        </label>
+
+                        <input
+                            type="date"
+                            id="expenseEndDate"
+                            name="expense_end_date"
+                            class="expense-input"
+                        >
+
+                        <span class="form-help">
+                            Optional. Use this when the bill covers a duration.
+                        </span>
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expenseCategory"
+                        >
+                            Category
+                        </label>
+
+                        <select
+                            id="expenseCategory"
+                            name="category"
+                            class="expense-select"
+                            required
+                        >
+
+                            <option value="">
+                                Select category
+                            </option>
+
+                            <option value="Water Bill">
+                                Water Bill
+                            </option>
+
+                            <option value="Electricity Bill">
+                                Electricity Bill
+                            </option>
+
+                            <option value="Rent">
+                                Rent
+                            </option>
+
+                            <option value="Permits">
+                                Permits
+                            </option>
+
+                            <option value="Maintenance">
+                                Maintenance
+                            </option>
+
+                            <option value="Other">
+                                Other
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expenseDescription"
+                        >
+                            Description
+                        </label>
+
+                        <input
+                            type="text"
+                            id="expenseDescription"
+                            name="description"
+                            class="expense-input"
+                            maxlength="255"
+                            placeholder="e.g. August water bill"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expenseAmount"
+                        >
+                            Amount
+                        </label>
+
+                        <input
+                            type="number"
+                            id="expenseAmount"
+                            name="amount"
+                            class="expense-input"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            required
+                        >
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expensePeriod1"
+                        >
+                            Accounting Period 1
+                        </label>
+
+                        <select
+                            id="expensePeriod1"
+                            name="period_id"
+                            class="expense-select"
+                            required
+                        >
+                            <option value="">
+                                Select period
+                            </option>
+                        </select>
+
+                    </div>
+
+
+                    <div class="form-field">
+
+                        <label
+                            class="form-label"
+                            for="expensePeriod2"
+                        >
+                            Accounting Period 2
+                        </label>
+
+                        <select
+                            id="expensePeriod2"
+                            name="end_period_id"
+                            class="expense-select"
+                        >
+                            <option value="">
+                                None
+                            </option>
+                        </select>
+
+                        <span class="form-help">
+                            Optional. Use when the expense spans two accounting periods.
+                        </span>
+
+                    </div>
+
+
+                    <div class="form-field expense-form-full">
+
+                        <label
+                            class="form-label"
+                            for="expenseNotes"
+                        >
+                            Notes
+                        </label>
+
+                        <textarea
+                            id="expenseNotes"
+                            name="notes"
+                            class="expense-textarea"
+                            placeholder="Optional notes"
+                        ></textarea>
+
+                    </div>
+
+
+                    <div class="expense-form-full">
+
+                        <div class="expense-period-note">
+                            If an expense covers more than one accounting period,
+                            the backend allocates the amount across the selected
+                            period range so the same expense is not counted twice.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="expense-form-actions">
+
+                    <button
+                        type="button"
+                        id="cancelExpenseButton"
+                        class="dashboard-button secondary"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="submit"
+                        id="saveExpenseButton"
+                        class="dashboard-button primary"
+                    >
+                        Save Expense
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <!-- TABLE -->
+
+            <div class="dashboard-card-body">
+
+                <div id="manualExpensesContainer">
+
+                    <div class="empty-state">
+                        Loading...
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             TOP CUSTOMERS / OUTSTANDING BALANCES
         ====================================================== -->
 
         <section class="dashboard-two-column">
@@ -722,13 +1247,15 @@ $monthName = date('F Y');
                 <div class="dashboard-card-header">
 
                     <div>
+
                         <h3 class="dashboard-card-title">
                             Top Customers
                         </h3>
 
                         <p class="dashboard-card-subtitle">
-                            Highest delivery value for this month
+                            Highest delivery value for this accounting period
                         </p>
+
                     </div>
 
                 </div>
@@ -736,20 +1263,24 @@ $monthName = date('F Y');
                 <div class="dashboard-card-body">
 
                     <div id="topCustomersContainer">
+
                         <div class="empty-state">
                             Loading...
                         </div>
+
                     </div>
 
                 </div>
 
             </article>
 
+
             <article class="dashboard-card">
 
                 <div class="dashboard-card-header">
 
                     <div>
+
                         <h3 class="dashboard-card-title">
                             Outstanding Balances
                         </h3>
@@ -757,6 +1288,7 @@ $monthName = date('F Y');
                         <p class="dashboard-card-subtitle">
                             Customers with unpaid delivery balances
                         </p>
+
                     </div>
 
                 </div>
@@ -764,9 +1296,11 @@ $monthName = date('F Y');
                 <div class="dashboard-card-body">
 
                     <div id="outstandingContainer">
+
                         <div class="empty-state">
                             Loading...
                         </div>
+
                     </div>
 
                 </div>
@@ -775,40 +1309,6 @@ $monthName = date('F Y');
 
         </section>
 
-        <!-- =====================================================
-             MONTHLY HISTORY
-        ====================================================== -->
-
-        <section class="dashboard-card dashboard-history">
-
-            <div class="dashboard-card-header">
-
-                <div>
-                    <h3 class="dashboard-card-title">
-                        Historical Monthly Trend
-                    </h3>
-
-                    <p class="dashboard-card-subtitle">
-                        Saved monthly analytics for comparison
-                    </p>
-                </div>
-
-            </div>
-
-            <div class="dashboard-card-body">
-
-                <div
-                    class="history-table-wrapper"
-                    id="historyContainer"
-                >
-                    <div class="empty-state">
-                        Loading...
-                    </div>
-                </div>
-
-            </div>
-
-        </section>
 
         <!-- =====================================================
              RECENT CUSTOMERS
@@ -819,21 +1319,16 @@ $monthName = date('F Y');
             <div class="dashboard-card-header">
 
                 <div>
+
                     <h3 class="dashboard-card-title">
                         Recent Customers
                     </h3>
 
                     <p class="dashboard-card-subtitle">
-                        Most recently added customers
+                        Recently added customer records
                     </p>
-                </div>
 
-                <a
-                    href="customers.php"
-                    class="btn btn-secondary"
-                >
-                    View Customers
-                </a>
+                </div>
 
             </div>
 
@@ -843,9 +1338,11 @@ $monthName = date('F Y');
                     id="recentCustomersContainer"
                     class="recent-customers-grid"
                 >
+
                     <div class="empty-state">
                         Loading...
                     </div>
+
                 </div>
 
             </div>
@@ -856,15 +1353,24 @@ $monthName = date('F Y');
 
 </div>
 
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+
 <script>
+
+/* =========================================================
+   CONFIG
+========================================================= */
 
 const ANALYTICS_URL =
     'backend/home-analytics-backend.php';
 
 let revenueChart = null;
 let gallonsChart = null;
+
+let accountingPeriods = [];
+let selectedPeriodId = null;
 
 
 /* =========================================================
@@ -907,22 +1413,372 @@ function escapeHtml(value) {
 }
 
 
-function getSelectedMonth() {
+function formatDate(dateString) {
 
-    const value =
-        document.getElementById(
-            'dashboardMonth'
-        ).value;
+    if (!dateString) {
+        return '';
+    }
 
     const parts =
-        value.split('-');
+        String(dateString).split('-');
 
-    return {
-        year: Number(parts[0]),
-        month: Number(parts[1])
-    };
+    if (parts.length !== 3) {
+        return String(dateString);
+    }
+
+    const date =
+        new Date(
+            Number(parts[0]),
+            Number(parts[1]) - 1,
+            Number(parts[2])
+        );
+
+    if (Number.isNaN(date.getTime())) {
+        return String(dateString);
+    }
+
+    return date.toLocaleDateString(
+        'en-PH',
+        {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        }
+    );
 }
 
+
+function getSelectedPeriod() {
+
+    return accountingPeriods.find(
+        period =>
+            Number(period.period_id) ===
+            Number(selectedPeriodId)
+    ) || null;
+}
+
+
+function showError(message) {
+
+    const box =
+        document.getElementById(
+            'dashboardError'
+        );
+
+    box.textContent =
+        message || 'Something went wrong.';
+
+    box.style.display =
+        'block';
+}
+
+
+function hideError() {
+
+    document.getElementById(
+        'dashboardError'
+    ).style.display =
+        'none';
+}
+
+
+/* =========================================================
+   PERIOD LABEL HELPERS
+========================================================= */
+
+/*
+ * The backend may return analytics_year / analytics_month,
+ * but we do not depend on those fields anymore.
+ *
+ * If period_start is 2026-08-15, we can safely determine
+ * the accounting period's displayed month as September 2026
+ * from the period's end date.
+ */
+
+function getPeriodYear(period) {
+
+    if (
+        period.analytics_year !== undefined &&
+        period.analytics_year !== null &&
+        period.analytics_year !== ''
+    ) {
+        return Number(
+            period.analytics_year
+        );
+    }
+
+    if (
+        period.year !== undefined &&
+        period.year !== null &&
+        period.year !== ''
+    ) {
+        return Number(
+            period.year
+        );
+    }
+
+    if (
+        period.period_year !== undefined &&
+        period.period_year !== null &&
+        period.period_year !== ''
+    ) {
+        return Number(
+            period.period_year
+        );
+    }
+
+    /*
+     * Prefer period_end because the accounting period
+     * represents the month in which it ends.
+     *
+     * Example:
+     * Aug 15 → Sep 15 = September 2026
+     */
+    if (period.period_end) {
+
+        return Number(
+            String(
+                period.period_end
+            ).substring(0, 4)
+        );
+    }
+
+    if (period.period_start) {
+
+        return Number(
+            String(
+                period.period_start
+            ).substring(0, 4)
+        );
+    }
+
+    return null;
+}
+
+
+function getPeriodMonth(period) {
+
+    if (
+        period.analytics_month !== undefined &&
+        period.analytics_month !== null &&
+        period.analytics_month !== ''
+    ) {
+        return Number(
+            period.analytics_month
+        );
+    }
+
+    if (
+        period.month !== undefined &&
+        period.month !== null &&
+        period.month !== ''
+    ) {
+        return Number(
+            period.month
+        );
+    }
+
+    if (
+        period.period_month !== undefined &&
+        period.period_month !== null &&
+        period.period_month !== ''
+    ) {
+        return Number(
+            period.period_month
+        );
+    }
+
+    /*
+     * Prefer period_end because:
+     *
+     * Aug 15 → Sep 15 = September
+     */
+    if (period.period_end) {
+
+        return Number(
+            String(
+                period.period_end
+            ).substring(5, 7)
+        );
+    }
+
+    if (period.period_start) {
+
+        return Number(
+            String(
+                period.period_start
+            ).substring(5, 7)
+        );
+    }
+
+    return null;
+}
+
+
+function getPeriodDisplayName(period) {
+
+    /*
+     * First use a valid backend label if one exists.
+     */
+    let label =
+        period.period_label ||
+        period.label ||
+        period.name ||
+        '';
+
+
+    label =
+        String(label).trim();
+
+
+    /*
+     * Do not allow broken backend values such as:
+     *
+     * Undefined
+     * undefined
+     * undefined - undefined
+     */
+    if (
+        !label ||
+        label.toLowerCase() === 'undefined' ||
+        label.toLowerCase() === 'undefined - undefined' ||
+        label.toLowerCase().includes('undefined') ||
+        label.toLowerCase().includes('null')
+    ) {
+
+        const year =
+            getPeriodYear(period);
+
+        const month =
+            getPeriodMonth(period);
+
+
+        if (
+            year &&
+            month &&
+            month >= 1 &&
+            month <= 12
+        ) {
+
+            const date =
+                new Date(
+                    year,
+                    month - 1,
+                    1
+                );
+
+
+            label =
+                date.toLocaleDateString(
+                    'en-PH',
+                    {
+                        month: 'long',
+                        year: 'numeric'
+                    }
+                );
+        }
+    }
+
+
+    return label ||
+        'Accounting Period';
+}
+
+
+function buildPeriodLabel(period) {
+
+    const name =
+        getPeriodDisplayName(
+            period
+        );
+
+
+    const start =
+        formatDate(
+            period.period_start
+        );
+
+
+    const end =
+        formatDate(
+            period.period_end
+        );
+
+
+    if (start && end) {
+
+        return (
+            name +
+            ' — ' +
+            start +
+            ' – ' +
+            end
+        );
+    }
+
+
+    return name;
+}
+
+
+function setPeriodEditor(period) {
+
+    if (!period) {
+        return;
+    }
+
+    document.getElementById(
+        'periodStart'
+    ).value =
+        period.period_start || '';
+
+
+    document.getElementById(
+        'periodEnd'
+    ).value =
+        period.period_end || '';
+}
+
+
+function updatePeriodSubtitle(period) {
+
+    if (!period) {
+        return;
+    }
+
+
+    const range =
+        formatDate(
+            period.period_start
+        ) +
+        ' – ' +
+        formatDate(
+            period.period_end
+        );
+
+
+    const periodName =
+        getPeriodDisplayName(
+            period
+        );
+
+
+    document.getElementById(
+        'dashboardSubtitle'
+    ).textContent =
+        `${periodName} · ${range}`;
+
+
+    document.getElementById(
+        'revenueChartSubtitle'
+    ).textContent =
+        `Daily performance from ${range}`;
+}
+
+
+/* =========================================================
+   API
+========================================================= */
 
 async function requestAnalytics(
     action,
@@ -937,33 +1793,77 @@ async function requestAnalytics(
         action
     );
 
+
     Object.entries(extra).forEach(
         ([key, value]) => {
 
-            data.append(
-                key,
-                value
-            );
+            if (
+                value !== null &&
+                value !== undefined
+            ) {
+
+                data.append(
+                    key,
+                    String(value)
+                );
+            }
+
         }
     );
 
-    const response =
-        await fetch(
-            ANALYTICS_URL,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type':
-                        'application/x-www-form-urlencoded'
-                },
-                body: data
-            }
+
+    let response;
+
+
+    try {
+
+        response =
+            await fetch(
+                ANALYTICS_URL,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type':
+                            'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: data.toString()
+                }
+            );
+
+    } catch (error) {
+
+        throw new Error(
+            'Unable to connect to the analytics backend.'
+        );
+    }
+
+
+    const text =
+        await response.text();
+
+
+    let json;
+
+
+    try {
+
+        json =
+            JSON.parse(text);
+
+    } catch (error) {
+
+        console.error(
+            'Analytics backend response:',
+            text
         );
 
-    const json =
-        await response.json();
+        throw new Error(
+            'The analytics backend returned an invalid response.'
+        );
+    }
 
-    if (!json.success) {
+
+    if (!response.ok || !json.success) {
 
         throw new Error(
             json.message ||
@@ -971,7 +1871,233 @@ async function requestAnalytics(
         );
     }
 
+
     return json;
+}
+
+
+/* =========================================================
+   ACCOUNTING PERIODS
+========================================================= */
+
+async function loadPeriods() {
+
+    const response =
+        await requestAnalytics(
+            'periods'
+        );
+
+
+    accountingPeriods =
+        Array.isArray(response.periods)
+            ? response.periods
+            : [];
+
+
+    /*
+     * Only show September 2026 onward.
+     *
+     * This prevents old periods such as October 2024
+     * from appearing in the Analytics interface.
+     */
+    accountingPeriods =
+        accountingPeriods.filter(
+            period => {
+
+                const year =
+                    getPeriodYear(period);
+
+                const month =
+                    getPeriodMonth(period);
+
+
+                if (!year || !month) {
+                    return false;
+                }
+
+
+                return (
+                    year > 2026 ||
+                    (
+                        year === 2026 &&
+                        month >= 9
+                    )
+                );
+
+            }
+        );
+
+
+    const select =
+        document.getElementById(
+            'dashboardPeriod'
+        );
+
+
+    const expensePeriod1 =
+        document.getElementById(
+            'expensePeriod1'
+        );
+
+
+    const expensePeriod2 =
+        document.getElementById(
+            'expensePeriod2'
+        );
+
+
+    select.innerHTML = '';
+
+
+    expensePeriod1.innerHTML =
+        '<option value="">Select period</option>';
+
+
+    expensePeriod2.innerHTML =
+        '<option value="">None</option>';
+
+
+    accountingPeriods.forEach(
+        period => {
+
+            const label =
+                buildPeriodLabel(
+                    period
+                );
+
+
+            const option =
+                document.createElement(
+                    'option'
+                );
+
+
+            option.value =
+                period.period_id;
+
+
+            option.textContent =
+                label;
+
+
+            select.appendChild(
+                option
+            );
+
+
+            const option1 =
+                document.createElement(
+                    'option'
+                );
+
+
+            option1.value =
+                period.period_id;
+
+
+            option1.textContent =
+                label;
+
+
+            expensePeriod1.appendChild(
+                option1
+            );
+
+
+            const option2 =
+                document.createElement(
+                    'option'
+                );
+
+
+            option2.value =
+                period.period_id;
+
+
+            option2.textContent =
+                label;
+
+
+            expensePeriod2.appendChild(
+                option2
+            );
+
+        }
+    );
+
+
+    if (!accountingPeriods.length) {
+
+        select.innerHTML =
+            '<option value="">No accounting periods available</option>';
+
+        document.getElementById(
+            'dashboardSubtitle'
+        ).textContent =
+            'No accounting periods available.';
+
+        return;
+    }
+
+
+    /*
+     * Prefer September 2026.
+     *
+     * If it cannot be identified through
+     * analytics_year/month, use the period whose
+     * end date is September 15, 2026.
+     */
+    let currentPeriod =
+        accountingPeriods.find(
+            period =>
+                Number(
+                    getPeriodYear(period)
+                ) === 2026 &&
+                Number(
+                    getPeriodMonth(period)
+                ) === 9
+        );
+
+
+    if (!currentPeriod) {
+
+        currentPeriod =
+            accountingPeriods.find(
+                period =>
+                    String(
+                        period.period_end
+                    ) === '2026-09-15'
+            );
+    }
+
+
+    const period =
+        currentPeriod ||
+        accountingPeriods[0];
+
+
+    selectedPeriodId =
+        Number(
+            period.period_id
+        );
+
+
+    select.value =
+        selectedPeriodId;
+
+
+    expensePeriod1.value =
+        selectedPeriodId;
+
+
+    setPeriodEditor(
+        period
+    );
+
+
+    updatePeriodSubtitle(
+        period
+    );
 }
 
 
@@ -988,12 +2114,14 @@ function renderSummary(analytics) {
             analytics.total_revenue
         );
 
+
     document.getElementById(
         'netRevenue'
     ).textContent =
         formatMoney(
             analytics.net_revenue
         );
+
 
     document.getElementById(
         'totalExpenses'
@@ -1002,23 +2130,12 @@ function renderSummary(analytics) {
             analytics.total_expenses
         );
 
-    document.getElementById(
-        'totalGallons'
-    ).textContent =
-        formatNumber(
-            analytics.total_gallons
-        );
 
     document.getElementById(
-        'gallonsBreakdown'
+        'manualExpenses'
     ).textContent =
-        'Slim ' +
-        formatNumber(
-            analytics.slim_gallons
-        ) +
-        ' · Round ' +
-        formatNumber(
-            analytics.round_gallons
+        formatMoney(
+            analytics.manual_expenses
         );
 }
 
@@ -1029,29 +2146,60 @@ function renderSummary(analytics) {
 
 function renderRevenueChart(days) {
 
-    const labels =
-        days.map(
-            day => day.day
-        );
-
-    const revenue =
-        days.map(
-            day => day.revenue
-        );
-
-    const expenses =
-        days.map(
-            day => day.expenses
-        );
-
     if (revenueChart) {
+
         revenueChart.destroy();
+
+        revenueChart = null;
     }
+
 
     const canvas =
         document.getElementById(
             'revenueChart'
         );
+
+
+    if (!days || !days.length) {
+
+        canvas.style.display =
+            'none';
+
+        return;
+    }
+
+
+    canvas.style.display =
+        'block';
+
+
+    const labels =
+        days.map(
+            day =>
+                day.label ||
+                formatDate(
+                    day.date
+                )
+        );
+
+
+    const revenue =
+        days.map(
+            day =>
+                Number(
+                    day.revenue || 0
+                )
+        );
+
+
+    const expenses =
+        days.map(
+            day =>
+                Number(
+                    day.expenses || 0
+                )
+        );
+
 
     revenueChart =
         new Chart(
@@ -1060,6 +2208,7 @@ function renderRevenueChart(days) {
                 type: 'line',
 
                 data: {
+
                     labels,
 
                     datasets: [
@@ -1097,6 +2246,7 @@ function renderRevenueChart(days) {
                         }
 
                     ]
+
                 },
 
                 options: {
@@ -1135,8 +2285,11 @@ function renderRevenueChart(days) {
                                         )
                                     );
                                 }
+
                             }
+
                         }
+
                     },
 
                     scales: {
@@ -1155,17 +2308,28 @@ function renderRevenueChart(days) {
                                                 'en-PH'
                                             );
                                 }
+
                             }
+
                         },
 
                         x: {
 
                             grid: {
                                 display: false
+                            },
+
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 0
                             }
+
                         }
+
                     }
+
                 }
+
             }
         );
 }
@@ -1178,13 +2342,30 @@ function renderRevenueChart(days) {
 function renderGallonsChart(analytics) {
 
     if (gallonsChart) {
+
         gallonsChart.destroy();
+
+        gallonsChart = null;
     }
+
 
     const canvas =
         document.getElementById(
             'gallonsChart'
         );
+
+
+    const slim =
+        Number(
+            analytics.slim_gallons || 0
+        );
+
+
+    const round =
+        Number(
+            analytics.round_gallons || 0
+        );
+
 
     gallonsChart =
         new Chart(
@@ -1200,19 +2381,18 @@ function renderGallonsChart(analytics) {
                     ],
 
                     datasets: [
+
                         {
                             data: [
-                                Number(
-                                    analytics.slim_gallons
-                                ),
-                                Number(
-                                    analytics.round_gallons
-                                )
+                                slim,
+                                round
                             ],
 
                             borderWidth: 0
                         }
+
                     ]
+
                 },
 
                 options: {
@@ -1226,6 +2406,7 @@ function renderGallonsChart(analytics) {
                     plugins: {
 
                         legend: {
+
                             position: 'bottom',
 
                             labels: {
@@ -1233,6 +2414,7 @@ function renderGallonsChart(analytics) {
                                 usePointStyle: true,
                                 padding: 18
                             }
+
                         },
 
                         tooltip: {
@@ -1250,10 +2432,15 @@ function renderGallonsChart(analytics) {
                                         ' gal'
                                     );
                                 }
+
                             }
+
                         }
+
                     }
+
                 }
+
             }
         );
 }
@@ -1270,15 +2457,17 @@ function renderTopCustomers(customers) {
             'topCustomersContainer'
         );
 
-    if (!customers.length) {
+
+    if (!customers || !customers.length) {
 
         container.innerHTML =
             '<div class="empty-state">' +
-            'No delivery customers for this month.' +
+            'No delivery customers for this accounting period.' +
             '</div>';
 
         return;
     }
+
 
     let html =
         '<div class="table-wrapper">' +
@@ -1292,6 +2481,7 @@ function renderTopCustomers(customers) {
         '</thead>' +
         '<tbody>';
 
+
     customers.forEach(
         customer => {
 
@@ -1299,17 +2489,20 @@ function renderTopCustomers(customers) {
                 '<tr>' +
 
                 '<td>' +
+
                 '<span class="customer-name">' +
                 escapeHtml(
                     customer.customer_name
                 ) +
                 '</span>' +
+
                 '<span class="customer-secondary">' +
                 formatNumber(
                     customer.total_gallons
                 ) +
                 ' gallons' +
                 '</span>' +
+
                 '</td>' +
 
                 '<td>' +
@@ -1325,13 +2518,16 @@ function renderTopCustomers(customers) {
                 '</td>' +
 
                 '</tr>';
+
         }
     );
+
 
     html +=
         '</tbody>' +
         '</table>' +
         '</div>';
+
 
     container.innerHTML =
         html;
@@ -1351,7 +2547,8 @@ function renderOutstandingBalances(
             'outstandingContainer'
         );
 
-    if (!balances.length) {
+
+    if (!balances || !balances.length) {
 
         container.innerHTML =
             '<div class="empty-state">' +
@@ -1360,6 +2557,7 @@ function renderOutstandingBalances(
 
         return;
     }
+
 
     let html =
         '<table class="dashboard-table">' +
@@ -1370,6 +2568,7 @@ function renderOutstandingBalances(
         '</tr>' +
         '</thead>' +
         '<tbody>';
+
 
     balances.forEach(
         customer => {
@@ -1394,12 +2593,15 @@ function renderOutstandingBalances(
                 '</td>' +
 
                 '</tr>';
+
         }
     );
+
 
     html +=
         '</tbody>' +
         '</table>';
+
 
     container.innerHTML =
         html;
@@ -1407,117 +2609,174 @@ function renderOutstandingBalances(
 
 
 /* =========================================================
-   HISTORY
+   MANUAL EXPENSES
 ========================================================= */
 
-function renderHistory(rows) {
+function renderManualExpenses(expenses) {
 
     const container =
         document.getElementById(
-            'historyContainer'
+            'manualExpensesContainer'
         );
 
-    if (!rows.length) {
+
+    if (!expenses || !expenses.length) {
 
         container.innerHTML =
             '<div class="empty-state">' +
-            'No monthly analytics have been saved yet.' +
+            'No manual analytics expenses have been recorded.' +
             '</div>';
 
         return;
     }
 
+
     let html =
+        '<div class="table-wrapper">' +
         '<table class="dashboard-table">' +
         '<thead>' +
         '<tr>' +
-        '<th>Month</th>' +
-        '<th class="amount">Revenue</th>' +
-        '<th class="amount">Expenses</th>' +
-        '<th class="amount">Net</th>' +
-        '<th class="amount">Gallons</th>' +
+        '<th>Date</th>' +
+        '<th>Category</th>' +
+        '<th>Description</th>' +
+        '<th>Period</th>' +
+        '<th class="amount">Amount</th>' +
+        '<th></th>' +
         '</tr>' +
         '</thead>' +
         '<tbody>';
 
-    rows.forEach(
-        row => {
 
-            const monthDate =
-                new Date(
-                    Number(
-                        row.analytics_year
-                    ),
-                    Number(
-                        row.analytics_month
-                    ) - 1,
-                    1
-                );
-
-            const monthLabel =
-                monthDate.toLocaleDateString(
-                    'en-US',
-                    {
-                        month: 'long',
-                        year: 'numeric'
-                    }
-                );
-
-            const net =
-                Number(
-                    row.net_revenue || 0
-                );
-
-            const netClass =
-                net >= 0
-                    ? 'trend-positive'
-                    : 'trend-negative';
+    expenses.forEach(
+        expense => {
 
             html +=
                 '<tr>' +
 
                 '<td>' +
+                escapeHtml(
+                    formatDate(
+                        expense.expense_date
+                    )
+                ) +
+
+                (
+                    expense.expense_end_date
+                        ? '<span class="customer-secondary">to ' +
+                          escapeHtml(
+                              formatDate(
+                                  expense.expense_end_date
+                              )
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
+                '</td>' +
+
+                '<td>' +
+                escapeHtml(
+                    expense.category
+                ) +
+                '</td>' +
+
+                '<td>' +
+
                 '<span class="customer-name">' +
-                monthLabel +
+                escapeHtml(
+                    expense.description
+                ) +
                 '</span>' +
+
+                (
+                    expense.notes
+                        ? '<span class="customer-secondary">' +
+                          escapeHtml(
+                              expense.notes
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
+                '</td>' +
+
+                '<td>' +
+                escapeHtml(
+                    expense.period_label ||
+                    ''
+                ) +
+
+                (
+                    expense.end_period_label
+                        ? '<span class="customer-secondary">' +
+                          'to ' +
+                          escapeHtml(
+                              expense.end_period_label
+                          ) +
+                          '</span>'
+                        : ''
+                ) +
+
                 '</td>' +
 
                 '<td class="amount">' +
                 formatMoney(
-                    row.total_revenue
+                    expense.amount
                 ) +
                 '</td>' +
 
-                '<td class="amount">' +
-                formatMoney(
-                    row.total_expenses
-                ) +
-                '</td>' +
+                '<td>' +
 
-                '<td class="amount ' +
-                netClass +
-                '">' +
-                formatMoney(
-                    net
+                '<button' +
+                ' type="button"' +
+                ' class="expense-action"' +
+                ' data-expense-id="' +
+                escapeHtml(
+                    expense.expense_id
                 ) +
-                '</td>' +
+                '"' +
+                '>' +
+                'Delete' +
+                '</button>' +
 
-                '<td class="amount">' +
-                formatNumber(
-                    row.total_gallons
-                ) +
                 '</td>' +
 
                 '</tr>';
+
         }
     );
 
+
     html +=
         '</tbody>' +
-        '</table>';
+        '</table>' +
+        '</div>';
+
 
     container.innerHTML =
         html;
+
+
+    container
+        .querySelectorAll(
+            '.expense-action'
+        )
+        .forEach(
+            button => {
+
+                button.addEventListener(
+                    'click',
+                    () => {
+
+                        deleteManualExpense(
+                            button.dataset.expenseId
+                        );
+
+                    }
+                );
+
+            }
+        );
 }
 
 
@@ -1534,7 +2793,8 @@ function renderRecentCustomers(
             'recentCustomersContainer'
         );
 
-    if (!customers.length) {
+
+    if (!customers || !customers.length) {
 
         container.innerHTML =
             '<div class="empty-state">' +
@@ -1544,58 +2804,73 @@ function renderRecentCustomers(
         return;
     }
 
+
     container.innerHTML =
-        customers.map(
-            customer => {
+        customers
+            .map(
+                customer => {
 
-                let dateText =
-                    'Customer record';
+                    let dateText =
+                        'Customer record';
 
-                if (customer.created_at) {
 
-                    const date =
-                        new Date(
-                            customer.created_at
-                                .replace(' ', 'T')
-                        );
+                    if (customer.created_at) {
 
-                    if (
-                        !Number.isNaN(
-                            date.getTime()
-                        )
-                    ) {
-
-                        dateText =
-                            'Added ' +
-                            date.toLocaleDateString(
-                                'en-PH',
-                                {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric'
-                                }
+                        const date =
+                            new Date(
+                                String(
+                                    customer.created_at
+                                )
+                                .replace(
+                                    ' ',
+                                    'T'
+                                )
                             );
+
+
+                        if (
+                            !Number.isNaN(
+                                date.getTime()
+                            )
+                        ) {
+
+                            dateText =
+                                'Added ' +
+                                date.toLocaleDateString(
+                                    'en-PH',
+                                    {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                    }
+                                );
+
+                        }
+
                     }
+
+
+                    return (
+
+                        '<div class="recent-customer">' +
+
+                        '<div class="recent-customer-name">' +
+                        escapeHtml(
+                            customer.customer_name
+                        ) +
+                        '</div>' +
+
+                        '<div class="recent-customer-date">' +
+                        dateText +
+                        '</div>' +
+
+                        '</div>'
+
+                    );
+
                 }
-
-                return (
-                    '<div class="recent-customer">' +
-
-                    '<div class="recent-customer-name">' +
-                    escapeHtml(
-                        customer.customer_name
-                    ) +
-                    '</div>' +
-
-                    '<div class="recent-customer-date">' +
-                    dateText +
-                    '</div>' +
-
-                    '</div>'
-                );
-            }
-        )
-        .join('');
+            )
+            .join('');
 }
 
 
@@ -1605,27 +2880,36 @@ function renderRecentCustomers(
 
 async function loadDashboard() {
 
-    const month =
-        getSelectedMonth();
+    if (!selectedPeriodId) {
+        return;
+    }
+
 
     const refreshButton =
         document.getElementById(
             'dashboardRefresh'
         );
 
-    const errorBox =
-        document.getElementById(
-            'dashboardError'
-        );
 
     refreshButton.disabled =
         true;
 
+
     refreshButton.textContent =
         'Loading...';
 
-    errorBox.style.display =
-        'none';
+
+    document
+        .querySelector(
+            '.dashboard-page'
+        )
+        .classList.add(
+            'dashboard-loading'
+        );
+
+
+    hideError();
+
 
     try {
 
@@ -1633,93 +2917,517 @@ async function loadDashboard() {
             await requestAnalytics(
                 'dashboard',
                 {
-                    year: month.year,
-                    month: month.month
+                    period_id:
+                        selectedPeriodId
                 }
             );
+
 
         const daily =
             await requestAnalytics(
                 'daily_chart',
                 {
-                    year: month.year,
-                    month: month.month
+                    period_id:
+                        selectedPeriodId
                 }
             );
 
-        const history =
+
+        /*
+         * Historical Accounting Period Trend was removed
+         * from the dashboard, so we no longer make the
+         * unnecessary history request here.
+         */
+
+
+        const manualExpenses =
             await requestAnalytics(
-                'history',
+                'manual_expenses',
                 {
-                    limit: 24
+                    period_id:
+                        selectedPeriodId
                 }
             );
+
 
         renderSummary(
             dashboard.analytics
         );
 
+
         renderRevenueChart(
-            daily.days
+            daily.days || []
         );
+
 
         renderGallonsChart(
             dashboard.analytics
         );
 
-        renderTopCustomers(
-            dashboard.top_customers
+
+        renderManualExpenses(
+            manualExpenses.expenses || []
         );
+
+
+        renderTopCustomers(
+            dashboard.top_customers || []
+        );
+
 
         renderOutstandingBalances(
-            dashboard.outstanding_balances
+            dashboard.outstanding_balances || []
         );
 
-        renderHistory(
-            history.analytics
-        );
 
         renderRecentCustomers(
-            dashboard.recent_customers
+            dashboard.recent_customers || []
         );
 
-        const selectedDate =
-            new Date(
-                month.year,
-                month.month - 1,
-                1
-            );
+
+        const period =
+            getSelectedPeriod();
+
+
+        updatePeriodSubtitle(
+            period
+        );
+
 
         document.getElementById(
-            'dashboardSubtitle'
-        ).textContent =
-            selectedDate.toLocaleDateString(
-                'en-US',
-                {
-                    month: 'long',
-                    year: 'numeric'
-                }
-            ) +
-            ' business performance and analytics';
+            'expensePeriod1'
+        ).value =
+            selectedPeriodId;
+
 
     } catch (error) {
 
         console.error(error);
 
-        errorBox.textContent =
+        showError(
             error.message ||
-            'Unable to load dashboard analytics.';
-
-        errorBox.style.display =
-            'block';
+            'Unable to load dashboard analytics.'
+        );
 
     } finally {
 
         refreshButton.disabled =
             false;
 
+
         refreshButton.textContent =
             'Refresh';
+
+
+        document
+            .querySelector(
+                '.dashboard-page'
+            )
+            .classList.remove(
+                'dashboard-loading'
+            );
+
+    }
+}
+
+
+/* =========================================================
+   SAVE ACCOUNTING PERIOD
+========================================================= */
+
+async function saveAccountingPeriod() {
+
+    const period =
+        getSelectedPeriod();
+
+
+    if (!period) {
+        return;
+    }
+
+
+    const start =
+        document.getElementById(
+            'periodStart'
+        ).value;
+
+
+    const end =
+        document.getElementById(
+            'periodEnd'
+        ).value;
+
+
+    if (!start || !end) {
+
+        showError(
+            'Please enter both the start date and end date.'
+        );
+
+        return;
+    }
+
+
+    if (start > end) {
+
+        showError(
+            'The start date cannot be later than the end date.'
+        );
+
+        return;
+    }
+
+
+    const button =
+        document.getElementById(
+            'savePeriodButton'
+        );
+
+
+    button.disabled =
+        true;
+
+
+    button.textContent =
+        'Saving...';
+
+
+    hideError();
+
+
+    try {
+
+        await requestAnalytics(
+            'save_period',
+            {
+                period_id:
+                    selectedPeriodId,
+
+                period_start:
+                    start,
+
+                period_end:
+                    end
+            }
+        );
+
+
+        await loadPeriods();
+
+
+        document.getElementById(
+            'periodEditor'
+        ).classList.remove(
+            'open'
+        );
+
+
+        await loadDashboard();
+
+
+    } catch (error) {
+
+        showError(
+            error.message
+        );
+
+    } finally {
+
+        button.disabled =
+            false;
+
+        button.textContent =
+            'Save Period';
+    }
+}
+
+
+/* =========================================================
+   MANUAL EXPENSE FORM
+========================================================= */
+
+function openExpenseForm() {
+
+    const form =
+        document.getElementById(
+            'manualExpenseForm'
+        );
+
+
+    form.classList.add(
+        'open'
+    );
+
+
+    document.getElementById(
+        'expenseDate'
+    ).focus();
+
+
+    const period =
+        getSelectedPeriod();
+
+
+    if (period) {
+
+        document.getElementById(
+            'expensePeriod1'
+        ).value =
+            period.period_id;
+
+    }
+}
+
+
+function closeExpenseForm() {
+
+    const form =
+        document.getElementById(
+            'manualExpenseForm'
+        );
+
+
+    form.classList.remove(
+        'open'
+    );
+
+
+    form.reset();
+
+
+    const period =
+        getSelectedPeriod();
+
+
+    if (period) {
+
+        document.getElementById(
+            'expensePeriod1'
+        ).value =
+            period.period_id;
+
+    }
+}
+
+
+async function saveManualExpense(
+    event
+) {
+
+    event.preventDefault();
+
+
+    const saveButton =
+        document.getElementById(
+            'saveExpenseButton'
+        );
+
+
+    const expenseDate =
+        document.getElementById(
+            'expenseDate'
+        ).value;
+
+
+    const expenseEndDate =
+        document.getElementById(
+            'expenseEndDate'
+        ).value;
+
+
+    const category =
+        document.getElementById(
+            'expenseCategory'
+        ).value;
+
+
+    const description =
+        document.getElementById(
+            'expenseDescription'
+        ).value.trim();
+
+
+    const amount =
+        document.getElementById(
+            'expenseAmount'
+        ).value;
+
+
+    const periodId =
+        document.getElementById(
+            'expensePeriod1'
+        ).value;
+
+
+    const endPeriodId =
+        document.getElementById(
+            'expensePeriod2'
+        ).value;
+
+
+    const notes =
+        document.getElementById(
+            'expenseNotes'
+        ).value.trim();
+
+
+    if (
+        !expenseDate ||
+        !category ||
+        !description ||
+        !amount ||
+        !periodId
+    ) {
+
+        showError(
+            'Please complete all required expense fields.'
+        );
+
+        return;
+    }
+
+
+    if (
+        expenseEndDate &&
+        expenseEndDate < expenseDate
+    ) {
+
+        showError(
+            'Expense end date cannot be earlier than expense date.'
+        );
+
+        return;
+    }
+
+
+    if (
+        endPeriodId &&
+        Number(endPeriodId) <
+        Number(periodId)
+    ) {
+
+        showError(
+            'Accounting Period 2 must not be earlier than Accounting Period 1.'
+        );
+
+        return;
+    }
+
+
+    saveButton.disabled =
+        true;
+
+
+    saveButton.textContent =
+        'Saving...';
+
+
+    hideError();
+
+
+    try {
+
+        await requestAnalytics(
+            'save_manual_expense',
+            {
+                period_id:
+                    periodId,
+
+                end_period_id:
+                    endPeriodId,
+
+                category:
+                    category,
+
+                description:
+                    description,
+
+                amount:
+                    amount,
+
+                expense_date:
+                    expenseDate,
+
+                expense_end_date:
+                    expenseEndDate,
+
+                notes:
+                    notes
+            }
+        );
+
+
+        closeExpenseForm();
+
+
+        await loadDashboard();
+
+
+    } catch (error) {
+
+        showError(
+            error.message
+        );
+
+    } finally {
+
+        saveButton.disabled =
+            false;
+
+
+        saveButton.textContent =
+            'Save Expense';
+    }
+}
+
+
+/* =========================================================
+   DELETE MANUAL EXPENSE
+========================================================= */
+
+async function deleteManualExpense(
+    expenseId
+) {
+
+    if (!expenseId) {
+        return;
+    }
+
+
+    const confirmed =
+        window.confirm(
+            'Delete this manual analytics expense?'
+        );
+
+
+    if (!confirmed) {
+        return;
+    }
+
+
+    hideError();
+
+
+    try {
+
+        await requestAnalytics(
+            'delete_manual_expense',
+            {
+                expense_id:
+                    expenseId
+            }
+        );
+
+
+        await loadDashboard();
+
+
+    } catch (error) {
+
+        showError(
+            error.message
+        );
+
     }
 }
 
@@ -1729,11 +3437,39 @@ async function loadDashboard() {
 ========================================================= */
 
 document.getElementById(
-    'dashboardMonth'
+    'dashboardPeriod'
 ).addEventListener(
     'change',
-    loadDashboard
+    async function () {
+
+        selectedPeriodId =
+            Number(
+                this.value
+            );
+
+
+        const period =
+            getSelectedPeriod();
+
+
+        if (period) {
+
+            setPeriodEditor(
+                period
+            );
+
+            updatePeriodSubtitle(
+                period
+            );
+
+        }
+
+
+        await loadDashboard();
+
+    }
 );
+
 
 document.getElementById(
     'dashboardRefresh'
@@ -1743,13 +3479,107 @@ document.getElementById(
 );
 
 
+document.getElementById(
+    'editPeriodButton'
+).addEventListener(
+    'click',
+    function () {
+
+        const editor =
+            document.getElementById(
+                'periodEditor'
+            );
+
+
+        editor.classList.toggle(
+            'open'
+        );
+
+
+        const period =
+            getSelectedPeriod();
+
+
+        if (period) {
+
+            setPeriodEditor(
+                period
+            );
+
+        }
+
+    }
+);
+
+
+document.getElementById(
+    'savePeriodButton'
+).addEventListener(
+    'click',
+    saveAccountingPeriod
+);
+
+
+document.getElementById(
+    'addExpenseButton'
+).addEventListener(
+    'click',
+    openExpenseForm
+);
+
+
+document.getElementById(
+    'cancelExpenseButton'
+).addEventListener(
+    'click',
+    closeExpenseForm
+);
+
+
+document.getElementById(
+    'manualExpenseForm'
+).addEventListener(
+    'submit',
+    saveManualExpense
+);
+
+
 /* =========================================================
    INITIAL LOAD
 ========================================================= */
 
-loadDashboard();
+(async function initDashboard() {
+
+    try {
+
+        hideError();
+
+
+        await loadPeriods();
+
+
+        if (selectedPeriodId) {
+
+            await loadDashboard();
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+
+        showError(
+            error.message ||
+            'Unable to initialize the dashboard.'
+        );
+
+    }
+
+})();
 
 </script>
 
 </body>
+
 </html>
