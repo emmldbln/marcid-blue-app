@@ -4356,7 +4356,7 @@ class ExpenseController extends BaseRowController {
                 '.expense-category'
             );
 
-        const name =
+        let name =
             row.querySelector(
                 '.expense-name'
             );
