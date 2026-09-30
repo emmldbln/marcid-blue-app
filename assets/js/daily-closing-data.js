@@ -3906,6 +3906,7 @@
 
 
         bindAutosaveEvents();
+        bindSidePanels();
 
 
         /*
