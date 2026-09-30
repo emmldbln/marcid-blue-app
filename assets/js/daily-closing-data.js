@@ -394,19 +394,80 @@
             getRows(
                 '.driver-expense-row'
             ).map(
-                row => getRowData(
-                    row,
-                    {
-                        category:
-                            '.driver-expense-category',
+                row => {
 
-                        name:
-                            '.driver-expense-name',
+                    const category =
+                        row.querySelector(
+                            '.driver-expense-category'
+                        );
 
-                        amount:
+                    const nameField =
+                        row.querySelector(
+                            '.driver-expense-name'
+                        );
+
+                    const amount =
+                        row.querySelector(
                             '.driver-expense-amount'
+                        );
+
+                    const isCashAdvance =
+                        category &&
+                        category.value ===
+                            'Cash Advance';
+
+                    let name = '';
+                    let employeeId = '';
+
+                    if (isCashAdvance) {
+
+                        employeeId =
+                            nameField
+                                ? String(
+                                    nameField.value || ''
+                                )
+                                : '';
+
+                        const selectedOption =
+                            nameField &&
+                            nameField.options
+                                ? nameField.options[
+                                    nameField.selectedIndex
+                                ]
+                                : null;
+
+                        name =
+                            selectedOption &&
+                            selectedOption.value
+                                ? selectedOption.textContent.trim()
+                                : '';
+
+                    } else {
+
+                        name =
+                            nameField
+                                ? String(
+                                    nameField.value || ''
+                                )
+                                : '';
+
                     }
-                )
+
+                    return {
+                        category:
+                            category
+                                ? category.value
+                                : '',
+                        name,
+                        employee_id:
+                            employeeId,
+                        amount:
+                            amount
+                                ? amount.value
+                                : ''
+                    };
+
+                }
             );
 
 
@@ -582,6 +643,9 @@
 
     window.marcidBlueUpdatePayrollCashAdvances =
         updatePayrollCashAdvances;
+
+    window.marcidBlueUpdatePayrollTotal =
+        updatePayrollTotal;
 
 
     function getPayrollTotal() {
@@ -1079,20 +1143,74 @@
         expenses.forEach(
             (data, index) => {
 
-                setRowData(
-                    expenseRows[index],
-                    {
-                        category:
-                            '.driver-expense-category',
+                const row =
+                    expenseRows[index];
 
-                        name:
-                            '.driver-expense-name',
+                if (!row) {
+                    return;
+                }
 
-                        amount:
-                            '.driver-expense-amount'
-                    },
-                    data
-                );
+                const category =
+                    row.querySelector(
+                        '.driver-expense-category'
+                    );
+
+                if (category) {
+                    category.value =
+                        data.category || '';
+                }
+
+                if (
+                    typeof window.marcidBlueDriverExpenseControllerUpdateRow ===
+                    'function'
+                ) {
+
+                    const field =
+                        row.querySelector(
+                            '.driver-expense-name'
+                        );
+
+                    if (field) {
+                        field.dataset.selectedEmployeeId =
+                            data.employee_id != null
+                                ? String(data.employee_id)
+                                : '';
+
+                        field.dataset.description =
+                            data.name || '';
+                    }
+
+                    window.marcidBlueDriverExpenseControllerUpdateRow(
+                        row,
+                        true
+                    );
+                }
+
+                const amount =
+                    row.querySelector(
+                        '.driver-expense-amount'
+                    );
+
+                if (amount) {
+                    amount.value =
+                        data.amount ?? '';
+                }
+
+                const nameField =
+                    row.querySelector(
+                        '.driver-expense-name'
+                    );
+
+                if (nameField) {
+                    nameField.value =
+                        data.category === 'Cash Advance'
+                            ? (
+                                data.employee_id != null
+                                    ? String(data.employee_id)
+                                    : ''
+                            )
+                            : (data.name ?? '');
+                }
 
             }
         );
@@ -1759,9 +1877,11 @@
 
                         amountDisplay.textContent =
                             formatPayrollMoney(
-                                numericValue
+                                numericValue +
+                                getEmployeeCashAdvance(
+                                    employee.employee_id
+                                )
                             );
-
 
                         updatePayrollTotal();
 
@@ -3921,6 +4041,8 @@
                 )
         );
 
+
+        await loadPayrollEmployees();
 
         await loadDraft();
 
