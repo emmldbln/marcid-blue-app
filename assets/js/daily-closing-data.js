@@ -16,6 +16,11 @@
 
     const CURRENT_DEBT_REFRESH_DELAY = 350;
 
+    const PAYROLL_BACKEND_URL = 'backend/payroll-backend.php';
+
+    let payrollEmployees = [];
+
+
     let dailyId = 0;
 
     let autosaveTimer = null;
@@ -2595,7 +2600,28 @@
         }
 
 
-        function openPayroll() {
+        async function openPayroll() {
+
+            if (currentDebtDrawer) {
+                currentDebtDrawer.classList.remove('open');
+                currentDebtDrawer.setAttribute('aria-hidden', 'true');
+            }
+
+            if (!payrollDrawer) {
+                return;
+            }
+
+            payrollDrawer.classList.add('open');
+            payrollDrawer.setAttribute('aria-hidden', 'false');
+            hideBothTabs();
+
+            if (overlay) {
+                overlay.classList.add('open');
+            }
+
+            await loadPayrollEmployees();
+
+        }
 
             /*
              * Always close Current Debt first.
