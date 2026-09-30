@@ -944,17 +944,13 @@
             typeof
                 window
                     .marcidBlueDailyClosing
-                    .calculateAll ===
+                    .calculateEverything ===
                 'function'
         ) {
 
             window
                 .marcidBlueDailyClosing
-                .calculateAll();
-
-            updatePayrollTotal();
-
-            return;
+                .calculateEverything();
 
         }
 
@@ -1022,44 +1018,44 @@
 
     function updatePayrollTotal() {
 
-        const total =
-            getPayrollTotal();
+            const total =
+                getPayrollTotal();
 
 
-        const totalElement =
-            getPayrollTotalElement();
+            const totalElement =
+                getPayrollTotalElement();
 
 
-        if (totalElement) {
+            if (totalElement) {
 
-            totalElement.textContent =
-                formatPayrollMoney(
-                    total
-                );
+                totalElement.textContent =
+                    formatPayrollMoney(
+                        total
+                    );
 
-        }
+            }
 
 
-        /*
-         * Let the Daily Closing calculator update
-         * Net Profit after payroll changes.
-         */
-        if (
-            window.marcidBlueDailyClosing &&
-            typeof
+            /*
+            * Let the Daily Closing calculator update
+            * Net Profit after payroll changes.
+            */
+            if (
+                window.marcidBlueDailyClosing &&
+                typeof
+                    window
+                        .marcidBlueDailyClosing
+                        .calculateEverything ===
+                    'function'
+            ) {
+
                 window
                     .marcidBlueDailyClosing
-                    .calculateAll ===
-                'function'
-        ) {
+                    .calculateEverything();
 
-            window
-                .marcidBlueDailyClosing
-                .calculateAll();
+            }
 
         }
-
-    }
 
 
     /*

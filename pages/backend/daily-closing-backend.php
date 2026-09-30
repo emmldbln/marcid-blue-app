@@ -3702,10 +3702,213 @@ final class DailyClosingService
                 );
             }
 
+            /*
+            * ================================================
+            * 6. PAYROLL
+            * ================================================
+            *
+            * Payroll is saved permanently only when the
+            * Daily Closing is finalized.
+            *
+            * The payroll data comes from the saved draft.
+            *
+            * We intentionally validate the employee against
+            * the employees table instead of trusting the
+            * employee name/position from the browser.
+            */
+
+            $payroll =
+                is_array($draft['payroll'] ?? null)
+                    ? $draft['payroll']
+                    : [];
+
+            $payrollInsert =
+                $this->pdo->prepare(
+                    "INSERT INTO daily_payroll (
+                        daily_id,
+                        employee_id,
+                        daily_rate,
+                        payroll_amount
+                    )
+                    VALUES (
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                    )"
+                );
+
+            $employeeLookup =
+                $this->pdo->prepare(
+                    "SELECT
+                        employee_id,
+                        daily_rate
+                    FROM employees
+                    WHERE employee_id = ?
+                    LIMIT 1"
+                );
+
+            $payrollEmployeeIds = [];
+
+            foreach (
+                $payroll
+                as $payrollEntry
+            ) {
+
+                if (!is_array($payrollEntry)) {
+                    continue;
+                }
+
+                $employeeId =
+                    filter_var(
+                        $payrollEntry['employee_id'] ?? null,
+                        FILTER_VALIDATE_INT
+                    );
+
+                if (
+                    $employeeId === false ||
+                    $employeeId <= 0
+                ) {
+
+                    throw new InvalidArgumentException(
+                        'Invalid employee in payroll.'
+                    );
+                }
+
+
+                /*
+                * Prevent duplicate employees inside
+                * the same Daily Closing draft.
+                */
+
+                if (
+                    isset(
+                        $payrollEmployeeIds[$employeeId]
+                    )
+                ) {
+
+                    throw new InvalidArgumentException(
+                        'An employee appears more than once in payroll.'
+                    );
+                }
+
+                $payrollEmployeeIds[$employeeId] = true;
+
+
+                /*
+                * Confirm that the employee still exists.
+                *
+                * We do NOT require is_active = 1 here.
+                *
+                * An employee could be deactivated after
+                * today's payroll was entered, and their
+                * finalized historical payroll should still
+                * be allowed to save.
+                */
+
+                $employeeLookup->execute([
+                    $employeeId
+                ]);
+
+                $employee =
+                    $employeeLookup->fetch(
+                        PDO::FETCH_ASSOC
+                    );
+
+                if (!$employee) {
+
+                    throw new InvalidArgumentException(
+                        'Employee #' .
+                        $employeeId .
+                        ' no longer exists.'
+                    );
+                }
+
+
+                /*
+                * Daily rate is taken from the saved draft
+                * so the finalized record preserves the rate
+                * that was being used for that Daily Closing.
+                */
+
+                $dailyRateRaw =
+                    $payrollEntry['daily_rate']
+                    ?? 0;
+
+                if (
+                    !is_numeric($dailyRateRaw)
+                ) {
+
+                    throw new InvalidArgumentException(
+                        'Invalid daily rate for employee #' .
+                        $employeeId .
+                        '.'
+                    );
+                }
+
+                $dailyRate =
+                    round(
+                        (float) $dailyRateRaw,
+                        2
+                    );
+
+                if ($dailyRate < 0) {
+
+                    throw new InvalidArgumentException(
+                        'Daily rate cannot be negative.'
+                    );
+                }
+
+
+                /*
+                * Payroll amount.
+                */
+
+                $payrollAmountRaw =
+                    $payrollEntry['amount']
+                    ?? 0;
+
+                if (
+                    !is_numeric($payrollAmountRaw)
+                ) {
+
+                    throw new InvalidArgumentException(
+                        'Invalid payroll amount for employee #' .
+                        $employeeId .
+                        '.'
+                    );
+                }
+
+                $payrollAmount =
+                    round(
+                        (float) $payrollAmountRaw,
+                        2
+                    );
+
+                if ($payrollAmount < 0) {
+
+                    throw new InvalidArgumentException(
+                        'Payroll amount cannot be negative.'
+                    );
+                }
+
+
+                /*
+                * Save the finalized payroll record.
+                */
+
+                $payrollInsert->execute([
+                    $dailyId,
+                    $employeeId,
+                    $dailyRate,
+                    $payrollAmount
+                ]);
+            }
+
 
             /*
              * ================================================
-             * 6. FINALIZE DAILY RECORD
+             * 7. FINALIZE DAILY RECORD
              * ================================================
              */
 
@@ -3744,7 +3947,7 @@ final class DailyClosingService
 
             /*
              * ================================================
-             * 7. DELETE TEMPORARY DRAFT
+             * 8. DELETE TEMPORARY DRAFT
              * ================================================
              */
 

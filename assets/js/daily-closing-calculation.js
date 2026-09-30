@@ -1106,21 +1106,7 @@
         }
 
 
-        // =========================================================
-        // NET PROFIT FOR TODAY
-        // =========================================================
-        //
-        // Based on actual money received:
-        //
-        // Walk-in Sales
-        // + Other / Additional Sales
-        // + Actual Delivery Payments
-        //
-        // Overpayments are included because they are actual
-        // payments received.
-        // =========================================================
-
-        function updateNetProfit() {
+       function updateNetProfit() {
 
             const shopResult =
                 calculateShop();
@@ -1142,11 +1128,71 @@
                 getTotalDeliverySalesReceived();
 
 
-            const totalReceived =
+            /*
+            * ---------------------------------------------------------
+            * TOTAL REVENUE
+            * ---------------------------------------------------------
+            *
+            * Based on actual money received:
+            *
+            * Walk-in Sales
+            * + Other / Additional Sales
+            * + Actual Delivery Payments
+            */
+
+            const totalRevenue =
                 roundMoney(
                     walkInSales
                     + otherSales
                     + deliverySalesReceived
+                );
+
+
+            /*
+            * ---------------------------------------------------------
+            * PAYROLL
+            * ---------------------------------------------------------
+            *
+            * Payroll is separate from Station / Driver Expenses.
+            * It is deducted directly from Net Profit.
+            */
+
+            let payrollTotal = 0;
+
+
+            if (
+                window.marcidBlueDailyClosingData &&
+                typeof
+                    window.marcidBlueDailyClosingData
+                        .getPayrollTotal ===
+                    'function'
+            ) {
+
+                payrollTotal =
+                    Number(
+                        window.marcidBlueDailyClosingData
+                            .getPayrollTotal()
+                    ) || 0;
+
+            }
+
+
+            payrollTotal =
+                roundMoney(
+                    payrollTotal
+                );
+
+
+            /*
+            * ---------------------------------------------------------
+            * NET PROFIT
+            * ---------------------------------------------------------
+            */
+
+            const netProfit =
+                roundMoney(
+                    totalRevenue
+                    - payrollTotal
                 );
 
 
@@ -1159,11 +1205,14 @@
             if (netProfitElement) {
 
                 netProfitElement.textContent =
-                    formatMoney(totalReceived);
+                    formatMoney(
+                        netProfit
+                    );
+
             }
 
 
-            return totalReceived;
+            return netProfit;
         }
 
 
