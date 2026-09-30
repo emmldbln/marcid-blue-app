@@ -4027,19 +4027,30 @@
     function bindAutosaveEvents() {
 
         /*
-         * Capture delivery edits explicitly. Delivery rows are
-         * dynamically created, so this keeps autosave active for
-         * both Shop Deliveries and Driver Deliveries.
+         * IMPORTANT:
+         * Use the same direct form/panel event model that the
+         * original working Daily Closing autosave used.
+         *
+         * The delivery and Cash Advance controls are dynamic,
+         * but their input/change events bubble to these stable
+         * parent containers.
          */
-        document.addEventListener(
-            'input',
-            event => {
 
-                if (
-                    !event.target.matches(
-                        'input'
-                    )
-                ) {
+        const shopForm =
+            document.getElementById(
+                'shopWalkInForm'
+            );
+
+        const driverPanel =
+            document.getElementById(
+                'driverDeliveriesPanel'
+            );
+
+
+        const handleShopChange =
+            () => {
+
+                if (isRestoring) {
                     return;
                 }
 
@@ -4048,19 +4059,13 @@
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
-            },
-            true
-        );
+            };
 
-        document.addEventListener(
-            'change',
-            event => {
 
-                if (
-                    !event.target.matches(
-                        'input, select'
-                    )
-                ) {
+        const handleDriverChange =
+            () => {
+
+                if (isRestoring) {
                     return;
                 }
 
@@ -4069,78 +4074,56 @@
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
-            },
-            true
-        );
+            };
 
 
-        document.addEventListener(
-            'input',
-            event => {
+        if (shopForm) {
 
-                if (
-                    !event.target.matches(
-                        'input'
-                    )
-                ) {
+            shopForm.addEventListener(
+                'input',
+                handleShopChange
+            );
 
-                    return;
+            shopForm.addEventListener(
+                'change',
+                handleShopChange
+            );
 
-                }
+        } else {
 
+            console.warn(
+                'Marcid Blue: Shop / Walk-in form not found for autosave.'
+            );
 
-                if (
-                    event.target.matches(
-                        '.payroll-amount-input'
-                    )
-                ) {
-
-                    updatePayrollTotal();
-
-                }
+        }
 
 
-                scheduleAutosave();
+        if (driverPanel) {
 
-                scheduleCurrentDebtRefresh();
+            driverPanel.addEventListener(
+                'input',
+                handleDriverChange
+            );
 
-            }
-        );
+            driverPanel.addEventListener(
+                'change',
+                handleDriverChange
+            );
 
+        } else {
 
-        document.addEventListener(
-            'change',
-            event => {
+            console.warn(
+                'Marcid Blue: Driver delivery panel not found for autosave.'
+            );
 
-                if (
-                    !event.target.matches(
-                        'input, select'
-                    )
-                ) {
-
-                    return;
-
-                }
+        }
 
 
-                if (
-                    event.target.matches(
-                        '.payroll-amount-input'
-                    )
-                ) {
-
-                    updatePayrollTotal();
-
-                }
-
-
-                scheduleAutosave();
-
-                scheduleCurrentDebtRefresh();
-
-            }
-        );
-
+        /*
+         * Buttons that create/remove dynamic rows.
+         * Wait one tick so the new row exists before the draft
+         * is collected.
+         */
 
         document.addEventListener(
             'click',
@@ -4160,17 +4143,21 @@
 
 
                 if (!target) {
-
                     return;
+                }
 
+
+                if (isRestoring) {
+                    return;
                 }
 
 
                 setTimeout(
                     () => {
 
-                        scheduleAutosave();
+                        hasUnsavedChanges = true;
 
+                        scheduleAutosave();
                         scheduleCurrentDebtRefresh();
 
                     },
@@ -4203,7 +4190,6 @@
         }
 
     }
-
 
     /*
      * ---------------------------------------------------------
