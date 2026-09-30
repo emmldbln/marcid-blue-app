@@ -1681,7 +1681,7 @@ $walkInOtherSales = 0.00;
     ========================================================= */
 
     .payroll-tab {
-        top: calc(50% - 178px);
+        top: calc(50% - 263px);
 
         border: 1px solid #0f766e;
         border-right: 0;
@@ -1991,7 +1991,7 @@ $walkInOtherSales = 0.00;
         }
 
         .payroll-tab {
-            top: calc(50% - 153px);
+            top: calc(50% - 225.5px);
         }
 
         .current-debt-tab {
