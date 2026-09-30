@@ -1617,107 +1617,56 @@ function getPeriodMonth(period) {
 
 function getPeriodDisplayName(period) {
 
-    /*
-     * First use a valid backend label if one exists.
-     */
-    let label =
-        period.period_label ||
-        period.label ||
-        period.name ||
-        '';
-
-
-    label =
-        String(label).trim();
-
-
-    /*
-     * Do not allow broken backend values such as:
-     *
-     * Undefined
-     * undefined
-     * undefined - undefined
-     */
-    if (
-        !label ||
-        label.toLowerCase() === 'undefined' ||
-        label.toLowerCase() === 'undefined - undefined' ||
-        label.toLowerCase().includes('undefined') ||
-        label.toLowerCase().includes('null')
-    ) {
-
-        const year =
-            getPeriodYear(period);
-
-        const month =
-            getPeriodMonth(period);
-
-
-        if (
-            year &&
-            month &&
-            month >= 1 &&
-            month <= 12
-        ) {
-
-            const date =
-                new Date(
-                    year,
-                    month - 1,
-                    1
-                );
-
-
-            label =
-                date.toLocaleDateString(
-                    'en-PH',
-                    {
-                        month: 'long',
-                        year: 'numeric'
-                    }
-                );
-        }
+    if (!period) {
+        return 'Accounting Period';
     }
 
+    const year =
+        getPeriodYear(period);
 
-    return label ||
-        'Accounting Period';
+    const month =
+        getPeriodMonth(period);
+
+    if (
+        year &&
+        month &&
+        month >= 1 &&
+        month <= 12
+    ) {
+
+        const date =
+            new Date(
+                year,
+                month - 1,
+                1
+            );
+
+        return date.toLocaleDateString(
+            'en-PH',
+            {
+                month: 'long',
+                year: 'numeric'
+            }
+        );
+    }
+
+    return 'Accounting Period';
 }
 
 
 function buildPeriodLabel(period) {
-
-    const name =
-        getPeriodDisplayName(
-            period
-        );
-
-
-    const start =
-        formatDate(
-            period.period_start
-        );
-
-
-    const end =
-        formatDate(
-            period.period_end
-        );
-
-
-    if (start && end) {
-
-        return (
-            name +
-            ' — ' +
-            start +
-            ' – ' +
-            end
-        );
+    if (!period) {
+        return 'Accounting Period';
     }
 
+    const start = formatDate(period.period_start || period.start);
+    const end = formatDate(period.period_end || period.end);
 
-    return name;
+    if (start && end) {
+        return `${start} – ${end}`;
+    }
+
+    return 'Accounting Period';
 }
 
 
@@ -1741,37 +1690,16 @@ function setPeriodEditor(period) {
 
 
 function updatePeriodSubtitle(period) {
-
-    if (!period) {
-        return;
-    }
-
+    if (!period) return;
 
     const range =
-        formatDate(
-            period.period_start
-        ) +
+        formatDate(period.period_start || period.start) +
         ' – ' +
-        formatDate(
-            period.period_end
-        );
+        formatDate(period.period_end || period.end);
 
+    document.getElementById('dashboardSubtitle').textContent = range;
 
-    const periodName =
-        getPeriodDisplayName(
-            period
-        );
-
-
-    document.getElementById(
-        'dashboardSubtitle'
-    ).textContent =
-        `${periodName} · ${range}`;
-
-
-    document.getElementById(
-        'revenueChartSubtitle'
-    ).textContent =
+    document.getElementById('revenueChartSubtitle').textContent =
         `Daily performance from ${range}`;
 }
 

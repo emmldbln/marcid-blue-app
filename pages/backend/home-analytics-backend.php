@@ -386,8 +386,7 @@ function ensureDefaultPeriod(PDO $pdo): void
             ?
         )
         ON DUPLICATE KEY UPDATE
-            period_start = VALUES(period_start),
-            period_end = VALUES(period_end)"
+            period_id = period_id"
     );
 
     $stmt->execute([
@@ -543,57 +542,67 @@ function getPeriods(PDO $pdo): array
     ensureDefaultPeriod($pdo);
 
     /*
-     * Create the next period as an available option.
-     * This lets the system move forward without
-     * displaying old 2024/2025 periods.
+     * Generate every accounting period from
+     * September 2026 through the next calendar month.
+     *
+     * Existing periods are never overwritten.
      */
+
     $today = new DateTimeImmutable('today');
 
+    $startYear = 2026;
+    $startMonth = 9;
+
     $targetYear =
-        (int)$today->format('Y');
+        (int)$today
+            ->modify('+1 month')
+            ->format('Y');
 
     $targetMonth =
-        (int)$today->format('n');
+        (int)$today
+            ->modify('+1 month')
+            ->format('n');
 
-    /*
-     * Current period.
-     */
-    if (
-        isAllowedAnalyticsMonth(
+    $cursor = new DateTimeImmutable(
+        sprintf(
+            '%04d-%02d-01',
+            $startYear,
+            $startMonth
+        )
+    );
+
+    $target = new DateTimeImmutable(
+        sprintf(
+            '%04d-%02d-01',
             $targetYear,
             $targetMonth
         )
-    ) {
-        ensurePeriod(
-            $pdo,
-            $targetYear,
-            $targetMonth
-        );
-    }
+    );
 
-    /*
-     * Also make one future period available.
-     */
-    $next =
-        $today->modify('+1 month');
+    while ($cursor <= $target) {
 
-    $nextYear =
-        (int)$next->format('Y');
+        $year =
+            (int)$cursor->format('Y');
 
-    $nextMonth =
-        (int)$next->format('n');
+        $month =
+            (int)$cursor->format('n');
 
-    if (
-        isAllowedAnalyticsMonth(
-            $nextYear,
-            $nextMonth
-        )
-    ) {
-        ensurePeriod(
-            $pdo,
-            $nextYear,
-            $nextMonth
-        );
+        if (
+            isAllowedAnalyticsMonth(
+                $year,
+                $month
+            )
+        ) {
+
+            ensurePeriod(
+                $pdo,
+                $year,
+                $month
+            );
+        }
+
+        $cursor =
+            $cursor->modify('+1 month');
     }
 
     $stmt = $pdo->query(
@@ -621,41 +630,68 @@ function getPeriods(PDO $pdo): array
         as $row
     ) {
 
+        $start =
+            (string)$row['period_start'];
+
+        $end =
+            (string)$row['period_end'];
+
+        $year =
+            (int)$row['analytics_year'];
+
+        $month =
+            (int)$row['analytics_month'];
+
         $periods[] = [
+
             'period_id' =>
                 (int)$row['period_id'],
 
             'year' =>
-                (int)$row['analytics_year'],
+                $year,
 
             'month' =>
-                (int)$row['analytics_month'],
+                $month,
 
+            /*
+             * Human-readable date range.
+             */
             'label' =>
-                dateObject(
-                    $row['period_start']
-                )->format('M j, Y')
-                .
-                ' – '
-                .
-                dateObject(
-                    $row['period_end']
-                )->format('M j, Y'),
+                formatPeriodRange(
+                    $start,
+                    $end
+                ),
 
+            /*
+             * Human-readable accounting month.
+             */
             'month_label' =>
                 dateObject(
                     sprintf(
                         '%04d-%02d-01',
-                        (int)$row['analytics_year'],
-                        (int)$row['analytics_month']
+                        $year,
+                        $month
                     )
                 )->format('F Y'),
 
+            /*
+             * Keep the backend's existing names.
+             */
             'start' =>
-                $row['period_start'],
+                $start,
 
             'end' =>
-                $row['period_end']
+                $end,
+
+            /*
+             * Also expose explicit names so the
+             * frontend can use them safely.
+             */
+            'period_start' =>
+                $start,
+
+            'period_end' =>
+                $end
         ];
     }
 
