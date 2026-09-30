@@ -2065,7 +2065,7 @@ $walkInOtherSales = 0.00;
                 👤
 
                 <?= htmlspecialchars(
-                    $_SESSION['full_name'] ?? 'Admin'
+                    $_SESSION['full_name'] ?? 'Marcid Blue Admin'
                 ) ?>
 
             </div>

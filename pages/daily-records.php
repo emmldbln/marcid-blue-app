@@ -361,23 +361,19 @@ $currentPage = 'daily-records';
 
         <header class="topbar">
 
-            <div class="topbar-title">
-                Daily Records
-            </div>
+    <div class="topbar-left"></div>
 
-            <div class="topbar-user">
+    <div class="topbar-user">
 
-                👤
+        👤
 
-                <?php
-                echo htmlspecialchars(
-                    $_SESSION['full_name'] ?? 'Admin'
-                );
-                ?>
+        <?= htmlspecialchars(
+            $_SESSION['full_name'] ?? 'Marcid Blue Admin'
+        ) ?>
 
-            </div>
+    </div>
 
-        </header>
+</header>
 
         <section class="page">
 

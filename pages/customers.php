@@ -702,78 +702,77 @@ require '../includes/sidebar.php';
 ?>
 
 <main class="main">
+
+    <!-- Customers Topbar -->
+    <header class="topbar">
+
+        <div class="topbar-left"></div>
+
+        <div class="topbar-user">
+
+            👤
+
+            <?= htmlspecialchars(
+                $_SESSION['full_name'] ?? 'Marcid Blue Admin'
+            ) ?>
+
+        </div>
+
+    </header>
+
     <div class="customers-page">
 
         <div class="customers-header">
+
             <div class="customers-title">
+
                 <h1>Customers</h1>
-                <p>Manage customer profiles, pricing, locations, and account history.</p>
+
+                <p>
+                    Manage customer profiles, pricing, locations, and account history.
+                </p>
+
             </div>
 
             <div class="customer-actions">
-                <button type="button" class="customer-btn secondary" id="refreshCustomers">
+
+                <button
+                    type="button"
+                    class="customer-btn secondary"
+                    id="refreshCustomers"
+                >
                     ↻ Refresh
                 </button>
 
-                <button type="button" class="customer-btn primary" id="addCustomerBtn">
+                <button
+                    type="button"
+                    class="customer-btn primary"
+                    id="addCustomerBtn"
+                >
                     + Add Customer
                 </button>
+
             </div>
+
         </div>
 
-        <!-- All Customers -->
+
+        <!-- =========================================================
+             FOLDERS
+             ========================================================= -->
+
         <section class="customers-card">
 
             <div class="customers-card-header">
+
                 <div>
-                    <h2>All Customers</h2>
-                    <span id="customerCount">Loading...</span>
-                </div>
-            </div>
 
-            <div class="customers-toolbar">
-                <input
-                    type="text"
-                    id="customerSearch"
-                    class="customers-search"
-                    placeholder="Search customer, contact number, or address..."
-                    autocomplete="off"
-                >
-            </div>
-
-            <div class="customers-table-wrap">
-                <table class="customers-table">
-                    <thead>
-                        <tr>
-                            <th>Customer</th>
-                            <th>Location</th>
-                            <th>Price / Gal</th>
-                            <th>Last Order</th>
-                            <th>Balance</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-
-                    <tbody id="customersTableBody">
-                        <tr>
-                            <td colspan="7">
-                                <div class="loading">Loading customers...</div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-        </section>
-
-        <!-- Folders -->
-        <section class="customers-card">
-
-            <div class="customers-card-header">
-                <div>
                     <h2>Folders</h2>
-                    <span>Organize customers by location or area.</span>
+
+                    <span>
+                        Organize customers by location or area.
+                    </span>
+
                 </div>
 
                 <button
@@ -783,30 +782,155 @@ require '../includes/sidebar.php';
                 >
                     + Add Folder
                 </button>
+
             </div>
 
-            <div id="foldersGrid" class="folders-grid">
-                <div class="loading">Loading folders...</div>
+
+            <!-- Folder Tree / Drag & Drop Area -->
+
+            <div
+                id="foldersGrid"
+                class="folders-grid"
+            >
+
+                <div class="loading">
+                    Loading folders...
+                </div>
+
             </div>
+
+
+            <!-- Unassigned Customers -->
 
             <div
                 id="unassignedDropZone"
                 class="unassigned"
             >
+
                 <div class="unassigned-header">
-                    <strong>Unassigned Customers</strong>
-                    <span>Drag customers here to remove their folder</span>
+
+                    <strong>
+                        Unassigned Customers
+                    </strong>
+
+                    <span>
+                        Drag customers here to remove their folder
+                    </span>
+
                 </div>
 
                 <div
                     id="unassignedList"
                     class="unassigned-list"
                 ></div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================================================
+             ALL CUSTOMERS
+             ========================================================= -->
+
+        <section class="customers-card">
+
+            <div class="customers-card-header">
+
+                <div>
+
+                    <h2>All Customers</h2>
+
+                    <span id="customerCount">
+                        Loading...
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- Search -->
+
+            <div class="customers-toolbar">
+
+                <input
+                    type="text"
+                    id="customerSearch"
+                    class="customers-search"
+                    placeholder="Search customer, contact number, or address..."
+                    autocomplete="off"
+                >
+
+            </div>
+
+
+            <!-- Customer Table -->
+
+            <div class="customers-table-wrap">
+
+                <table class="customers-table">
+
+                    <thead>
+
+                        <tr>
+
+                            <th>
+                                Customer
+                            </th>
+
+                            <th>
+                                Location
+                            </th>
+
+                            <th>
+                                Price / Gal
+                            </th>
+
+                            <th>
+                                Last Order
+                            </th>
+
+                            <th>
+                                Balance
+                            </th>
+
+                            <th>
+                                Status
+                            </th>
+
+                            <th>
+                                Actions
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="customersTableBody">
+
+                        <tr>
+
+                            <td colspan="7">
+
+                                <div class="loading">
+                                    Loading customers...
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
             </div>
 
         </section>
 
     </div>
+
 </main>
 
 <!-- Customer Modal -->
@@ -2419,3 +2543,4 @@ loadAll();
 
 </body>
 </html>
+

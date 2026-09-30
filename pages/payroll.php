@@ -450,11 +450,15 @@ $currentPage = 'payroll';
 
     <header class="topbar">
 
-        <div class="topbar-left">
+        <div class="topbar-left"></div>
 
-            <h2>
-                Payroll
-            </h2>
+        <div class="topbar-user">
+
+            👤
+
+            <?= htmlspecialchars(
+                $_SESSION['full_name'] ?? 'Marcid Blue Admin'
+            ) ?>
 
         </div>
 

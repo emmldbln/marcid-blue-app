@@ -723,6 +723,16 @@ $currentPage = 'home';
 
         </div>
 
+        <div class="topbar-user">
+
+            👤
+
+            <?= htmlspecialchars(
+                $_SESSION['full_name'] ?? 'Marcid Blue Admin'
+            ) ?>
+
+        </div>
+
     </header>
 
     <main class="dashboard-page">
