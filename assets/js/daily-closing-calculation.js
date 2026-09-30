@@ -1435,29 +1435,25 @@
             const shopResult =
                 calculateShop();
 
-
             refreshShopDeliveryBalances();
-
 
             const driverResult =
                 calculateDriver();
 
-
             const totalDeliveries =
                 updateTotalDeliveriesCard();
 
-
-            const totalReceived =
+            const netProfit =
                 updateNetProfit();
-
 
             return {
                 shop: shopResult,
                 driver: driverResult,
                 totalDeliveries: totalDeliveries,
-                totalReceived: totalReceived,
+                netProfit: netProfit,
                 debt: getCurrentDraftDebt()
             };
+
         }
 
 

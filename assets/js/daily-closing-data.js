@@ -35,6 +35,8 @@
 
     let saveQueued = false;
 
+    let savePromise = null;
+
     let currentDebtRefreshTimer = null;
 
     let currentDebtRequestId = 0;
@@ -365,11 +367,11 @@
     }
 
 
-    /*
-     * ---------------------------------------------------------
-     * PAYROLL STATE
-     * ---------------------------------------------------------
-     */
+/*
+ * ---------------------------------------------------------
+ * PAYROLL STATE
+ * ---------------------------------------------------------
+ */
 
     function getPayrollAmountInput(employeeId) {
 
@@ -380,6 +382,96 @@
         );
 
     }
+
+
+    function getPayrollState() {
+
+        return payrollEmployees.map(
+            employee => {
+
+                const employeeId =
+                    Number(
+                        employee.employee_id
+                    ) || 0;
+
+
+                const input =
+                    getPayrollAmountInput(
+                        employeeId
+                    );
+
+
+                /*
+                * Daily Rate is only the employee's reference rate.
+                *
+                * It must NOT become the Payroll Amount automatically.
+                *
+                * If the input exists, use exactly what is currently
+                * entered in the Payroll Amount field.
+                *
+                * If the input does not exist, use 0 instead of the
+                * employee's Daily Rate.
+                */
+
+                const value =
+                    input
+                        ? input.value
+                        : '0';
+
+
+                return {
+
+                    employee_id:
+                        employeeId,
+
+                    full_name:
+                        employee.full_name || '',
+
+                    position:
+                        employee.position || '',
+
+                    daily_rate:
+                        Number(
+                            employee.daily_rate
+                        ) || 0,
+
+                    amount:
+                        value
+
+                };
+
+            }
+        );
+
+    }
+
+
+    function getPayrollTotal() {
+
+        let total = 0;
+
+
+        document
+            .querySelectorAll(
+                '.payroll-amount-input'
+            )
+            .forEach(
+                input => {
+
+                    total +=
+                        Number(
+                            input.value
+                        ) || 0;
+
+                }
+            );
+
+
+        return total;
+
+    }
+
+
 
 
     function getPayrollState() {
@@ -883,51 +975,74 @@
      * ---------------------------------------------------------
      */
 
-    function restorePayrollState(state) {
+        function restorePayrollState(state) {
 
-        if (!Array.isArray(state)) {
-            return;
-        }
+            if (!Array.isArray(state)) {
 
-        state.forEach(
-            payroll => {
-
-                const employeeId =
-                    Number(
-                        payroll.employee_id
-                    ) || 0;
-
-                if (employeeId <= 0) {
-                    return;
-                }
-
-                const input =
-                    getPayrollAmountInput(
-                        employeeId
-                    );
-
-                if (!input) {
-                    return;
-                }
-
-                if (
-                    payroll.amount !== undefined &&
-                    payroll.amount !== null
-                ) {
-
-                    input.value =
-                        payroll.amount;
-
-                }
+                return;
 
             }
-        );
 
 
-        updatePayrollTotal();
+            state.forEach(
+                payroll => {
 
-    }
+                    const employeeId =
+                        Number(
+                            payroll.employee_id
+                        ) || 0;
 
+
+                    if (employeeId <= 0) {
+
+                        return;
+
+                    }
+
+
+                    const input =
+                        getPayrollAmountInput(
+                            employeeId
+                        );
+
+
+                    if (!input) {
+
+                        return;
+
+                    }
+
+
+                    /*
+                    * Restore ONLY the saved Payroll Amount.
+                    *
+                    * Do not use daily_rate here.
+                    *
+                    * A saved amount of 0 is valid and must remain 0.
+                    */
+
+                    if (
+                        payroll.amount !== undefined &&
+                        payroll.amount !== null
+                    ) {
+
+                        input.value =
+                            payroll.amount;
+
+                    } else {
+
+                        input.value =
+                            '0.00';
+
+                    }
+
+                }
+            );
+
+
+            updatePayrollTotal();
+
+        }
 
     /*
      * ---------------------------------------------------------
@@ -951,27 +1066,6 @@
                 .calculateEverything();
 
         }
-
-
-        document
-            .querySelectorAll(
-                'input, select'
-            )
-            .forEach(
-                element => {
-
-                    element.dispatchEvent(
-                        new Event(
-                            'input',
-                            {
-                                bubbles: true
-                            }
-                        )
-                    );
-
-                }
-            );
-
 
         updatePayrollTotal();
 
@@ -1016,44 +1110,45 @@
 
     function updatePayrollTotal() {
 
-            const total =
-                getPayrollTotal();
+        const total =
+            getPayrollTotal();
 
 
-            const totalElement =
-                getPayrollTotalElement();
+        const totalElement =
+            getPayrollTotalElement();
 
 
-            if (totalElement) {
+        if (totalElement) {
 
-                totalElement.textContent =
-                    formatPayrollMoney(
-                        total
-                    );
-
-            }
-
-
-            /*
-            * Let the Daily Closing calculator update
-            * Net Profit after payroll changes.
-            */
-            if (
-                window.marcidBlueDailyClosing &&
-                typeof
-                    window
-                        .marcidBlueDailyClosing
-                        .calculateEverything ===
-                    'function'
-            ) {
-
-                window
-                    .marcidBlueDailyClosing
-                    .calculateEverything();
-
-            }
+            totalElement.textContent =
+                formatPayrollMoney(
+                    total
+                );
 
         }
+
+
+        /*
+        * Payroll is part of Daily Closing.
+        * Recalculate the central Daily Closing
+        * totals whenever Payroll changes.
+        */
+        if (
+            window.marcidBlueDailyClosing &&
+            typeof
+                window
+                    .marcidBlueDailyClosing
+                    .calculateEverything ===
+                'function'
+        ) {
+
+            window
+                .marcidBlueDailyClosing
+                .calculateEverything();
+
+        }
+
+    }
 
 
     /*
@@ -1131,14 +1226,10 @@
 
 
                 /*
-                 * -------------------------------------------------
-                 * HEADER
-                 * -------------------------------------------------
-                 *
-                 * Employee name on the left.
-                 * Payroll amount on the right.
-                 * -------------------------------------------------
-                 */
+                * -------------------------------------------------
+                * EMPLOYEE HEADER
+                * -------------------------------------------------
+                */
 
                 const header =
                     document.createElement(
@@ -1190,6 +1281,21 @@
                 );
 
 
+                /*
+                * -------------------------------------------------
+                * PAYROLL HEADER AMOUNT
+                * -------------------------------------------------
+                *
+                * IMPORTANT:
+                *
+                * This is the actual Payroll Amount.
+                *
+                * It starts at ZERO for a new Daily Closing.
+                *
+                * Do NOT use employee.daily_rate here.
+                * -------------------------------------------------
+                */
+
                 const amountDisplay =
                     document.createElement(
                         'div'
@@ -1198,16 +1304,9 @@
                 amountDisplay.className =
                     'payroll-item-amount';
 
-
-                const initialAmount =
-                    Number(
-                        employee.daily_rate
-                    ) || 0;
-
-
                 amountDisplay.textContent =
                     formatPayrollMoney(
-                        initialAmount
+                        0
                     );
 
 
@@ -1226,14 +1325,10 @@
 
 
                 /*
-                 * -------------------------------------------------
-                 * DETAILS
-                 * -------------------------------------------------
-                 *
-                 * Same compact detail-card style as the Current
-                 * Debt drawer's item structure.
-                 * -------------------------------------------------
-                 */
+                * -------------------------------------------------
+                * DETAILS
+                * -------------------------------------------------
+                */
 
                 const details =
                     document.createElement(
@@ -1245,8 +1340,14 @@
 
 
                 /*
-                 * DAILY RATE
-                 */
+                * -------------------------------------------------
+                * DAILY RATE
+                * -------------------------------------------------
+                *
+                * This is display-only reference information.
+                * It does NOT populate Payroll Amount.
+                * -------------------------------------------------
+                */
 
                 const rateDetail =
                     document.createElement(
@@ -1279,7 +1380,9 @@
 
                 rateValue.textContent =
                     formatPayrollMoney(
-                        initialAmount
+                        Number(
+                            employee.daily_rate
+                        ) || 0
                     );
 
 
@@ -1293,8 +1396,10 @@
 
 
                 /*
-                 * PAYROLL AMOUNT
-                 */
+                * -------------------------------------------------
+                * PAYROLL AMOUNT
+                * -------------------------------------------------
+                */
 
                 const payrollDetail =
                     document.createElement(
@@ -1337,13 +1442,29 @@
                 amountInput.className =
                     'payroll-amount-input';
 
+
                 amountInput.dataset.payrollAmount =
                     String(
                         employee.employee_id
                     );
 
+
+                /*
+                * -------------------------------------------------
+                * IMPORTANT
+                * -------------------------------------------------
+                *
+                * New Payroll Amount = 0.
+                *
+                * Daily Rate is deliberately NOT used here.
+                *
+                * A saved draft will overwrite this value later
+                * through restorePayrollState().
+                * -------------------------------------------------
+                */
+
                 amountInput.value =
-                    initialAmount.toFixed(2);
+                    '0.00';
 
 
                 amountInput.style.width =
@@ -1377,6 +1498,12 @@
                     '700';
 
 
+                /*
+                * -------------------------------------------------
+                * INPUT EVENT
+                * -------------------------------------------------
+                */
+
                 amountInput.addEventListener(
                     'input',
                     () => {
@@ -1400,6 +1527,12 @@
                     }
                 );
 
+
+                /*
+                * -------------------------------------------------
+                * CHANGE EVENT
+                * -------------------------------------------------
+                */
 
                 amountInput.addEventListener(
                     'change',
@@ -1456,9 +1589,16 @@
         );
 
 
+        /*
+        * Update the total after all employees have been
+        * rendered.
+        */
+
         updatePayrollTotal();
 
     }
+
+
 
 
     /*
@@ -2674,11 +2814,11 @@
     }
 
 
-    /*
-     * ---------------------------------------------------------
-     * SAVE DRAFT
-     * ---------------------------------------------------------
-     */
+/*
+ * ---------------------------------------------------------
+ * SAVE DRAFT
+ * ---------------------------------------------------------
+ */
 
     async function saveDraft() {
 
@@ -2692,9 +2832,27 @@
         }
 
 
+        /*
+        * -----------------------------------------------------
+        * If another save is already running, do not start
+        * another request.
+        *
+        * Simply mark that another save is needed.
+        *
+        * The active save will automatically save the newest
+        * state after it finishes.
+        * -----------------------------------------------------
+        */
+
         if (isSaving) {
 
             saveQueued = true;
+
+            if (savePromise) {
+
+                await savePromise;
+
+            }
 
             return;
 
@@ -2704,105 +2862,158 @@
         isSaving = true;
 
 
+        /*
+        * -----------------------------------------------------
+        * Capture the current state only when the save actually
+        * begins.
+        *
+        * This means the latest Payroll / Shop / Driver values
+        * are what get saved.
+        * -----------------------------------------------------
+        */
+
+        const draft =
+            collectDraft();
+
+
+        const body =
+            new URLSearchParams();
+
+
+        body.set(
+            'action',
+            'save'
+        );
+
+
+        body.set(
+            'daily_id',
+            String(dailyId)
+        );
+
+
+        body.set(
+            'draft',
+            JSON.stringify(draft)
+        );
+
+
+        console.info(
+            'Marcid Blue: saving daily draft...',
+            draft
+        );
+
+
+        /*
+        * -----------------------------------------------------
+        * Store the active request Promise.
+        *
+        * Finalize can wait for this Promise instead of starting
+        * another save request.
+        * -----------------------------------------------------
+        */
+
+        savePromise =
+            (async () => {
+
+                try {
+
+                    const response =
+                        await fetch(
+                            BACKEND_URL,
+                            {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                cache: 'no-store',
+                                headers: {
+                                    'Content-Type':
+                                        'application/x-www-form-urlencoded; charset=UTF-8',
+
+                                    Accept:
+                                        'application/json'
+                                },
+                                body
+                            }
+                        );
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            'Backend returned HTTP ' +
+                            response.status
+                        );
+
+                    }
+
+
+                    const result =
+                        await response.json();
+
+
+                    if (!result.success) {
+
+                        throw new Error(
+                            result.message ||
+                            'Draft save failed.'
+                        );
+
+                    }
+
+
+                    console.info(
+                        'Marcid Blue: draft saved successfully.'
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        'Marcid Blue: autosave failed.',
+                        error
+                    );
+
+
+                    /*
+                    * Do not throw the error back into the UI.
+                    *
+                    * The user can continue editing and the next
+                    * autosave can try again.
+                    */
+
+                }
+
+            })();
+
+
         try {
 
-            const draft =
-                collectDraft();
-
-
-            const body =
-                new URLSearchParams();
-
-
-            body.set(
-                'action',
-                'save'
-            );
-
-
-            body.set(
-                'daily_id',
-                String(dailyId)
-            );
-
-
-            body.set(
-                'draft',
-                JSON.stringify(draft)
-            );
-
-
-            console.info(
-                'Marcid Blue: saving daily draft...',
-                draft
-            );
-
-
-            const response =
-                await fetch(
-                    BACKEND_URL,
-                    {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        cache: 'no-store',
-                        headers: {
-                            'Content-Type':
-                                'application/x-www-form-urlencoded; charset=UTF-8',
-
-                            Accept:
-                                'application/json'
-                        },
-                        body
-                    }
-                );
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    'Backend returned HTTP ' +
-                    response.status
-                );
-
-            }
-
-
-            const result =
-                await response.json();
-
-
-            if (!result.success) {
-
-                throw new Error(
-                    result.message ||
-                    'Draft save failed.'
-                );
-
-            }
-
-
-            console.info(
-                'Marcid Blue: draft saved successfully.'
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                'Marcid Blue: autosave failed.',
-                error
-            );
+            await savePromise;
 
         } finally {
 
             isSaving = false;
 
+            savePromise = null;
+
+
+            /*
+            * -------------------------------------------------
+            * A change happened while the previous request was
+            * running.
+            *
+            * Save the newest state once.
+            *
+            * This does NOT use scheduleAutosave(), because the
+            * change has already waited for the active request.
+            * -------------------------------------------------
+            */
 
             if (saveQueued) {
 
                 saveQueued = false;
 
-                scheduleAutosave();
+                await saveDraft();
 
             }
 
@@ -2812,10 +3023,10 @@
 
 
     /*
-     * ---------------------------------------------------------
-     * AUTOSAVE
-     * ---------------------------------------------------------
-     */
+    * ---------------------------------------------------------
+    * AUTOSAVE
+    * ---------------------------------------------------------
+    */
 
     function scheduleAutosave() {
 
@@ -2829,6 +3040,23 @@
         }
 
 
+        /*
+        * -----------------------------------------------------
+        * Reset the existing timer.
+        *
+        * Every new edit therefore restarts the countdown.
+        *
+        * Example:
+        *
+        * 18:00:00  edit
+        * 18:00:01  edit
+        * 18:00:02  edit
+        * 18:00:03  edit
+        *
+        * Only one save happens after the user stops editing.
+        * -----------------------------------------------------
+        */
+
         clearTimeout(
             autosaveTimer
         );
@@ -2836,11 +3064,32 @@
 
         autosaveTimer =
             setTimeout(
-                () => saveDraft(),
+                () => {
+
+                    /*
+                    * If a save is already running, do not start
+                    * another request. Tell the active save that
+                    * another save is needed afterward.
+                    */
+
+                    if (isSaving) {
+
+                        saveQueued = true;
+
+                        return;
+
+                    }
+
+
+                    saveDraft();
+
+                },
                 AUTOSAVE_DELAY
             );
 
     }
+
+
 
 
     /*
@@ -2857,41 +3106,26 @@
             )
             .forEach(
                 input => {
+                        if (
+                            input.matches(
+                                '.payroll-amount-input'
+                            )
+                        ) {
 
-                    if (
-                        input.matches(
-                            '.payroll-amount-input'
-                        )
-                    ) {
+                            /*
+                            * Reset the actual Payroll Amount to zero.
+                            *
+                            * Daily Rate is NOT the Payroll Amount.
+                            * It is only the employee's reference rate.
+                            */
 
-                        const employeeId =
-                            Number(
-                                input.dataset.payrollAmount
-                            ) || 0;
-
-
-                        const employee =
-                            payrollEmployees.find(
-                                item =>
-                                    Number(
-                                        item.employee_id
-                                    ) === employeeId
-                            );
+                            input.value =
+                                '0.00';
 
 
-                        input.value =
-                            employee
-                                ? (
-                                    Number(
-                                        employee.daily_rate
-                                    ) || 0
-                                ).toFixed(2)
-                                : '';
+                            return;
 
-
-                        return;
-
-                    }
+                        }
 
 
                     input.value = '';
