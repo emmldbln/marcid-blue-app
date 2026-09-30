@@ -3215,11 +3215,6 @@
             return;
 
         }
-
-
-        /* Persist the latest form state immediately in the browser. */
-        saveDraftToBrowser(collectDraft());
-
         clearTimeout(
             autosaveTimer
         );
