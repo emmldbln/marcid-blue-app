@@ -3084,27 +3084,9 @@
         }
 
 
-        /*
-        * -----------------------------------------------------
-        * If another save is already running, do not start
-        * another request.
-        *
-        * Simply mark that another save is needed.
-        *
-        * The active save will automatically save the newest
-        * state after it finishes.
-        * -----------------------------------------------------
-        */
-
         if (isSaving) {
 
             saveQueued = true;
-
-            if (savePromise) {
-
-                await savePromise;
-
-            }
 
             return;
 
@@ -3114,172 +3096,104 @@
         isSaving = true;
 
 
-        /*
-        * -----------------------------------------------------
-        * Capture the current state only when the save actually
-        * begins.
-        *
-        * This means the latest Payroll / Shop / Driver values
-        * are what get saved.
-        * -----------------------------------------------------
-        */
-
-        const draft =
-            collectDraft();
-
         try {
-            localStorage.setItem(
-                LOCAL_DRAFT_KEY_PREFIX + String(dailyId),
+
+            const draft =
+                collectDraft();
+
+
+            const body =
+                new URLSearchParams();
+
+
+            body.set(
+                'action',
+                'save'
+            );
+
+
+            body.set(
+                'daily_id',
+                String(dailyId)
+            );
+
+
+            body.set(
+                'draft',
                 JSON.stringify(draft)
             );
+
+
+            console.info(
+                'Marcid Blue: saving daily draft...',
+                draft
+            );
+
+
+            const response =
+                await fetch(
+                    BACKEND_URL,
+                    {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Content-Type':
+                                'application/x-www-form-urlencoded; charset=UTF-8',
+                            'Accept':
+                                'application/json'
+                        },
+                        body
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    'Backend returned HTTP ' +
+                    response.status
+                );
+
+            }
+
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                throw new Error(
+                    result.message ||
+                    'Draft save failed.'
+                );
+
+            }
+
+
+            console.info(
+                'Marcid Blue: draft saved successfully.'
+            );
+
+
         } catch (error) {
-            console.warn(
-                'Marcid Blue: unable to cache draft locally.',
+
+            console.error(
+                'Marcid Blue: autosave failed.',
                 error
             );
-        }
-
-
-        const body =
-            new URLSearchParams();
-
-
-        body.set(
-            'action',
-            'save'
-        );
-
-
-        body.set(
-            'daily_id',
-            String(dailyId)
-        );
-
-
-        body.set(
-            'draft',
-            JSON.stringify(draft)
-        );
-
-
-        console.info(
-            'Marcid Blue: saving daily draft...',
-            draft
-        );
-
-
-        /*
-        * -----------------------------------------------------
-        * Store the active request Promise.
-        *
-        * Finalize can wait for this Promise instead of starting
-        * another save request.
-        * -----------------------------------------------------
-        */
-
-        savePromise =
-            (async () => {
-
-                try {
-
-                    const response =
-                        await fetch(
-                            BACKEND_URL,
-                            {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                cache: 'no-store',
-                                headers: {
-                                    'Content-Type':
-                                        'application/x-www-form-urlencoded; charset=UTF-8',
-
-                                    Accept:
-                                        'application/json'
-                                },
-                                body
-                            }
-                        );
-
-
-                    if (!response.ok) {
-
-                        throw new Error(
-                            'Backend returned HTTP ' +
-                            response.status
-                        );
-
-                    }
-
-
-                    const result =
-                        await response.json();
-
-
-                    if (!result.success) {
-
-                        throw new Error(
-                            result.message ||
-                            'Draft save failed.'
-                        );
-
-                    }
-
-
-                    hasUnsavedChanges = false;
-
-                    console.info(
-                        'Marcid Blue: draft saved successfully.'
-                    );
-
-
-                } catch (error) {
-
-                    console.error(
-                        'Marcid Blue: autosave failed.',
-                        error
-                    );
-
-
-                    /*
-                    * Do not throw the error back into the UI.
-                    *
-                    * The user can continue editing and the next
-                    * autosave can try again.
-                    */
-
-                }
-
-            })();
-
-
-        try {
-
-            await savePromise;
 
         } finally {
 
             isSaving = false;
 
-            savePromise = null;
-
-
-            /*
-            * -------------------------------------------------
-            * A change happened while the previous request was
-            * running.
-            *
-            * Save the newest state once.
-            *
-            * This does NOT use scheduleAutosave(), because the
-            * change has already waited for the active request.
-            * -------------------------------------------------
-            */
 
             if (saveQueued) {
 
                 saveQueued = false;
 
-                await saveDraft();
+                scheduleAutosave();
 
             }
 
@@ -3289,95 +3203,10 @@
 
 
     /*
-    * ---------------------------------------------------------
-    * AUTOSAVE
-    * ---------------------------------------------------------
-    */
-
-    /*
      * ---------------------------------------------------------
-     * SAVE BEFORE PAGE REFRESH / NAVIGATION
-     * ---------------------------------------------------------
-     *
-     * A normal debounce can still be cancelled by the browser
-     * when the user refreshes immediately after editing.
-     *
-     * Keepalive allows the final draft request to continue while
-     * the page is being unloaded.
+     * AUTOSAVE
      * ---------------------------------------------------------
      */
-    function saveDraftBeforeUnload() {
-
-        if (
-            isRestoring ||
-            dailyId <= 0
-        ) {
-            return;
-        }
-
-
-        clearTimeout(
-            autosaveTimer
-        );
-
-
-        const draft =
-            collectDraft();
-
-
-        const body =
-            new URLSearchParams();
-
-
-        body.set(
-            'action',
-            'save'
-        );
-
-
-        body.set(
-            'daily_id',
-            String(dailyId)
-        );
-
-
-        body.set(
-            'draft',
-            JSON.stringify(draft)
-        );
-
-
-        try {
-
-            fetch(
-                BACKEND_URL,
-                {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    cache: 'no-store',
-                    keepalive: true,
-                    headers: {
-                        'Content-Type':
-                            'application/x-www-form-urlencoded; charset=UTF-8',
-
-                        Accept:
-                            'application/json'
-                    },
-                    body
-                }
-            );
-
-        } catch (error) {
-
-            console.error(
-                'Marcid Blue: unable to save draft before page exit.',
-                error
-            );
-
-        }
-
-    }
-
 
     function scheduleAutosave() {
 
@@ -3391,25 +3220,6 @@
         }
 
 
-        /*
-        * -----------------------------------------------------
-        * Reset the existing timer.
-        *
-        * Every new edit therefore restarts the countdown.
-        *
-        * Example:
-        *
-        * 18:00:00  edit
-        * 18:00:01  edit
-        * 18:00:02  edit
-        * 18:00:03  edit
-        *
-        * Only one save happens after the user stops editing.
-        * -----------------------------------------------------
-        */
-
-        hasUnsavedChanges = true;
-
         clearTimeout(
             autosaveTimer
         );
@@ -3417,32 +3227,11 @@
 
         autosaveTimer =
             setTimeout(
-                () => {
-
-                    /*
-                    * If a save is already running, do not start
-                    * another request. Tell the active save that
-                    * another save is needed afterward.
-                    */
-
-                    if (isSaving) {
-
-                        saveQueued = true;
-
-                        return;
-
-                    }
-
-
-                    saveDraft();
-
-                },
+                () => saveDraft(),
                 AUTOSAVE_DELAY
             );
 
     }
-
-
 
 
     /*
@@ -4026,104 +3815,46 @@
 
     function bindAutosaveEvents() {
 
-        /*
-         * IMPORTANT:
-         * Use the same direct form/panel event model that the
-         * original working Daily Closing autosave used.
-         *
-         * The delivery and Cash Advance controls are dynamic,
-         * but their input/change events bubble to these stable
-         * parent containers.
-         */
+        document.addEventListener(
+            'input',
+            event => {
 
-        const shopForm =
-            document.getElementById(
-                'shopWalkInForm'
-            );
+                if (
+                    !event.target.matches(
+                        'input'
+                    )
+                ) {
 
-        const driverPanel =
-            document.getElementById(
-                'driverDeliveriesPanel'
-            );
-
-
-        const handleShopChange =
-            () => {
-
-                if (isRestoring) {
                     return;
-                }
 
-                hasUnsavedChanges = true;
+                }
 
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
-            };
+            }
+        );
 
 
-        const handleDriverChange =
-            () => {
+        document.addEventListener(
+            'change',
+            event => {
 
-                if (isRestoring) {
+                if (
+                    !event.target.matches(
+                        'input, select'
+                    )
+                ) {
+
                     return;
-                }
 
-                hasUnsavedChanges = true;
+                }
 
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
+            }
+        );
 
-            };
-
-
-        if (shopForm) {
-
-            shopForm.addEventListener(
-                'input',
-                handleShopChange
-            );
-
-            shopForm.addEventListener(
-                'change',
-                handleShopChange
-            );
-
-        } else {
-
-            console.warn(
-                'Marcid Blue: Shop / Walk-in form not found for autosave.'
-            );
-
-        }
-
-
-        if (driverPanel) {
-
-            driverPanel.addEventListener(
-                'input',
-                handleDriverChange
-            );
-
-            driverPanel.addEventListener(
-                'change',
-                handleDriverChange
-            );
-
-        } else {
-
-            console.warn(
-                'Marcid Blue: Driver delivery panel not found for autosave.'
-            );
-
-        }
-
-
-        /*
-         * Buttons that create/remove dynamic rows.
-         * Wait one tick so the new row exists before the draft
-         * is collected.
-         */
 
         document.addEventListener(
             'click',
@@ -4147,30 +3878,12 @@
                 }
 
 
-                if (isRestoring) {
-                    return;
-                }
-
-
                 setTimeout(
-                    () => {
-
-                        hasUnsavedChanges = true;
-
-                        scheduleAutosave();
-                        scheduleCurrentDebtRefresh();
-
-                    },
+                    () => scheduleAutosave(),
                     50
                 );
 
             }
-        );
-
-
-        window.addEventListener(
-            'beforeunload',
-            saveDraftBeforeUnload
         );
 
 
@@ -4186,137 +3899,6 @@
                 'click',
                 resetDailyClosing
             );
-
-        }
-
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * FINALIZE
-     * ---------------------------------------------------------
-     */
-
-    async function finalizeDailyClosing() {
-
-        const button =
-            getElement(
-                'finalizeDailyClosingButton'
-            );
-
-
-        if (!button) {
-
-            console.error(
-                'Finalize button not found.'
-            );
-
-            return;
-
-        }
-
-
-        const confirmed =
-            window.confirm(
-                'Are you sure you want to finalize and close this day?\n\n' +
-                'Once finalized, the daily record will be saved and closed.'
-            );
-
-
-        if (!confirmed) {
-
-            return;
-
-        }
-
-
-        button.disabled = true;
-
-
-        const originalText =
-            button.textContent;
-
-
-        button.textContent =
-            'Finalizing...';
-
-
-        try {
-
-            await saveDraft();
-
-
-            const formData =
-                new FormData();
-
-
-            formData.append(
-                'action',
-                'finalize'
-            );
-
-
-            formData.append(
-                'daily_id',
-                String(dailyId)
-            );
-
-
-            const response =
-                await fetch(
-                    BACKEND_URL,
-                    {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        body: formData
-                    }
-                );
-
-
-            const result =
-                await response.json();
-
-
-            if (
-                !response.ok ||
-                !result.success
-            ) {
-
-                throw new Error(
-                    result.message ||
-                    'Unable to finalize the daily closing.'
-                );
-
-            }
-
-
-            window.alert(
-                result.message ||
-                'Daily closing finalized successfully.'
-            );
-
-
-            window.location.reload();
-
-
-        } catch (error) {
-
-            console.error(
-                'Finalize daily closing error:',
-                error
-            );
-
-
-            window.alert(
-                error.message ||
-                'Unable to finalize the daily closing.'
-            );
-
-
-            button.disabled = false;
-
-            button.textContent =
-                originalText;
 
         }
 
