@@ -1767,6 +1767,199 @@ $walkInOtherSales = 0.00;
 
 
     /* =========================================================
+    PAYROLL DRAWER
+    ========================================================= */
+
+    .payroll-drawer {
+        position: fixed;
+        top: 0;
+        right: -430px;
+        z-index: 9989;
+
+        width: min(430px, 92vw);
+        height: 100vh;
+
+        display: flex;
+        flex-direction: column;
+
+        box-sizing: border-box;
+
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+
+        box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12);
+
+        transition: right 0.25s ease;
+    }
+
+    .payroll-drawer.open {
+        right: 0;
+    }
+
+    .payroll-drawer-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+
+        padding: 22px 20px;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .payroll-drawer-title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .payroll-drawer-subtitle {
+        margin-top: 4px;
+
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .payroll-close {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        padding: 0;
+
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+
+        background: var(--surface);
+        color: var(--text-muted);
+
+        font-size: 20px;
+        line-height: 1;
+
+        cursor: pointer;
+    }
+
+    .payroll-close:hover {
+        color: var(--danger);
+        border-color: var(--danger);
+        background: var(--danger-light);
+    }
+
+    .payroll-drawer-summary {
+        padding: 18px 20px;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .payroll-drawer-summary-label {
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .payroll-drawer-summary-value {
+        margin-top: 4px;
+
+        color: var(--text);
+        font-size: 24px;
+        font-weight: 800;
+    }
+
+    .payroll-list {
+        flex: 1;
+
+        overflow-y: auto;
+
+        padding: 12px 20px 24px;
+    }
+
+    .payroll-loading,
+    .payroll-empty {
+        padding: 40px 10px;
+
+        text-align: center;
+
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .payroll-item {
+        padding: 14px 0;
+
+        border-bottom: 1px solid var(--border);
+    }
+
+    .payroll-item:last-child {
+        border-bottom: 0;
+    }
+
+    .payroll-item-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .payroll-employee-name {
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .payroll-employee-position {
+        margin-top: 3px;
+
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+
+    .payroll-item-amount {
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .payroll-item-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+
+        margin-top: 12px;
+    }
+
+    .payroll-detail {
+        padding: 10px 12px;
+
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+
+        background: var(--surface-muted);
+    }
+
+    .payroll-detail-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .payroll-detail-value {
+        margin-top: 3px;
+
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+
+    /* =========================================================
     CURRENT DEBT DRAWER
     ========================================================= */
 
@@ -1998,6 +2191,15 @@ $walkInOtherSales = 0.00;
             top: 50%;
         }
 
+        .payroll-drawer {
+            width: 92vw;
+            right: -92vw;
+        }
+
+        .payroll-drawer.open {
+            right: 0;
+        }
+
         .current-debt-drawer {
             width: 92vw;
             right: -92vw;
@@ -2062,6 +2264,73 @@ $walkInOtherSales = 0.00;
     class="current-debt-overlay"
     id="currentDebtOverlay"
 ></div>
+
+
+<!-- =========================================================
+     PAYROLL DRAWER
+     ========================================================= -->
+
+<aside
+    class="payroll-drawer"
+    id="payrollDrawer"
+    aria-hidden="true"
+>
+
+    <div class="payroll-drawer-header">
+
+        <div>
+
+            <div class="payroll-drawer-title">
+                Payroll
+            </div>
+
+            <div class="payroll-drawer-subtitle">
+                Today's payroll for active employees.
+            </div>
+
+        </div>
+
+
+        <button
+            type="button"
+            class="payroll-close"
+            id="payrollClose"
+            aria-label="Close Payroll"
+        >
+            ×
+        </button>
+
+    </div>
+
+
+    <div class="payroll-drawer-summary">
+
+        <div class="payroll-drawer-summary-label">
+            Total Payroll
+        </div>
+
+        <div
+            class="payroll-drawer-summary-value"
+            id="payrollTotal"
+        >
+            ₱0.00
+        </div>
+
+    </div>
+
+
+    <div
+        class="payroll-list"
+        id="payrollList"
+    >
+
+        <div class="payroll-loading">
+            Loading payroll...
+        </div>
+
+    </div>
+
+</aside>
 
 
 <aside
