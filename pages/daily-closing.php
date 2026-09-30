@@ -2916,7 +2916,7 @@ $walkInOtherSales = 0.00;
                                             name="expense_name[]"
                                             class="form-input expense-name"
                                             maxlength="255"
-                                            placeholder="Only needed for Cash Advance / Others"
+                                            placeholder="Not required for Food / Gas"
                                             disabled
                                         >
 
@@ -4191,6 +4191,35 @@ class ExpenseController extends BaseRowController {
             row => this.updateRow(row)
         );
 
+        window.marcidBlueExpenseControllerUpdateRow =
+            (row, restoring = false) => {
+
+                if (
+                    restoring &&
+                    row
+                ) {
+
+                    const field =
+                        row.querySelector(
+                            '.expense-name'
+                        );
+
+                    if (field) {
+
+                        field.dataset.selectedEmployeeId =
+                            field.value || '';
+
+                        field.dataset.description =
+                            field.value || '';
+
+                    }
+
+                }
+
+                this.updateRow(row);
+
+            };
+
     }
 
 
@@ -4221,6 +4250,68 @@ class ExpenseController extends BaseRowController {
                             '.expense-row'
                         )
                     );
+
+                    if (
+                        typeof window.marcidBlueUpdatePayrollCashAdvances ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollCashAdvances();
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        this.container.addEventListener(
+            'input',
+            event => {
+
+                if (
+                    event.target.classList.contains(
+                        'expense-amount'
+                    ) ||
+                    event.target.classList.contains(
+                        'expense-name'
+                    )
+                ) {
+
+                    if (
+                        typeof window.marcidBlueUpdatePayrollCashAdvances ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollCashAdvances();
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        this.container.addEventListener(
+            'change',
+            event => {
+
+                if (
+                    event.target.classList.contains(
+                        'expense-name'
+                    )
+                ) {
+
+                    if (
+                        typeof window.marcidBlueUpdatePayrollCashAdvances ===
+                        'function'
+                    ) {
+
+                        window.marcidBlueUpdatePayrollCashAdvances();
+
+                    }
 
                 }
 
@@ -4285,37 +4376,259 @@ class ExpenseController extends BaseRowController {
         }
 
 
-        const needsName =
-            category.value === 'Cash Advance' ||
+        const isCashAdvance =
+            category.value === 'Cash Advance';
+
+        const isOthers =
             category.value === 'Others';
 
 
-        name.disabled =
-            !needsName;
+        if (isCashAdvance) {
 
-        name.required =
-            needsName;
+            const selectedEmployeeId =
+                name.dataset.selectedEmployeeId ||
+                name.value ||
+                '';
 
+            if (name.tagName !== 'SELECT') {
 
-        label.textContent =
-            needsName
-                ? 'Name / Description *'
-                : 'Name / Description';
+                const select =
+                    document.createElement('select');
 
+                select.className =
+                    name.className;
 
-        if (needsName) {
+                select.name =
+                    name.name;
+
+                select.required =
+                    true;
+
+                select.dataset.selectedEmployeeId =
+                    selectedEmployeeId;
+
+                const placeholder =
+                    document.createElement('option');
+
+                placeholder.value = '';
+
+                placeholder.textContent =
+                    'Select employee';
+
+                select.appendChild(
+                    placeholder
+                );
+
+                const employees =
+                    Array.isArray(
+                        window.marcidBluePayrollEmployees
+                    )
+                        ? window.marcidBluePayrollEmployees
+                        : [];
+
+                employees.forEach(
+                    employee => {
+
+                        const option =
+                            document.createElement('option');
+
+                        option.value =
+                            String(
+                                employee.employee_id
+                            );
+
+                        option.textContent =
+                            employee.full_name ||
+                            'Unnamed Employee';
+
+                        if (
+                            String(
+                                employee.employee_id
+                            ) ===
+                            String(
+                                selectedEmployeeId
+                            )
+                        ) {
+
+                            option.selected =
+                                true;
+
+                        }
+
+                        select.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+                name.replaceWith(
+                    select
+                );
+
+                name = select;
+
+            } else {
+
+                const currentValue =
+                    name.value ||
+                    selectedEmployeeId;
+
+                name.innerHTML = '';
+
+                const placeholder =
+                    document.createElement('option');
+
+                placeholder.value = '';
+
+                placeholder.textContent =
+                    'Select employee';
+
+                name.appendChild(
+                    placeholder
+                );
+
+                const employees =
+                    Array.isArray(
+                        window.marcidBluePayrollEmployees
+                    )
+                        ? window.marcidBluePayrollEmployees
+                        : [];
+
+                employees.forEach(
+                    employee => {
+
+                        const option =
+                            document.createElement('option');
+
+                        option.value =
+                            String(
+                                employee.employee_id
+                            );
+
+                        option.textContent =
+                            employee.full_name ||
+                            'Unnamed Employee';
+
+                        option.selected =
+                            String(
+                                employee.employee_id
+                            ) ===
+                            String(
+                                currentValue
+                            );
+
+                        name.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+            }
+
+            label.textContent =
+                'Employee *';
+
+            name.disabled =
+                false;
+
+            name.required =
+                true;
+
+        } else if (isOthers) {
+
+            if (name.tagName !== 'INPUT') {
+
+                const input =
+                    document.createElement('input');
+
+                input.type =
+                    'text';
+
+                input.className =
+                    name.className;
+
+                input.name =
+                    name.name;
+
+                input.maxLength =
+                    255;
+
+                input.value =
+                    name.dataset.description ||
+                    '';
+
+                name.replaceWith(
+                    input
+                );
+
+                name = input;
+
+            }
+
+            name.disabled =
+                false;
+
+            name.required =
+                true;
 
             name.placeholder =
-                category.value === 'Cash Advance'
-                    ? 'Enter recipient name'
-                    : 'Enter expense description';
+                'Enter expense description';
+
+            label.textContent =
+                'Name / Description *';
 
         } else {
 
-            name.value = '';
+            if (name.tagName !== 'INPUT') {
+
+                const input =
+                    document.createElement('input');
+
+                input.type =
+                    'text';
+
+                input.className =
+                    name.className;
+
+                input.name =
+                    name.name;
+
+                input.maxLength =
+                    255;
+
+                name.replaceWith(
+                    input
+                );
+
+                name = input;
+
+            }
+
+            name.value =
+                '';
+
+            name.disabled =
+                true;
+
+            name.required =
+                false;
 
             name.placeholder =
                 'Not required for Food / Gas';
+
+            label.textContent =
+                'Name / Description';
+
+        }
+
+        if (
+            typeof window.marcidBlueUpdatePayrollCashAdvances ===
+            'function'
+        ) {
+
+            window.marcidBlueUpdatePayrollCashAdvances();
 
         }
 
@@ -4473,6 +4786,15 @@ class ExpenseController extends BaseRowController {
 
 
         this.updateRow(row);
+
+        if (
+            typeof window.marcidBlueUpdatePayrollCashAdvances ===
+            'function'
+        ) {
+
+            window.marcidBlueUpdatePayrollCashAdvances();
+
+        }
 
     }
 
