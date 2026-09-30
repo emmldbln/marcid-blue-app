@@ -13,7 +13,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 /*
 |--------------------------------------------------------------------------
-| Response
+| Response helpers
 |--------------------------------------------------------------------------
 */
 
@@ -23,39 +23,24 @@ function respond(array $data, int $status = 200): never
 
     echo json_encode(
         $data,
-        JSON_UNESCAPED_UNICODE |
-        JSON_UNESCAPED_SLASHES
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
 
     exit;
 }
 
-/*
-|--------------------------------------------------------------------------
-| POST helpers
-|--------------------------------------------------------------------------
-*/
-
-function postString(
-    string $key,
-    string $default = ''
-): string {
-    return trim(
-        (string)($_POST[$key] ?? $default)
-    );
+function postString(string $key, string $default = ''): string
+{
+    return trim((string)($_POST[$key] ?? $default));
 }
 
-function postInt(
-    string $key,
-    int $default = 0
-): int {
+function postInt(string $key, int $default = 0): int
+{
     return (int)($_POST[$key] ?? $default);
 }
 
-function postFloat(
-    string $key,
-    float $default = 0.0
-): float {
+function postFloat(string $key, float $default = 0.0): float
+{
     return (float)($_POST[$key] ?? $default);
 }
 
@@ -65,10 +50,8 @@ function postFloat(
 |--------------------------------------------------------------------------
 */
 
-function tableExists(
-    PDO $pdo,
-    string $table
-): bool {
+function tableExists(PDO $pdo, string $table): bool
+{
     $stmt = $pdo->prepare(
         "SELECT COUNT(*)
          FROM information_schema.tables
@@ -81,11 +64,8 @@ function tableExists(
     return (int)$stmt->fetchColumn() > 0;
 }
 
-function columnExists(
-    PDO $pdo,
-    string $table,
-    string $column
-): bool {
+function columnExists(PDO $pdo, string $table, string $column): bool
+{
     $stmt = $pdo->prepare(
         "SELECT COUNT(*)
          FROM information_schema.columns
@@ -115,12 +95,7 @@ function money(float $value): float
 
 function validDate(string $date): bool
 {
-    if (
-        !preg_match(
-            '/^\d{4}-\d{2}-\d{2}$/',
-            $date
-        )
-    ) {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
         return false;
     }
 
@@ -151,10 +126,8 @@ function exclusiveEnd(string $inclusiveEnd): string
         ->format('Y-m-d');
 }
 
-function formatPeriodRange(
-    string $start,
-    string $end
-): string {
+function formatPeriodRange(string $start, string $end): string
+{
     return dateObject($start)->format('M j, Y')
         . ' – '
         . dateObject($end)->format('M j, Y');
@@ -162,17 +135,7 @@ function formatPeriodRange(
 
 /*
 |--------------------------------------------------------------------------
-| Accounting Period Defaults
-|--------------------------------------------------------------------------
-|
-| September 2026:
-|   August 15, 2026 -> September 15, 2026
-|
-| October 2026:
-|   September 16, 2026 -> October 15, 2026
-|
-| November 2026:
-|   October 16, 2026 -> November 15, 2026
+| Accounting period rules
 |--------------------------------------------------------------------------
 */
 
@@ -190,11 +153,14 @@ function isAllowedAnalyticsMonth(
     int $year,
     int $month
 ): bool {
-    if ($year < 2026) {
+    if ($year < minimumAnalyticsYear()) {
         return false;
     }
 
-    if ($year === 2026 && $month < 9) {
+    if (
+        $year === minimumAnalyticsYear()
+        && $month < minimumAnalyticsMonth()
+    ) {
         return false;
     }
 
@@ -205,7 +171,6 @@ function defaultPeriodDates(
     int $year,
     int $month
 ): array {
-
     if (!isAllowedAnalyticsMonth($year, $month)) {
         throw new InvalidArgumentException(
             'Analytics periods can only start from September 2026.'
@@ -213,17 +178,26 @@ function defaultPeriodDates(
     }
 
     /*
-     * September 2026 is the special starting period.
+     * First accounting period:
+     *
+     * September 2026
+     * August 15, 2026 -> September 15, 2026
      */
     if ($year === 2026 && $month === 9) {
-
         return [
             'start' => '2026-08-15',
             'end'   => '2026-09-15'
         ];
     }
 
-    $current = new DateTimeImmutable(
+    /*
+     * Standard periods:
+     *
+     * Previous month's 16th
+     * ->
+     * Current month's 15th
+     */
+    $end = new DateTimeImmutable(
         sprintf(
             '%04d-%02d-15',
             $year,
@@ -231,26 +205,13 @@ function defaultPeriodDates(
         )
     );
 
-    $start = $current
-        ->modify('-1 day')
-        ->modify('first day of this month')
-        ->modify('+15 days');
-
-    /*
-     * Easier and safer:
-     * the start is the 16th of the previous month.
-     */
-    $start = $current
+    $start = $end
         ->modify('-1 month')
-        ->modify('first day of this month')
-        ->modify('+15 days');
+        ->modify('+1 day');
 
     return [
-        'start' =>
-            $start->format('Y-m-d'),
-
-        'end' =>
-            $current->format('Y-m-d')
+        'start' => $start->format('Y-m-d'),
+        'end'   => $end->format('Y-m-d')
     ];
 }
 
@@ -264,105 +225,68 @@ function ensureAnalyticsSchema(PDO $pdo): void
 {
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS analytics_periods (
-
             period_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-
             analytics_year SMALLINT UNSIGNED NOT NULL,
-
             analytics_month TINYINT UNSIGNED NOT NULL,
-
             period_start DATE NOT NULL,
-
             period_end DATE NOT NULL,
-
-            created_at DATETIME NOT NULL
-                DEFAULT CURRENT_TIMESTAMP,
-
-            updated_at DATETIME NOT NULL
-                DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ON UPDATE CURRENT_TIMESTAMP,
-
             PRIMARY KEY (period_id),
-
-            UNIQUE KEY unique_analytics_period
-                (
-                    analytics_year,
-                    analytics_month
-                ),
-
-            KEY idx_period_dates
-                (
-                    period_start,
-                    period_end
-                )
-
-        ) ENGINE=InnoDB
-          DEFAULT CHARSET=utf8mb4
-          COLLATE=utf8mb4_unicode_ci"
+            UNIQUE KEY unique_analytics_period (
+                analytics_year,
+                analytics_month
+            ),
+            KEY idx_period_dates (
+                period_start,
+                period_end
+            )
+        )
+        ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4
+        COLLATE=utf8mb4_unicode_ci"
     );
 
     $pdo->exec(
         "CREATE TABLE IF NOT EXISTS analytics_manual_expenses (
-
             expense_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-
             period_id INT UNSIGNED NOT NULL,
-
-            end_period_id INT UNSIGNED NULL,
-
+            end_period_id INT UNSIGNED DEFAULT NULL,
             category VARCHAR(100) NOT NULL,
-
             description VARCHAR(255) NOT NULL,
-
             amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-
             expense_date DATE NOT NULL,
-
-            expense_end_date DATE NULL,
-
-            notes TEXT NULL,
-
-            created_by INT UNSIGNED NULL,
-
-            created_at DATETIME NOT NULL
-                DEFAULT CURRENT_TIMESTAMP,
-
-            updated_at DATETIME NOT NULL
-                DEFAULT CURRENT_TIMESTAMP
+            expense_end_date DATE DEFAULT NULL,
+            notes TEXT DEFAULT NULL,
+            created_by INT UNSIGNED DEFAULT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ON UPDATE CURRENT_TIMESTAMP,
-
             PRIMARY KEY (expense_id),
-
-            KEY idx_manual_expenses_period
-                (period_id),
-
-            KEY idx_manual_expenses_end_period
-                (end_period_id),
-
-            KEY idx_manual_expenses_date
-                (expense_date),
-
+            KEY idx_manual_expenses_period (period_id),
+            KEY idx_manual_expenses_date (expense_date),
+            KEY idx_manual_expenses_end_period (end_period_id),
             CONSTRAINT fk_manual_expenses_period
                 FOREIGN KEY (period_id)
                 REFERENCES analytics_periods(period_id)
-                ON UPDATE CASCADE
-                ON DELETE RESTRICT,
-
+                ON DELETE RESTRICT
+                ON UPDATE CASCADE,
             CONSTRAINT fk_manual_expenses_end_period
                 FOREIGN KEY (end_period_id)
                 REFERENCES analytics_periods(period_id)
-                ON UPDATE CASCADE
                 ON DELETE RESTRICT
-
-        ) ENGINE=InnoDB
-          DEFAULT CHARSET=utf8mb4
-          COLLATE=utf8mb4_unicode_ci"
+                ON UPDATE CASCADE
+        )
+        ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4
+        COLLATE=utf8mb4_unicode_ci"
     );
 }
 
 /*
 |--------------------------------------------------------------------------
-| Ensure default September 2026 period
+| Period creation
 |--------------------------------------------------------------------------
 */
 
@@ -371,15 +295,13 @@ function ensureDefaultPeriod(PDO $pdo): void
     $dates = defaultPeriodDates(2026, 9);
 
     $stmt = $pdo->prepare(
-        "INSERT INTO analytics_periods
-        (
+        "INSERT INTO analytics_periods (
             analytics_year,
             analytics_month,
             period_start,
             period_end
         )
-        VALUES
-        (
+        VALUES (
             2026,
             9,
             ?,
@@ -395,18 +317,11 @@ function ensureDefaultPeriod(PDO $pdo): void
     ]);
 }
 
-/*
-|--------------------------------------------------------------------------
-| Create future period if needed
-|--------------------------------------------------------------------------
-*/
-
 function ensurePeriod(
     PDO $pdo,
     int $year,
     int $month
 ): int {
-
     if (!isAllowedAnalyticsMonth($year, $month)) {
         throw new InvalidArgumentException(
             'Invalid accounting period.'
@@ -432,22 +347,19 @@ function ensurePeriod(
         return (int)$existing;
     }
 
-    $dates =
-        defaultPeriodDates(
-            $year,
-            $month
-        );
+    $dates = defaultPeriodDates(
+        $year,
+        $month
+    );
 
     $stmt = $pdo->prepare(
-        "INSERT INTO analytics_periods
-        (
+        "INSERT INTO analytics_periods (
             analytics_year,
             analytics_month,
             period_start,
             period_end
         )
-        VALUES
-        (
+        VALUES (
             ?,
             ?,
             ?,
@@ -465,17 +377,10 @@ function ensurePeriod(
     return (int)$pdo->lastInsertId();
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get period
-|--------------------------------------------------------------------------
-*/
-
 function getPeriod(
     PDO $pdo,
     int $periodId
 ): array {
-
     $stmt = $pdo->prepare(
         "SELECT
             period_id,
@@ -509,100 +414,32 @@ function getPeriod(
         );
     }
 
-    if (
-        !validDate((string)$period['period_start']) ||
-        !validDate((string)$period['period_end'])
-    ) {
-        throw new InvalidArgumentException(
-            'Invalid accounting period dates.'
-        );
-    }
-
-    if (
-        $period['period_start']
-        >
-        $period['period_end']
-    ) {
-        throw new InvalidArgumentException(
-            'Accounting period start date cannot be after the end date.'
-        );
-    }
-
     return $period;
 }
-
-/*
-|--------------------------------------------------------------------------
-| Get periods
-|--------------------------------------------------------------------------
-*/
 
 function getPeriods(PDO $pdo): array
 {
     ensureDefaultPeriod($pdo);
 
-    /*
-     * Generate every accounting period from
-     * September 2026 through the next calendar month.
-     *
-     * Existing periods are never overwritten.
-     */
-
     $today = new DateTimeImmutable('today');
 
-    $startYear = 2026;
-    $startMonth = 9;
-
-    $targetYear =
-        (int)$today
-            ->modify('+1 month')
-            ->format('Y');
-
-    $targetMonth =
-        (int)$today
-            ->modify('+1 month')
-            ->format('n');
-
-    $cursor = new DateTimeImmutable(
-        sprintf(
-            '%04d-%02d-01',
-            $startYear,
-            $startMonth
-        )
-    );
-
-    $target = new DateTimeImmutable(
-        sprintf(
-            '%04d-%02d-01',
-            $targetYear,
-            $targetMonth
-        )
-    );
+    /*
+     * Generate periods from September 2026
+     * through the next calendar month.
+     */
+    $cursor = new DateTimeImmutable('2026-09-01');
+    $target = $today
+        ->modify('+1 month')
+        ->modify('first day of this month');
 
     while ($cursor <= $target) {
+        ensurePeriod(
+            $pdo,
+            (int)$cursor->format('Y'),
+            (int)$cursor->format('n')
+        );
 
-        $year =
-            (int)$cursor->format('Y');
-
-        $month =
-            (int)$cursor->format('n');
-
-        if (
-            isAllowedAnalyticsMonth(
-                $year,
-                $month
-            )
-        ) {
-
-            ensurePeriod(
-                $pdo,
-                $year,
-                $month
-            );
-        }
-
-        $cursor =
-            $cursor->modify('+1 month');
+        $cursor = $cursor->modify('+1 month');
     }
 
     $stmt = $pdo->query(
@@ -619,8 +456,7 @@ function getPeriods(PDO $pdo): array
                 analytics_year = 2026
                 AND analytics_month >= 9
             )
-         ORDER BY
-            period_start DESC"
+         ORDER BY period_start DESC"
     );
 
     $periods = [];
@@ -629,69 +465,28 @@ function getPeriods(PDO $pdo): array
         $stmt->fetchAll(PDO::FETCH_ASSOC)
         as $row
     ) {
+        $start = (string)$row['period_start'];
+        $end   = (string)$row['period_end'];
 
-        $start =
-            (string)$row['period_start'];
-
-        $end =
-            (string)$row['period_end'];
-
-        $year =
-            (int)$row['analytics_year'];
-
-        $month =
-            (int)$row['analytics_month'];
+        $year  = (int)$row['analytics_year'];
+        $month = (int)$row['analytics_month'];
 
         $periods[] = [
-
-            'period_id' =>
-                (int)$row['period_id'],
-
-            'year' =>
-                $year,
-
-            'month' =>
-                $month,
-
-            /*
-             * Human-readable date range.
-             */
-            'label' =>
-                formatPeriodRange(
-                    $start,
-                    $end
-                ),
-
-            /*
-             * Human-readable accounting month.
-             */
-            'month_label' =>
-                dateObject(
-                    sprintf(
-                        '%04d-%02d-01',
-                        $year,
-                        $month
-                    )
-                )->format('F Y'),
-
-            /*
-             * Keep the backend's existing names.
-             */
-            'start' =>
-                $start,
-
-            'end' =>
-                $end,
-
-            /*
-             * Also expose explicit names so the
-             * frontend can use them safely.
-             */
-            'period_start' =>
-                $start,
-
-            'period_end' =>
-                $end
+            'period_id'    => (int)$row['period_id'],
+            'year'         => $year,
+            'month'        => $month,
+            'start'        => $start,
+            'end'          => $end,
+            'period_start' => $start,
+            'period_end'   => $end,
+            'label'        => formatPeriodRange($start, $end),
+            'month_label'  => dateObject(
+                sprintf(
+                    '%04d-%02d-01',
+                    $year,
+                    $month
+                )
+            )->format('F Y')
         ];
     }
 
@@ -700,20 +495,15 @@ function getPeriods(PDO $pdo): array
 
 /*
 |--------------------------------------------------------------------------
-| Save period
+| Save accounting period
 |--------------------------------------------------------------------------
 */
 
 function savePeriod(PDO $pdo): void
 {
-    $periodId =
-        postInt('period_id');
-
-    $start =
-        postString('period_start');
-
-    $end =
-        postString('period_end');
+    $periodId = postInt('period_id');
+    $start    = postString('period_start');
+    $end      = postString('period_end');
 
     if ($periodId <= 0) {
         respond([
@@ -723,32 +513,28 @@ function savePeriod(PDO $pdo): void
     }
 
     if (
-        !validDate($start) ||
-        !validDate($end)
+        !validDate($start)
+        || !validDate($end)
     ) {
         respond([
             'success' => false,
-            'message' => 'Please enter valid start and end dates.'
+            'message' => 'Please enter valid period dates.'
         ], 400);
     }
 
     if ($start > $end) {
         respond([
             'success' => false,
-            'message' => 'Start date cannot be after the end date.'
+            'message' =>
+                'Start date cannot be after the end date.'
         ], 400);
     }
 
-    $period =
-        getPeriod(
-            $pdo,
-            $periodId
-        );
+    getPeriod(
+        $pdo,
+        $periodId
+    );
 
-    /*
-     * Do not allow the period's identity
-     * to be changed here. Only its date range.
-     */
     $stmt = $pdo->prepare(
         "UPDATE analytics_periods
          SET
@@ -766,549 +552,125 @@ function savePeriod(PDO $pdo): void
     respond([
         'success' => true,
         'message' => 'Accounting period saved.',
-        'period' => getPeriod($pdo, $periodId)
+        'period'  => getPeriod(
+            $pdo,
+            $periodId
+        )
     ]);
 }
 
 /*
 |--------------------------------------------------------------------------
-| Walk-in revenue
+| DAILY CLOSING REVENUE
+|--------------------------------------------------------------------------
+|
+| The Daily Closing application stores shop/walk-in sales in:
+|
+| daily_sales
+|
+| Relevant columns:
+|
+| sales_date
+| walk_in_customers
+| walk_in_price
+| other_shop_payment
+| other_sales
+|
+| Delivery collections are handled separately through:
+|
+| deliveries
+| payments
+|
 |--------------------------------------------------------------------------
 */
+
+function dailySalesRevenueExpression(
+    PDO $pdo
+): ?string {
+    if (!tableExists($pdo, 'daily_sales')) {
+        return null;
+    }
+
+    $parts = [];
+
+    if (
+        columnExists(
+            $pdo,
+            'daily_sales',
+            'walk_in_customers'
+        )
+        &&
+        columnExists(
+            $pdo,
+            'daily_sales',
+            'walk_in_price'
+        )
+    ) {
+        $parts[] =
+            "(COALESCE(walk_in_customers, 0)
+              * COALESCE(walk_in_price, 0))";
+    }
+
+    if (
+        columnExists(
+            $pdo,
+            'daily_sales',
+            'other_shop_payment'
+        )
+    ) {
+        $parts[] =
+            "COALESCE(other_shop_payment, 0)";
+    }
+
+    if (
+        columnExists(
+            $pdo,
+            'daily_sales',
+            'other_sales'
+        )
+    ) {
+        $parts[] =
+            "COALESCE(other_sales, 0)";
+    }
+
+    if (!$parts) {
+        return null;
+    }
+
+    return implode(' + ', $parts);
+}
 
 function calculateWalkInRevenue(
     PDO $pdo,
     string $start,
     string $endExclusive
 ): float {
-
     if (
-        !tableExists(
+        !tableExists($pdo, 'daily_sales')
+        || !columnExists(
             $pdo,
-            'daily_records'
+            'daily_sales',
+            'sales_date'
         )
     ) {
         return 0.00;
     }
 
-    foreach ([
-        'walk_in_revenue',
-        'walk_in_sales',
-        'walk_in_amount'
-    ] as $column) {
+    $expression =
+        dailySalesRevenueExpression($pdo);
 
-        if (
-            columnExists(
-                $pdo,
-                'daily_records',
-                $column
-            )
-        ) {
-
-            $stmt = $pdo->prepare(
-                "SELECT
-                    COALESCE(
-                        SUM($column),
-                        0
-                    )
-                 FROM daily_records
-                 WHERE business_date >= ?
-                   AND business_date < ?"
-            );
-
-            $stmt->execute([
-                $start,
-                $endExclusive
-            ]);
-
-            return money(
-                (float)$stmt->fetchColumn()
-            );
-        }
-    }
-
-    foreach ([
-        'walk_in_count',
-        'walkins',
-        'walk_in_quantity'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'daily_records',
-                $column
-            )
-        ) {
-
-            $stmt = $pdo->prepare(
-                "SELECT
-                    COALESCE(
-                        SUM($column),
-                        0
-                    )
-                 FROM daily_records
-                 WHERE business_date >= ?
-                   AND business_date < ?"
-            );
-
-            $stmt->execute([
-                $start,
-                $endExclusive
-            ]);
-
-            return money(
-                (float)$stmt->fetchColumn() * 30
-            );
-        }
-    }
-
-    return 0.00;
-}
-
-/*
-|--------------------------------------------------------------------------
-| Daily walk-ins
-|--------------------------------------------------------------------------
-*/
-
-function calculateDailyWalkIns(
-    PDO $pdo,
-    string $start,
-    string $endExclusive
-): array {
-
-    $result = [];
-
-    if (
-        !tableExists(
-            $pdo,
-            'daily_records'
-        )
-    ) {
-        return $result;
-    }
-
-    $expression = null;
-
-    foreach ([
-        'walk_in_revenue',
-        'walk_in_sales',
-        'walk_in_amount'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'daily_records',
-                $column
-            )
-        ) {
-
-            $expression =
-                "COALESCE($column,0)";
-
-            break;
-        }
-    }
-
-    if (!$expression) {
-
-        foreach ([
-            'walk_in_count',
-            'walkins',
-            'walk_in_quantity'
-        ] as $column) {
-
-            if (
-                columnExists(
-                    $pdo,
-                    'daily_records',
-                    $column
-                )
-            ) {
-
-                $expression =
-                    "COALESCE($column,0) * 30";
-
-                break;
-            }
-        }
-    }
-
-    if (!$expression) {
-        return $result;
-    }
-
-    $stmt = $pdo->prepare(
-        "SELECT
-            business_date,
-            $expression AS revenue
-         FROM daily_records
-         WHERE business_date >= ?
-           AND business_date < ?
-         ORDER BY business_date ASC"
-    );
-
-    $stmt->execute([
-        $start,
-        $endExclusive
-    ]);
-
-    foreach (
-        $stmt->fetchAll(PDO::FETCH_ASSOC)
-        as $row
-    ) {
-
-        $result[
-            (string)$row['business_date']
-        ] = money(
-            (float)$row['revenue']
-        );
-    }
-
-    return $result;
-}
-
-/*
-|--------------------------------------------------------------------------
-| Deliveries
-|--------------------------------------------------------------------------
-*/
-
-function calculateDeliveryStats(
-    PDO $pdo,
-    string $start,
-    string $endExclusive
-): array {
-
-    $result = [
-        'revenue' => 0.00,
-        'slim' => 0.00,
-        'round' => 0.00,
-        'deliveries' => 0
-    ];
-
-    if (
-        !tableExists(
-            $pdo,
-            'deliveries'
-        )
-    ) {
-        return $result;
-    }
-
-    if (
-        !columnExists(
-            $pdo,
-            'deliveries',
-            'delivery_date'
-        )
-    ) {
-        return $result;
-    }
-
-    $amount =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'amount_due'
-        )
-            ? 'amount_due'
-            : null;
-
-    $slim =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'slim_quantity'
-        )
-            ? 'slim_quantity'
-            : null;
-
-    $round =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'round_quantity'
-        )
-            ? 'round_quantity'
-            : null;
-
-    $select = [
-        'COUNT(*) AS delivery_count'
-    ];
-
-    $select[] =
-        $amount
-            ? "COALESCE(SUM($amount),0) AS revenue"
-            : "0 AS revenue";
-
-    $select[] =
-        $slim
-            ? "COALESCE(SUM($slim),0) AS slim"
-            : "0 AS slim";
-
-    $select[] =
-        $round
-            ? "COALESCE(SUM($round),0) AS round"
-            : "0 AS round";
-
-    $stmt = $pdo->prepare(
-        "SELECT
-            " . implode(',', $select) . "
-         FROM deliveries
-         WHERE delivery_date >= ?
-           AND delivery_date < ?"
-    );
-
-    $stmt->execute([
-        $start,
-        $endExclusive
-    ]);
-
-    $row =
-        $stmt->fetch(PDO::FETCH_ASSOC)
-        ?: [];
-
-    return [
-        'revenue' =>
-            money(
-                (float)($row['revenue'] ?? 0)
-            ),
-
-        'slim' =>
-            money(
-                (float)($row['slim'] ?? 0)
-            ),
-
-        'round' =>
-            money(
-                (float)($row['round'] ?? 0)
-            ),
-
-        'deliveries' =>
-            (int)($row['delivery_count'] ?? 0)
-    ];
-}
-
-/*
-|--------------------------------------------------------------------------
-| Daily deliveries
-|--------------------------------------------------------------------------
-*/
-
-function calculateDailyDeliveries(
-    PDO $pdo,
-    string $start,
-    string $endExclusive
-): array {
-
-    $result = [];
-
-    if (
-        !tableExists(
-            $pdo,
-            'deliveries'
-        ) ||
-        !columnExists(
-            $pdo,
-            'deliveries',
-            'delivery_date'
-        )
-    ) {
-        return $result;
-    }
-
-    $amount =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'amount_due'
-        )
-            ? 'amount_due'
-            : null;
-
-    $slim =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'slim_quantity'
-        )
-            ? 'slim_quantity'
-            : null;
-
-    $round =
-        columnExists(
-            $pdo,
-            'deliveries',
-            'round_quantity'
-        )
-            ? 'round_quantity'
-            : null;
-
-    $stmt = $pdo->prepare(
-        "SELECT
-            delivery_date,
-            " .
-            (
-                $amount
-                    ? "COALESCE($amount,0)"
-                    : "0"
-            )
-            . " AS revenue,
-
-            " .
-            (
-                $slim
-                    ? "COALESCE($slim,0)"
-                    : "0"
-            )
-            . " AS slim,
-
-            " .
-            (
-                $round
-                    ? "COALESCE($round,0)"
-                    : "0"
-            )
-            . " AS round
-
-         FROM deliveries
-
-         WHERE delivery_date >= ?
-           AND delivery_date < ?
-
-         ORDER BY delivery_date ASC"
-    );
-
-    $stmt->execute([
-        $start,
-        $endExclusive
-    ]);
-
-    foreach (
-        $stmt->fetchAll(PDO::FETCH_ASSOC)
-        as $row
-    ) {
-
-        $date =
-            (string)$row['delivery_date'];
-
-        if (!isset($result[$date])) {
-
-            $result[$date] = [
-                'revenue' => 0.00,
-                'slim' => 0.00,
-                'round' => 0.00,
-                'deliveries' => 0
-            ];
-        }
-
-        $result[$date]['revenue'] +=
-            (float)$row['revenue'];
-
-        $result[$date]['slim'] +=
-            (float)$row['slim'];
-
-        $result[$date]['round'] +=
-            (float)$row['round'];
-
-        $result[$date]['deliveries']++;
-    }
-
-    foreach ($result as $date => $data) {
-
-        $result[$date]['revenue'] =
-            money($data['revenue']);
-
-        $result[$date]['slim'] =
-            money($data['slim']);
-
-        $result[$date]['round'] =
-            money($data['round']);
-    }
-
-    return $result;
-}
-
-/*
-|--------------------------------------------------------------------------
-| Daily Closing Expenses
-|--------------------------------------------------------------------------
-*/
-
-function calculateExpenses(
-    PDO $pdo,
-    string $start,
-    string $endExclusive
-): float {
-
-    if (
-        !tableExists(
-            $pdo,
-            'expenses'
-        )
-    ) {
-        return 0.00;
-    }
-
-    $dateColumn = null;
-
-    foreach ([
-        'expense_date',
-        'date',
-        'business_date'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'expenses',
-                $column
-            )
-        ) {
-            $dateColumn = $column;
-            break;
-        }
-    }
-
-    if (!$dateColumn) {
-        return 0.00;
-    }
-
-    $amountColumn = null;
-
-    foreach ([
-        'amount',
-        'expense_amount'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'expenses',
-                $column
-            )
-        ) {
-            $amountColumn = $column;
-            break;
-        }
-    }
-
-    if (!$amountColumn) {
+    if ($expression === null) {
         return 0.00;
     }
 
     $stmt = $pdo->prepare(
-        "SELECT
-            COALESCE(
-                SUM($amountColumn),
-                0
-            )
-         FROM expenses
-         WHERE $dateColumn >= ?
-           AND $dateColumn < ?"
+        "SELECT COALESCE(
+            SUM($expression),
+            0
+        )
+        FROM daily_sales
+        WHERE sales_date >= ?
+          AND sales_date < ?"
     );
 
     $stmt->execute([
@@ -1321,88 +683,43 @@ function calculateExpenses(
     );
 }
 
-/*
-|--------------------------------------------------------------------------
-| Daily Closing expenses by date
-|--------------------------------------------------------------------------
-*/
-
-function calculateDailyExpenses(
+function calculateDailyWalkInRevenue(
     PDO $pdo,
     string $start,
     string $endExclusive
 ): array {
-
     $result = [];
 
     if (
-        !tableExists(
+        !tableExists($pdo, 'daily_sales')
+        || !columnExists(
             $pdo,
-            'expenses'
+            'daily_sales',
+            'sales_date'
         )
     ) {
         return $result;
     }
 
-    $dateColumn = null;
+    $expression =
+        dailySalesRevenueExpression($pdo);
 
-    foreach ([
-        'expense_date',
-        'date',
-        'business_date'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'expenses',
-                $column
-            )
-        ) {
-            $dateColumn = $column;
-            break;
-        }
-    }
-
-    if (!$dateColumn) {
-        return $result;
-    }
-
-    $amountColumn = null;
-
-    foreach ([
-        'amount',
-        'expense_amount'
-    ] as $column) {
-
-        if (
-            columnExists(
-                $pdo,
-                'expenses',
-                $column
-            )
-        ) {
-            $amountColumn = $column;
-            break;
-        }
-    }
-
-    if (!$amountColumn) {
+    if ($expression === null) {
         return $result;
     }
 
     $stmt = $pdo->prepare(
         "SELECT
-            $dateColumn AS expense_date,
+            sales_date,
             COALESCE(
-                SUM($amountColumn),
+                SUM($expression),
                 0
-            ) AS amount
-         FROM expenses
-         WHERE $dateColumn >= ?
-           AND $dateColumn < ?
-         GROUP BY $dateColumn
-         ORDER BY $dateColumn"
+            ) AS revenue
+         FROM daily_sales
+         WHERE sales_date >= ?
+           AND sales_date < ?
+         GROUP BY sales_date
+         ORDER BY sales_date"
     );
 
     $stmt->execute([
@@ -1414,13 +731,11 @@ function calculateDailyExpenses(
         $stmt->fetchAll(PDO::FETCH_ASSOC)
         as $row
     ) {
-
         $result[
-            (string)$row['expense_date']
-        ] =
-            money(
-                (float)$row['amount']
-            );
+            $row['sales_date']
+        ] = money(
+            (float)$row['revenue']
+        );
     }
 
     return $result;
@@ -1428,94 +743,404 @@ function calculateDailyExpenses(
 
 /*
 |--------------------------------------------------------------------------
-| Manual Expense allocation
+| DELIVERY REVENUE
 |--------------------------------------------------------------------------
 |
-| An expense may cover one period or two periods.
+| Revenue for the accounting dashboard uses actual payments received
+| through Daily Closing, rather than expected delivery amount_due.
 |
-| Example:
+| This means:
 |
-| Expense:
-| Aug 15 -> Oct 15
-| Amount: ₱3,000
-|
-| The amount is allocated according to the number
-| of covered days inside each accounting period.
+| unpaid delivery      = 0 revenue
+| partially paid       = actual amount received
+| fully paid           = actual amount received
+| overpaid             = actual amount received
 |
 |--------------------------------------------------------------------------
 */
 
-function manualExpenseCoverage(
-    array $expense
+function calculateDeliveryRevenue(
+    PDO $pdo,
+    string $start,
+    string $endExclusive
+): float {
+    if (
+        !tableExists($pdo, 'deliveries')
+        || !tableExists($pdo, 'payments')
+    ) {
+        return 0.00;
+    }
+
+    if (
+        !columnExists(
+            $pdo,
+            'deliveries',
+            'delivery_id'
+        )
+        || !columnExists(
+            $pdo,
+            'deliveries',
+            'delivery_date'
+        )
+        || !columnExists(
+            $pdo,
+            'payments',
+            'delivery_id'
+        )
+        || !columnExists(
+            $pdo,
+            'payments',
+            'amount'
+        )
+        || !columnExists(
+            $pdo,
+            'payments',
+            'payment_date'
+        )
+    ) {
+        return 0.00;
+    }
+
+    /*
+     * Payment date determines when money was actually received.
+     *
+     * This is important for accounting-period revenue.
+     */
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(
+            SUM(p.amount),
+            0
+        )
+        FROM payments p
+        WHERE p.payment_date >= ?
+          AND p.payment_date < ?
+          AND p.delivery_id IS NOT NULL"
+    );
+
+    $stmt->execute([
+        $start,
+        $endExclusive
+    ]);
+
+    return money(
+        (float)$stmt->fetchColumn()
+    );
+}
+
+function calculateDailyDeliveryRevenue(
+    PDO $pdo,
+    string $start,
+    string $endExclusive
 ): array {
+    $result = [];
 
-    $start =
-        (string)$expense['expense_date'];
-
-    $end =
-        !empty($expense['expense_end_date'])
-            ? (string)$expense['expense_end_date']
-            : $start;
-
-    if (!validDate($start)) {
-        return [];
+    if (
+        !tableExists($pdo, 'payments')
+        || !columnExists(
+            $pdo,
+            'payments',
+            'payment_date'
+        )
+        || !columnExists(
+            $pdo,
+            'payments',
+            'amount'
+        )
+    ) {
+        return $result;
     }
 
-    if (!validDate($end)) {
-        $end = $start;
+    $deliveryFilter = '';
+
+    if (
+        columnExists(
+            $pdo,
+            'payments',
+            'delivery_id'
+        )
+    ) {
+        $deliveryFilter =
+            ' AND p.delivery_id IS NOT NULL';
+    } else {
+        /*
+         * If delivery_id does not exist, do not treat all
+         * payments as delivery revenue.
+         */
+        return $result;
     }
 
-    if ($end < $start) {
-        $end = $start;
+    $stmt = $pdo->prepare(
+        "SELECT
+            p.payment_date,
+            COALESCE(
+                SUM(p.amount),
+                0
+            ) AS revenue
+         FROM payments p
+         WHERE p.payment_date >= ?
+           AND p.payment_date < ?
+           $deliveryFilter
+         GROUP BY p.payment_date
+         ORDER BY p.payment_date"
+    );
+
+    $stmt->execute([
+        $start,
+        $endExclusive
+    ]);
+
+    foreach (
+        $stmt->fetchAll(PDO::FETCH_ASSOC)
+        as $row
+    ) {
+        $result[
+            $row['payment_date']
+        ] = money(
+            (float)$row['revenue']
+        );
     }
 
-    return [
-        'start' => $start,
-        'end' => $end
-    ];
+    return $result;
 }
 
-function overlapDays(
-    string $aStart,
-    string $aEnd,
-    string $bStart,
-    string $bEnd
-): int {
+/*
+|--------------------------------------------------------------------------
+| Combined daily revenue
+|--------------------------------------------------------------------------
+*/
 
-    $startA = dateObject($aStart);
-    $endA = dateObject($aEnd);
+function calculateDailyRevenue(
+    PDO $pdo,
+    string $start,
+    string $endExclusive
+): array {
+    $walkIns = calculateDailyWalkInRevenue(
+        $pdo,
+        $start,
+        $endExclusive
+    );
 
-    $startB = dateObject($bStart);
-    $endB = dateObject($bEnd);
+    $deliveries = calculateDailyDeliveryRevenue(
+        $pdo,
+        $start,
+        $endExclusive
+    );
 
-    $start =
-        $startA > $startB
-            ? $startA
-            : $startB;
+    $dates = array_unique(
+        array_merge(
+            array_keys($walkIns),
+            array_keys($deliveries)
+        )
+    );
 
-    $end =
-        $endA < $endB
-            ? $endA
-            : $endB;
+    $result = [];
 
-    if ($start > $end) {
-        return 0;
+    foreach ($dates as $date) {
+        $walkIn = $walkIns[$date] ?? 0.00;
+        $delivery = $deliveries[$date] ?? 0.00;
+
+        $result[$date] = [
+            'walk_in_revenue' =>
+                money($walkIn),
+
+            'delivery_revenue' =>
+                money($delivery),
+
+            'revenue' =>
+                money(
+                    $walkIn + $delivery
+                )
+        ];
     }
 
-    return (int)$start
-        ->diff($end)
-        ->days + 1;
+    return $result;
 }
+
+/*
+|--------------------------------------------------------------------------
+| DAILY CLOSING EXPENSES
+|--------------------------------------------------------------------------
+*/
+
+function expenseDateColumn(PDO $pdo): ?string
+{
+    if (!tableExists($pdo, 'expenses')) {
+        return null;
+    }
+
+    foreach ([
+        'expense_date',
+        'date',
+        'transaction_date',
+        'created_date'
+    ] as $column) {
+        if (
+            columnExists(
+                $pdo,
+                'expenses',
+                $column
+            )
+        ) {
+            return $column;
+        }
+    }
+
+    return null;
+}
+
+function expenseAmountColumn(PDO $pdo): ?string
+{
+    if (!tableExists($pdo, 'expenses')) {
+        return null;
+    }
+
+    foreach ([
+        'amount',
+        'expense_amount',
+        'total'
+    ] as $column) {
+        if (
+            columnExists(
+                $pdo,
+                'expenses',
+                $column
+            )
+        ) {
+            return $column;
+        }
+    }
+
+    return null;
+}
+
+function calculateExpenses(
+    PDO $pdo,
+    string $start,
+    string $endExclusive
+): float {
+    $dateColumn =
+        expenseDateColumn($pdo);
+
+    $amountColumn =
+        expenseAmountColumn($pdo);
+
+    if (
+        $dateColumn === null
+        || $amountColumn === null
+    ) {
+        return 0.00;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(
+            SUM(`$amountColumn`),
+            0
+        )
+        FROM expenses
+        WHERE `$dateColumn` >= ?
+          AND `$dateColumn` < ?"
+    );
+
+    $stmt->execute([
+        $start,
+        $endExclusive
+    ]);
+
+    return money(
+        (float)$stmt->fetchColumn()
+    );
+}
+
+function calculateDailyExpenses(
+    PDO $pdo,
+    string $start,
+    string $endExclusive
+): array {
+    $result = [];
+
+    $dateColumn =
+        expenseDateColumn($pdo);
+
+    $amountColumn =
+        expenseAmountColumn($pdo);
+
+    if (
+        $dateColumn === null
+        || $amountColumn === null
+    ) {
+        return $result;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT
+            `$dateColumn` AS expense_date,
+            COALESCE(
+                SUM(`$amountColumn`),
+                0
+            ) AS amount
+         FROM expenses
+         WHERE `$dateColumn` >= ?
+           AND `$dateColumn` < ?
+         GROUP BY `$dateColumn`
+         ORDER BY `$dateColumn`"
+    );
+
+    $stmt->execute([
+        $start,
+        $endExclusive
+    ]);
+
+    foreach (
+        $stmt->fetchAll(PDO::FETCH_ASSOC)
+        as $row
+    ) {
+        $result[
+            $row['expense_date']
+        ] = money(
+            (float)$row['amount']
+        );
+    }
+
+    return $result;
+}
+
+/*
+|--------------------------------------------------------------------------
+| MANUAL ANALYTICS EXPENSES
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+|
+| The actual expense_date is authoritative.
+|
+| We do NOT allocate the expense across dates.
+| We do NOT modify expense_date when the selected period changes.
+|
+| A manual expense belongs to one accounting period.
+|
+| Example:
+|
+| Period: Aug 15 -> Sep 15
+| Expense date: Sep 15
+| Amount: ₱5,000
+|
+| It stays on Sep 15.
+|
+|--------------------------------------------------------------------------
+*/
 
 function getManualExpenses(
     PDO $pdo,
     int $periodId
 ): array {
-
-    getPeriod(
-        $pdo,
-        $periodId
-    );
+    if (
+        !tableExists(
+            $pdo,
+            'analytics_manual_expenses'
+        )
+    ) {
+        return [];
+    }
 
     $stmt = $pdo->prepare(
         "SELECT
@@ -1526,241 +1151,149 @@ function getManualExpenses(
             e.amount,
             e.expense_date,
             e.expense_end_date,
-
-            p.analytics_year AS period_year,
-            p.analytics_month AS period_month,
-            p.period_start AS period_start,
-            p.period_end AS period_end
-
+            e.notes,
+            e.created_at,
+            e.updated_at
          FROM analytics_manual_expenses e
-
-         INNER JOIN analytics_periods p
-            ON p.period_id = e.period_id
-
          WHERE e.period_id = ?
-
          ORDER BY
-            e.expense_date DESC,
-            e.expense_id DESC"
+            e.expense_date ASC,
+            e.expense_id ASC"
     );
 
     $stmt->execute([
         $periodId
     ]);
 
-    $result = [];
+    $expenses = [];
 
     foreach (
         $stmt->fetchAll(PDO::FETCH_ASSOC)
-        as $expense
+        as $row
     ) {
-
-        $expenseDate =
-            (string)$expense['expense_date'];
-
-        $expenseEndDate =
-            !empty($expense['expense_end_date'])
-                ? (string)$expense['expense_end_date']
-                : $expenseDate;
-
-        if (!validDate($expenseDate)) {
-            continue;
-        }
-
-        if (!validDate($expenseEndDate)) {
-            $expenseEndDate =
-                $expenseDate;
-        }
-
-        if ($expenseEndDate < $expenseDate) {
-            $expenseEndDate =
-                $expenseDate;
-        }
-
-        $result[] = [
+        $expenses[] = [
             'expense_id' =>
-                (int)$expense['expense_id'],
-
-            'category' =>
-                (string)$expense['category'],
-
-            'description' =>
-                (string)$expense['description'],
-
-            'amount' =>
-                money(
-                    (float)$expense['amount']
-                ),
-
-            'allocated_amount' =>
-                money(
-                    (float)$expense['amount']
-                ),
-
-            'expense_date' =>
-                $expenseDate,
-
-            'expense_end_date' =>
-                $expenseEndDate,
+                (int)$row['expense_id'],
 
             'period_id' =>
-                (int)$expense['period_id'],
+                (int)$row['period_id'],
 
-            'period_label' =>
-                formatPeriodRange(
-                    (string)$expense['period_start'],
-                    (string)$expense['period_end']
-                ),
+            'category' =>
+                (string)$row['category'],
+
+            'description' =>
+                (string)$row['description'],
+
+            'amount' =>
+                money((float)$row['amount']),
+
+            'expense_date' =>
+                (string)$row['expense_date'],
+
+            'expense_end_date' =>
+                $row['expense_end_date']
+                    ? (string)$row['expense_end_date']
+                    : null,
 
             'notes' =>
-                ''
+                $row['notes'] !== null
+                    ? (string)$row['notes']
+                    : null,
+
+            'created_at' =>
+                (string)$row['created_at'],
+
+            'updated_at' =>
+                (string)$row['updated_at']
         ];
     }
 
-    return $result;
+    return $expenses;
 }
 
 function calculateManualExpenseTotal(
     PDO $pdo,
     int $periodId
 ): float {
-
-    $expenses =
-        getManualExpenses(
+    if (
+        !tableExists(
             $pdo,
-            $periodId
-        );
-
-    $total = 0.00;
-
-    foreach ($expenses as $expense) {
-        $total +=
-            (float)$expense['amount'];
+            'analytics_manual_expenses'
+        )
+    ) {
+        return 0.00;
     }
 
-    return money($total);
-}
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(
+            SUM(amount),
+            0
+        )
+        FROM analytics_manual_expenses
+        WHERE period_id = ?"
+    );
 
-/*
-|--------------------------------------------------------------------------
-| Manual expenses by date
-|--------------------------------------------------------------------------
-*/
+    $stmt->execute([
+        $periodId
+    ]);
+
+    return money(
+        (float)$stmt->fetchColumn()
+    );
+}
 
 function calculateDailyManualExpenses(
     PDO $pdo,
-    int $periodId
+    int $periodId,
+    string $start,
+    string $endExclusive
 ): array {
-
-    $period =
-        getPeriod(
-            $pdo,
-            $periodId
-        );
-
-    $expenses =
-        getManualExpenses(
-            $pdo,
-            $periodId
-        );
-
     $result = [];
 
-    foreach ($expenses as $expense) {
-
-        $coverage =
-            manualExpenseCoverage(
-                $expense
-            );
-
-        if (!$coverage) {
-            continue;
-        }
-
-        $totalDays =
-            overlapDays(
-                $coverage['start'],
-                $coverage['end'],
-                $coverage['start'],
-                $coverage['end']
-            );
-
-        if ($totalDays <= 0) {
-            continue;
-        }
-
-        $overlapStart =
-            $coverage['start']
-            >
-            $period['period_start']
-                ? $coverage['start']
-                : $period['period_start'];
-
-        $overlapEnd =
-            $coverage['end']
-            <
-            $period['period_end']
-                ? $coverage['end']
-                : $period['period_end'];
-
-        if ($overlapStart > $overlapEnd) {
-            continue;
-        }
-
-        $allocated =
-            (float)$expense['amount']
-            *
-            (
-                overlapDays(
-                    $overlapStart,
-                    $overlapEnd,
-                    $coverage['start'],
-                    $coverage['end']
-                )
-                /
-                $totalDays
-            );
-
-        $days =
-            overlapDays(
-                $overlapStart,
-                $overlapEnd,
-                $overlapStart,
-                $overlapEnd
-            );
-
-        if ($days <= 0) {
-            continue;
-        }
-
-        $perDay =
-            $allocated / $days;
-
-        $date =
-            dateObject($overlapStart);
-
-        $last =
-            dateObject($overlapEnd);
-
-        while ($date <= $last) {
-
-            $key =
-                $date->format('Y-m-d');
-
-            if (!isset($result[$key])) {
-                $result[$key] = 0.00;
-            }
-
-            $result[$key] += $perDay;
-
-            $date =
-                $date->modify('+1 day');
-        }
+    if (
+        !tableExists(
+            $pdo,
+            'analytics_manual_expenses'
+        )
+    ) {
+        return $result;
     }
 
-    foreach ($result as $date => $amount) {
-        $result[$date] =
-            money($amount);
+    /*
+     * No allocation.
+     *
+     * Group directly by the stored expense_date.
+     */
+    $stmt = $pdo->prepare(
+        "SELECT
+            expense_date,
+            COALESCE(
+                SUM(amount),
+                0
+            ) AS amount
+         FROM analytics_manual_expenses
+         WHERE period_id = ?
+           AND expense_date >= ?
+           AND expense_date < ?
+         GROUP BY expense_date
+         ORDER BY expense_date"
+    );
+
+    $stmt->execute([
+        $periodId,
+        $start,
+        $endExclusive
+    ]);
+
+    foreach (
+        $stmt->fetchAll(PDO::FETCH_ASSOC)
+        as $row
+    ) {
+        $result[
+            $row['expense_date']
+        ] = money(
+            (float)$row['amount']
+        );
     }
 
     return $result;
@@ -1768,7 +1301,20 @@ function calculateDailyManualExpenses(
 
 /*
 |--------------------------------------------------------------------------
-| Save manual expense
+| Save manual Analytics expense
+|--------------------------------------------------------------------------
+|
+| The UI now has:
+|
+| Period
+| Category
+| Description
+| Amount
+| Expense Date
+|
+| Old fields such as end_period_id, expense_end_date and notes
+| remain in the database for compatibility, but new records do
+| not use them.
 |--------------------------------------------------------------------------
 */
 
@@ -1779,9 +1325,6 @@ function saveManualExpense(PDO $pdo): void
 
     $periodId =
         postInt('period_id');
-
-    $endPeriodId =
-        postInt('end_period_id');
 
     $category =
         postString('category');
@@ -1795,45 +1338,30 @@ function saveManualExpense(PDO $pdo): void
     $expenseDate =
         postString('expense_date');
 
-    $expenseEndDate =
-        postString('expense_end_date');
-
-    $notes =
-        postString('notes');
-
     if ($periodId <= 0) {
         respond([
             'success' => false,
-            'message' => 'Please select Accounting Period 1.'
+            'message' => 'Please select an accounting period.'
         ], 400);
     }
 
-    getPeriod(
-        $pdo,
-        $periodId
-    );
-
-    if ($endPeriodId > 0) {
-
+    $period =
         getPeriod(
             $pdo,
-            $endPeriodId
+            $periodId
         );
-    } else {
-        $endPeriodId = null;
-    }
 
     if ($category === '') {
         respond([
             'success' => false,
-            'message' => 'Please select an expense category.'
+            'message' => 'Please enter an expense category.'
         ], 400);
     }
 
     if ($description === '') {
         respond([
             'success' => false,
-            'message' => 'Please enter a description.'
+            'message' => 'Please enter an expense description.'
         ], 400);
     }
 
@@ -1851,58 +1379,30 @@ function saveManualExpense(PDO $pdo): void
         ], 400);
     }
 
-    if ($expenseEndDate === '') {
-        $expenseEndDate =
-            $expenseDate;
-    }
-
-    if (!validDate($expenseEndDate)) {
+    /*
+     * The expense date must belong to the selected accounting period.
+     */
+    if (
+        $expenseDate < $period['period_start']
+        || $expenseDate > $period['period_end']
+    ) {
         respond([
             'success' => false,
-            'message' => 'Please enter a valid expense end date.'
-        ], 400);
-    }
-
-    if ($expenseEndDate < $expenseDate) {
-        respond([
-            'success' => false,
-            'message' => 'Expense end date cannot be before expense date.'
+            'message' =>
+                'The expense date must be within the selected accounting period.'
         ], 400);
     }
 
     /*
-     * If a second accounting period is selected,
-     * its start must not be before Period 1.
+     * Deliberately force the old multi-period fields to NULL.
+     *
+     * The actual date remains exactly what the user entered.
      */
-    if ($endPeriodId !== null) {
-
-        $period1 =
-            getPeriod(
-                $pdo,
-                $periodId
-            );
-
-        $period2 =
-            getPeriod(
-                $pdo,
-                $endPeriodId
-            );
-
-        if (
-            $period2['period_start']
-            <
-            $period1['period_start']
-        ) {
-            respond([
-                'success' => false,
-                'message' =>
-                    'Accounting Period 2 must be the same as or later than Accounting Period 1.'
-            ], 400);
-        }
-    }
+    $endPeriodId = null;
+    $expenseEndDate = null;
+    $notes = null;
 
     if ($expenseId > 0) {
-
         $stmt = $pdo->prepare(
             "UPDATE analytics_manual_expenses
              SET
@@ -1922,70 +1422,79 @@ function saveManualExpense(PDO $pdo): void
             $endPeriodId,
             $category,
             $description,
-            money($amount),
+            $amount,
             $expenseDate,
             $expenseEndDate,
-            $notes !== '' ? $notes : null,
+            $notes,
             $expenseId
         ]);
 
-    } else {
-
-        $stmt = $pdo->prepare(
-            "INSERT INTO analytics_manual_expenses
-            (
-                period_id,
-                end_period_id,
-                category,
-                description,
-                amount,
-                expense_date,
-                expense_end_date,
-                notes,
-                created_by
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?
-            )"
-        );
-
-        $createdBy = null;
-
-        if (
-            isset($_SESSION['user_id'])
-        ) {
-            $createdBy =
-                (int)$_SESSION['user_id'];
-        }
-
-        $stmt->execute([
-            $periodId,
-            $endPeriodId,
-            $category,
-            $description,
-            money($amount),
-            $expenseDate,
-            $expenseEndDate,
-            $notes !== '' ? $notes : null,
-            $createdBy
+        respond([
+            'success' => true,
+            'message' => 'Expense updated.'
         ]);
     }
 
+    $createdBy = null;
+
+    /*
+     * Try to use the authenticated admin/user ID when available.
+     */
+    foreach ([
+        $_SESSION['user_id'] ?? null,
+        $_SESSION['admin_id'] ?? null
+    ] as $sessionUserId) {
+        if (
+            $sessionUserId !== null
+            && (int)$sessionUserId > 0
+        ) {
+            $createdBy = (int)$sessionUserId;
+            break;
+        }
+    }
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO analytics_manual_expenses (
+            period_id,
+            end_period_id,
+            category,
+            description,
+            amount,
+            expense_date,
+            expense_end_date,
+            notes,
+            created_by
+        )
+        VALUES (
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
+        )"
+    );
+
+    $stmt->execute([
+        $periodId,
+        $endPeriodId,
+        $category,
+        $description,
+        $amount,
+        $expenseDate,
+        $expenseEndDate,
+        $notes,
+        $createdBy
+    ]);
+
     respond([
         'success' => true,
-        'message' =>
-            $expenseId > 0
-                ? 'Manual expense updated.'
-                : 'Manual expense added.'
+        'message' => 'Expense added.',
+        'expense_id' =>
+            (int)$pdo->lastInsertId()
     ]);
 }
 
@@ -2018,32 +1527,28 @@ function deleteManualExpense(PDO $pdo): void
 
     respond([
         'success' => true,
-        'message' => 'Manual expense deleted.'
+        'message' => 'Expense deleted.'
     ]);
 }
 
 /*
 |--------------------------------------------------------------------------
-| Top customers
+| TOP CUSTOMERS
+|--------------------------------------------------------------------------
+|
+| Kept independent from the financial revenue calculation.
+| This remains based on delivery records / amount due.
 |--------------------------------------------------------------------------
 */
 
 function calculateTopCustomers(
     PDO $pdo,
     string $start,
-    string $endExclusive,
-    int $limit = 5
+    string $endExclusive
 ): array {
-
     if (
-        !tableExists(
-            $pdo,
-            'deliveries'
-        ) ||
-        !tableExists(
-            $pdo,
-            'customers'
-        )
+        !tableExists($pdo, 'deliveries')
+        || !tableExists($pdo, 'customers')
     ) {
         return [];
     }
@@ -2053,13 +1558,13 @@ function calculateTopCustomers(
             $pdo,
             'deliveries',
             'customer_id'
-        ) ||
-        !columnExists(
+        )
+        || !columnExists(
             $pdo,
             'deliveries',
             'delivery_date'
-        ) ||
-        !columnExists(
+        )
+        || !columnExists(
             $pdo,
             'deliveries',
             'amount_due'
@@ -2068,50 +1573,83 @@ function calculateTopCustomers(
         return [];
     }
 
-    $limit =
-        max(
-            1,
-            min(
-                $limit,
-                20
+    $nameColumn = null;
+
+    foreach ([
+        'name',
+        'customer_name',
+        'full_name'
+    ] as $column) {
+        if (
+            columnExists(
+                $pdo,
+                'customers',
+                $column
             )
-        );
+        ) {
+            $nameColumn = $column;
+            break;
+        }
+    }
+
+    if ($nameColumn === null) {
+        return [];
+    }
+
+    $slimExpression = '0';
+    $roundExpression = '0';
+
+    if (
+        columnExists(
+            $pdo,
+            'deliveries',
+            'slim_quantity'
+        )
+    ) {
+        $slimExpression =
+            'COALESCE(d.slim_quantity, 0)';
+    }
+
+    if (
+        columnExists(
+            $pdo,
+            'deliveries',
+            'round_quantity'
+        )
+    ) {
+        $roundExpression =
+            'COALESCE(d.round_quantity, 0)';
+    }
 
     $stmt = $pdo->prepare(
         "SELECT
-            c.customer_id,
-            c.customer_name,
-            COUNT(d.delivery_id) AS deliveries,
+            d.customer_id,
+            c.`$nameColumn` AS customer_name,
+            COUNT(*) AS delivery_count,
             COALESCE(
                 SUM(d.amount_due),
                 0
-            ) AS revenue,
+            ) AS total_amount,
             COALESCE(
-                SUM(d.slim_quantity),
+                SUM($slimExpression),
                 0
-            ) AS slim_gallons,
+            ) AS slim_quantity,
             COALESCE(
-                SUM(d.round_quantity),
+                SUM($roundExpression),
                 0
-            ) AS round_gallons
-
+            ) AS round_quantity
          FROM deliveries d
-
          INNER JOIN customers c
-            ON c.customer_id =
-               d.customer_id
-
-         WHERE d.customer_id IS NOT NULL
-           AND d.delivery_date >= ?
+            ON c.customer_id = d.customer_id
+         WHERE d.delivery_date >= ?
            AND d.delivery_date < ?
-
          GROUP BY
-            c.customer_id,
-            c.customer_name
-
-         ORDER BY revenue DESC
-
-         LIMIT $limit"
+            d.customer_id,
+            c.`$nameColumn`
+         ORDER BY
+            total_amount DESC,
+            delivery_count DESC
+         LIMIT 5"
     );
 
     $stmt->execute([
@@ -2125,7 +1663,6 @@ function calculateTopCustomers(
         $stmt->fetchAll(PDO::FETCH_ASSOC)
         as $row
     ) {
-
         $result[] = [
             'customer_id' =>
                 (int)$row['customer_id'],
@@ -2133,23 +1670,17 @@ function calculateTopCustomers(
             'customer_name' =>
                 (string)$row['customer_name'],
 
-            'deliveries' =>
-                (int)$row['deliveries'],
+            'delivery_count' =>
+                (int)$row['delivery_count'],
 
-            'revenue' =>
-                money(
-                    (float)$row['revenue']
-                ),
+            'total_amount' =>
+                money((float)$row['total_amount']),
 
-            'slim_gallons' =>
-                money(
-                    (float)$row['slim_gallons']
-                ),
+            'slim_quantity' =>
+                (int)$row['slim_quantity'],
 
-            'round_gallons' =>
-                money(
-                    (float)$row['round_gallons']
-                )
+            'round_quantity' =>
+                (int)$row['round_quantity']
         ];
     }
 
@@ -2158,82 +1689,135 @@ function calculateTopCustomers(
 
 /*
 |--------------------------------------------------------------------------
-| Outstanding balances
+| OUTSTANDING BALANCES
+|--------------------------------------------------------------------------
+|
+| Kept as an overall customer balance.
 |--------------------------------------------------------------------------
 */
 
 function calculateOutstandingBalances(
-    PDO $pdo,
-    int $limit = 10
+    PDO $pdo
 ): array {
-
     if (
-        !tableExists($pdo, 'deliveries') ||
-        !tableExists($pdo, 'payments') ||
         !tableExists($pdo, 'customers')
+        || !tableExists($pdo, 'deliveries')
     ) {
         return [];
     }
 
-    $limit =
-        max(
-            1,
-            min(
-                $limit,
-                50
+    if (
+        !tableExists($pdo, 'payments')
+        || !columnExists(
+            $pdo,
+            'deliveries',
+            'customer_id'
+        )
+        || !columnExists(
+            $pdo,
+            'deliveries',
+            'amount_due'
+        )
+    ) {
+        return [];
+    }
+
+    $customerNameColumn = null;
+
+    foreach ([
+        'name',
+        'customer_name',
+        'full_name'
+    ] as $column) {
+        if (
+            columnExists(
+                $pdo,
+                'customers',
+                $column
             )
-        );
+        ) {
+            $customerNameColumn = $column;
+            break;
+        }
+    }
+
+    if ($customerNameColumn === null) {
+        return [];
+    }
+
+    $paymentJoin = '';
+
+    if (
+        columnExists(
+            $pdo,
+            'payments',
+            'delivery_id'
+        )
+        && columnExists(
+            $pdo,
+            'deliveries',
+            'delivery_id'
+        )
+        && columnExists(
+            $pdo,
+            'payments',
+            'amount'
+        )
+    ) {
+        $paymentJoin =
+            "LEFT JOIN (
+                SELECT
+                    delivery_id,
+                    COALESCE(
+                        SUM(amount),
+                        0
+                    ) AS paid_amount
+                FROM payments
+                WHERE delivery_id IS NOT NULL
+                GROUP BY delivery_id
+            ) p
+                ON p.delivery_id = d.delivery_id";
+    } else {
+        return [];
+    }
 
     $stmt = $pdo->query(
         "SELECT
-            c.customer_id,
-            c.customer_name,
-
+            d.customer_id,
+            c.`$customerNameColumn` AS customer_name,
             COALESCE(
                 SUM(d.amount_due),
                 0
-            )
-            -
+            ) AS expected_amount,
             COALESCE(
-                SUM(
-                    COALESCE(
-                        pt.paid_amount,
-                        0
-                    )
-                ),
+                SUM(COALESCE(p.paid_amount, 0)),
                 0
-            ) AS balance
-
-         FROM customers c
-
-         INNER JOIN deliveries d
-            ON d.customer_id =
-               c.customer_id
-
-         LEFT JOIN (
-
-            SELECT
-                delivery_id,
-                SUM(amount) AS paid_amount
-
-            FROM payments
-
-            GROUP BY delivery_id
-
-         ) pt
-
-            ON pt.delivery_id =
-               d.delivery_id
-
+            ) AS paid_amount
+         FROM deliveries d
+         INNER JOIN customers c
+            ON c.customer_id = d.customer_id
+         $paymentJoin
          GROUP BY
-            c.customer_id,
-            c.customer_name
-
-         HAVING balance > 0
-
-         ORDER BY balance DESC
-
-         LIMIT $limit"
+            d.customer_id,
+            c.`$customerNameColumn`
+         HAVING
+            (
+                COALESCE(SUM(d.amount_due), 0)
+                -
+                COALESCE(
+                    SUM(COALESCE(p.paid_amount, 0)),
+                    0
+                )
+            ) > 0
+         ORDER BY
+            (
+                COALESCE(SUM(d.amount_due), 0)
+                -
+                COALESCE(
+                    SUM(COALESCE(p.paid_amount, 0)),
+                    0
+                )
+            ) DESC"
     );
 
     $result = [];
@@ -2242,6 +1826,18 @@ function calculateOutstandingBalances(
         $stmt->fetchAll(PDO::FETCH_ASSOC)
         as $row
     ) {
+        $expected =
+            (float)$row['expected_amount'];
+
+        $paid =
+            (float)$row['paid_amount'];
+
+        $balance =
+            $expected - $paid;
+
+        if ($balance <= 0) {
+            continue;
+        }
 
         $result[] = [
             'customer_id' =>
@@ -2250,10 +1846,14 @@ function calculateOutstandingBalances(
             'customer_name' =>
                 (string)$row['customer_name'],
 
-            'balance' =>
-                money(
-                    (float)$row['balance']
-                )
+            'expected_amount' =>
+                money($expected),
+
+            'paid_amount' =>
+                money($paid),
+
+            'outstanding_balance' =>
+                money($balance)
         ];
     }
 
@@ -2262,40 +1862,49 @@ function calculateOutstandingBalances(
 
 /*
 |--------------------------------------------------------------------------
-| Recent customers
+| RECENT CUSTOMERS
 |--------------------------------------------------------------------------
 */
 
 function calculateRecentCustomers(
-    PDO $pdo,
-    int $limit = 8
+    PDO $pdo
 ): array {
-
     if (
-        !tableExists(
-            $pdo,
-            'customers'
-        )
+        !tableExists($pdo, 'customers')
     ) {
         return [];
     }
 
-    $limit =
-        max(
-            1,
-            min(
-                $limit,
-                20
+    $nameColumn = null;
+
+    foreach ([
+        'name',
+        'customer_name',
+        'full_name'
+    ] as $column) {
+        if (
+            columnExists(
+                $pdo,
+                'customers',
+                $column
             )
-        );
+        ) {
+            $nameColumn = $column;
+            break;
+        }
+    }
+
+    if ($nameColumn === null) {
+        return [];
+    }
 
     $dateColumn = null;
 
     foreach ([
         'created_at',
-        'created_date'
+        'created_date',
+        'date_created'
     ] as $column) {
-
         if (
             columnExists(
                 $pdo,
@@ -2308,29 +1917,31 @@ function calculateRecentCustomers(
         }
     }
 
-    if (!$dateColumn) {
-
-        $stmt = $pdo->query(
-            "SELECT
-                customer_id,
-                customer_name
-             FROM customers
-             ORDER BY customer_id DESC
-             LIMIT $limit"
-        );
-
-    } else {
-
-        $stmt = $pdo->query(
-            "SELECT
-                customer_id,
-                customer_name,
-                $dateColumn AS created_at
-             FROM customers
-             ORDER BY $dateColumn DESC
-             LIMIT $limit"
-        );
+    if ($dateColumn === null) {
+        return [];
     }
+
+    $idColumn = 'customer_id';
+
+    if (
+        !columnExists(
+            $pdo,
+            'customers',
+            $idColumn
+        )
+    ) {
+        return [];
+    }
+
+    $stmt = $pdo->query(
+        "SELECT
+            `$idColumn` AS customer_id,
+            `$nameColumn` AS customer_name,
+            `$dateColumn` AS created_at
+         FROM customers
+         ORDER BY `$dateColumn` DESC
+         LIMIT 5"
+    );
 
     $result = [];
 
@@ -2338,7 +1949,6 @@ function calculateRecentCustomers(
         $stmt->fetchAll(PDO::FETCH_ASSOC)
         as $row
     ) {
-
         $result[] = [
             'customer_id' =>
                 (int)$row['customer_id'],
@@ -2347,8 +1957,7 @@ function calculateRecentCustomers(
                 (string)$row['customer_name'],
 
             'created_at' =>
-                $row['created_at']
-                    ?? null
+                (string)$row['created_at']
         ];
     }
 
@@ -2357,17 +1966,14 @@ function calculateRecentCustomers(
 
 /*
 |--------------------------------------------------------------------------
-| Dashboard
+| DASHBOARD
 |--------------------------------------------------------------------------
 */
 
-function actionDashboard(PDO $pdo): void
-{
-    ensureAnalyticsSchema($pdo);
-
-    $periodId =
-        postInt('period_id');
-
+function actionDashboard(
+    PDO $pdo,
+    int $periodId
+): void {
     $period =
         getPeriod(
             $pdo,
@@ -2383,18 +1989,25 @@ function actionDashboard(PDO $pdo): void
     $endExclusive =
         exclusiveEnd($end);
 
-    $walkIn =
+    $walkInRevenue =
         calculateWalkInRevenue(
             $pdo,
             $start,
             $endExclusive
         );
 
-    $delivery =
-        calculateDeliveryStats(
+    $deliveryRevenue =
+        calculateDeliveryRevenue(
             $pdo,
             $start,
             $endExclusive
+        );
+
+    $totalRevenue =
+        money(
+            $walkInRevenue
+            +
+            $deliveryRevenue
         );
 
     $dailyClosingExpenses =
@@ -2410,13 +2023,6 @@ function actionDashboard(PDO $pdo): void
             $periodId
         );
 
-    $totalRevenue =
-        money(
-            $walkIn
-            +
-            $delivery['revenue']
-        );
-
     $totalExpenses =
         money(
             $dailyClosingExpenses
@@ -2424,7 +2030,7 @@ function actionDashboard(PDO $pdo): void
             $manualExpenses
         );
 
-    $netRevenue =
+    $netProfit =
         money(
             $totalRevenue
             -
@@ -2450,6 +2056,12 @@ function actionDashboard(PDO $pdo): void
             'end' =>
                 $end,
 
+            'period_start' =>
+                $start,
+
+            'period_end' =>
+                $end,
+
             'label' =>
                 formatPeriodRange(
                     $start,
@@ -2458,86 +2070,82 @@ function actionDashboard(PDO $pdo): void
         ],
 
         'analytics' => [
-
             'total_revenue' =>
                 $totalRevenue,
 
             'walk_in_revenue' =>
-                $walkIn,
+                money($walkInRevenue),
 
             'delivery_revenue' =>
-                $delivery['revenue'],
+                money($deliveryRevenue),
 
             'daily_closing_expenses' =>
-                $dailyClosingExpenses,
+                money($dailyClosingExpenses),
 
             'manual_expenses' =>
-                $manualExpenses,
+                money($manualExpenses),
 
             'total_expenses' =>
                 $totalExpenses,
 
+            'net_profit' =>
+                $netProfit,
+
+            /*
+             * Kept as an alias for compatibility with
+             * older frontend code.
+             */
             'net_revenue' =>
-                $netRevenue,
-
-            'slim_gallons' =>
-                $delivery['slim'],
-
-            'round_gallons' =>
-                $delivery['round'],
-
-            'total_gallons' =>
-                money(
-                    $delivery['slim']
-                    +
-                    $delivery['round']
-                ),
-
-            'total_deliveries' =>
-                $delivery['deliveries']
+                $netProfit
         ],
-
-        'manual_expenses_list' =>
-            getManualExpenses(
-                $pdo,
-                $periodId
-            ),
 
         'top_customers' =>
             calculateTopCustomers(
                 $pdo,
                 $start,
-                $endExclusive,
-                5
+                $endExclusive
             ),
 
         'outstanding_balances' =>
             calculateOutstandingBalances(
-                $pdo,
-                10
+                $pdo
             ),
 
         'recent_customers' =>
             calculateRecentCustomers(
-                $pdo,
-                8
+                $pdo
             )
     ]);
 }
 
 /*
 |--------------------------------------------------------------------------
-| Daily chart
+| DAILY CHART
+|--------------------------------------------------------------------------
+|
+| One row per calendar day.
+|
+| Revenue:
+|   Daily Closing walk-in/shop revenue
+|   +
+|   actual delivery payments received
+|
+| Expenses:
+|   Daily Closing expenses
+|   +
+|   Manual Analytics expenses
+|
+| Net Profit:
+|   Revenue - Total Expenses
+|
+| The date is never shifted.
 |--------------------------------------------------------------------------
 */
 
-function actionDailyChart(PDO $pdo): void
-{
-    ensureAnalyticsSchema($pdo);
-
-    $periodId =
-        postInt('period_id');
-
+function actionDailyChart(
+    PDO $pdo,
+    int $periodId
+): void {
     $period =
         getPeriod(
             $pdo,
@@ -2553,180 +2161,148 @@ function actionDailyChart(PDO $pdo): void
     $endExclusive =
         exclusiveEnd($end);
 
-    $walkIns =
-        calculateDailyWalkIns(
+    $dailyRevenue =
+        calculateDailyRevenue(
             $pdo,
             $start,
             $endExclusive
         );
 
-    $deliveries =
-        calculateDailyDeliveries(
-            $pdo,
-            $start,
-            $endExclusive
-        );
-
-    $closingExpenses =
+    $dailyClosingExpenses =
         calculateDailyExpenses(
             $pdo,
             $start,
             $endExclusive
         );
 
-    $manualExpenses =
+    $dailyManualExpenses =
         calculateDailyManualExpenses(
             $pdo,
-            $periodId
+            $periodId,
+            $start,
+            $endExclusive
         );
 
     $days = [];
 
-    $date =
+    $cursor =
         dateObject($start);
 
     $last =
         dateObject($end);
 
-    while ($date <= $last) {
+    while ($cursor <= $last) {
+        $date =
+            $cursor->format('Y-m-d');
 
-        $dateKey =
-            $date->format('Y-m-d');
-
-        $walkIn =
-            $walkIns[$dateKey]
+        $walkInRevenue =
+            $dailyRevenue[$date]['walk_in_revenue']
             ?? 0.00;
 
-        $delivery =
-            $deliveries[$dateKey]
-            ??
-            [
-                'revenue' => 0.00,
-                'slim' => 0.00,
-                'round' => 0.00,
-                'deliveries' => 0
-            ];
-
-        $closingExpense =
-            $closingExpenses[$dateKey]
-            ?? 0.00;
-
-        $manualExpense =
-            $manualExpenses[$dateKey]
+        $deliveryRevenue =
+            $dailyRevenue[$date]['delivery_revenue']
             ?? 0.00;
 
         $revenue =
             money(
-                $walkIn
+                $walkInRevenue
                 +
-                $delivery['revenue']
+                $deliveryRevenue
             );
 
-        $totalExpense =
+        $closingExpenses =
+            $dailyClosingExpenses[$date]
+            ?? 0.00;
+
+        $manualExpenses =
+            $dailyManualExpenses[$date]
+            ?? 0.00;
+
+        $totalExpenses =
             money(
-                $closingExpense
+                $closingExpenses
                 +
-                $manualExpense
+                $manualExpenses
+            );
+
+        $netProfit =
+            money(
+                $revenue
+                -
+                $totalExpenses
             );
 
         $days[] = [
             'date' =>
-                $dateKey,
+                $date,
 
             'label' =>
-                $date->format('M j'),
+                $cursor->format('M j'),
+
+            'walk_in_revenue' =>
+                money($walkInRevenue),
+
+            'delivery_revenue' =>
+                money($deliveryRevenue),
 
             'revenue' =>
                 $revenue,
 
-            'walk_in_revenue' =>
-                money($walkIn),
-
-            'delivery_revenue' =>
-                money(
-                    $delivery['revenue']
-                ),
-
             'daily_closing_expenses' =>
-                money($closingExpense),
+                money($closingExpenses),
 
             'manual_expenses' =>
-                money($manualExpense),
+                money($manualExpenses),
 
             'expenses' =>
-                $totalExpense,
+                $totalExpenses,
 
+            'total_expenses' =>
+                $totalExpenses,
+
+            'net_profit' =>
+                $netProfit,
+
+            /*
+             * Compatibility alias.
+             */
             'net_revenue' =>
-                money(
-                    $revenue
-                    -
-                    $totalExpense
-                ),
-
-            'slim_gallons' =>
-                money(
-                    $delivery['slim']
-                ),
-
-            'round_gallons' =>
-                money(
-                    $delivery['round']
-                ),
-
-            'total_gallons' =>
-                money(
-                    $delivery['slim']
-                    +
-                    $delivery['round']
-                )
+                $netProfit
         ];
 
-        $date =
-            $date->modify('+1 day');
+        $cursor =
+            $cursor->modify('+1 day');
     }
 
     respond([
         'success' => true,
 
         'period' => [
-            'start' => $start,
-            'end' => $end
+            'period_id' =>
+                (int)$period['period_id'],
+
+            'start' =>
+                $start,
+
+            'end' =>
+                $end
         ],
 
-        'days' => $days
+        'days' =>
+            $days
     ]);
 }
 
 /*
 |--------------------------------------------------------------------------
-| Periods
+| Manual expenses action
 |--------------------------------------------------------------------------
 */
 
-function actionPeriods(PDO $pdo): void
-{
-    ensureAnalyticsSchema($pdo);
-
-    respond([
-        'success' => true,
-        'periods' =>
-            getPeriods($pdo)
-    ]);
-}
-
-/*
-|--------------------------------------------------------------------------
-| Manual expenses
-|--------------------------------------------------------------------------
-*/
-
-function actionManualExpenses(PDO $pdo): void
-{
-    ensureAnalyticsSchema($pdo);
-
-    $periodId =
-        postInt('period_id');
-
+function actionManualExpenses(
+    PDO $pdo,
+    int $periodId
+): void {
     getPeriod(
         $pdo,
         $periodId
@@ -2739,128 +2315,135 @@ function actionManualExpenses(PDO $pdo): void
             getManualExpenses(
                 $pdo,
                 $periodId
-            ),
-
-        'total' =>
-            calculateManualExpenseTotal(
-                $pdo,
-                $periodId
             )
     ]);
 }
 
 /*
 |--------------------------------------------------------------------------
-| History
+| Historical data
+|--------------------------------------------------------------------------
+|
+| Keep the existing history endpoint available.
+| It now reports the same accounting figures used by the dashboard.
 |--------------------------------------------------------------------------
 */
 
-function actionHistory(PDO $pdo): void
-{
-    ensureAnalyticsSchema($pdo);
+function actionHistory(
+    PDO $pdo,
+    int $periodId
+): void {
+    $period =
+        getPeriod(
+            $pdo,
+            $periodId
+        );
 
-    $periods =
-        getPeriods($pdo);
+    $start =
+        $period['period_start'];
+
+    $end =
+        $period['period_end'];
+
+    $endExclusive =
+        exclusiveEnd($end);
+
+    $dailyRevenue =
+        calculateDailyRevenue(
+            $pdo,
+            $start,
+            $endExclusive
+        );
+
+    $dailyClosingExpenses =
+        calculateDailyExpenses(
+            $pdo,
+            $start,
+            $endExclusive
+        );
+
+    $dailyManualExpenses =
+        calculateDailyManualExpenses(
+            $pdo,
+            $periodId,
+            $start,
+            $endExclusive
+        );
 
     $history = [];
 
-    foreach ($periods as $period) {
+    $cursor =
+        dateObject($start);
 
-        $periodId =
-            (int)$period['period_id'];
+    $last =
+        dateObject($end);
 
-        $start =
-            $period['start'];
-
-        $end =
-            $period['end'];
-
-        $endExclusive =
-            exclusiveEnd($end);
+    while ($cursor <= $last) {
+        $date =
+            $cursor->format('Y-m-d');
 
         $walkIn =
-            calculateWalkInRevenue(
-                $pdo,
-                $start,
-                $endExclusive
-            );
+            $dailyRevenue[$date]['walk_in_revenue']
+            ?? 0.00;
 
         $delivery =
-            calculateDeliveryStats(
-                $pdo,
-                $start,
-                $endExclusive
-            );
-
-        $dailyExpenses =
-            calculateExpenses(
-                $pdo,
-                $start,
-                $endExclusive
-            );
-
-        $manualExpenses =
-            calculateManualExpenseTotal(
-                $pdo,
-                $periodId
-            );
+            $dailyRevenue[$date]['delivery_revenue']
+            ?? 0.00;
 
         $revenue =
             money(
-                $walkIn
-                +
-                $delivery['revenue']
+                $walkIn + $delivery
             );
+
+        $closing =
+            $dailyClosingExpenses[$date]
+            ?? 0.00;
+
+        $manual =
+            $dailyManualExpenses[$date]
+            ?? 0.00;
 
         $expenses =
             money(
-                $dailyExpenses
-                +
-                $manualExpenses
+                $closing + $manual
+            );
+
+        $netProfit =
+            money(
+                $revenue - $expenses
             );
 
         $history[] = [
-            'period_id' =>
-                $periodId,
+            'date' =>
+                $date,
 
-            'year' =>
-                $period['year'],
-
-            'month' =>
-                $period['month'],
-
-            'month_label' =>
-                $period['month_label'],
-
-            'start' =>
-                $start,
-
-            'end' =>
-                $end,
-
-            'range' =>
-                $period['label'],
+            'label' =>
+                $cursor->format('M j'),
 
             'revenue' =>
                 $revenue,
 
+            'daily_closing_expenses' =>
+                money($closing),
+
+            'manual_expenses' =>
+                money($manual),
+
             'expenses' =>
                 $expenses,
 
-            'net_revenue' =>
-                money(
-                    $revenue
-                    -
-                    $expenses
-                ),
+            'total_expenses' =>
+                $expenses,
 
-            'gallons' =>
-                money(
-                    $delivery['slim']
-                    +
-                    $delivery['round']
-                )
+            'net_profit' =>
+                $netProfit,
+
+            'net_revenue' =>
+                $netProfit
         ];
+
+        $cursor =
+            $cursor->modify('+1 day');
     }
 
     respond([
@@ -2871,24 +2454,23 @@ function actionHistory(PDO $pdo): void
 
 /*
 |--------------------------------------------------------------------------
-| Main
+| Main dispatcher
 |--------------------------------------------------------------------------
 */
 
 try {
-
     ensureAnalyticsSchema($pdo);
 
     $action =
-        postString(
-            'action',
-            'periods'
-        );
+        postString('action');
 
     switch ($action) {
-
         case 'periods':
-            actionPeriods($pdo);
+            respond([
+                'success' => true,
+                'periods' =>
+                    getPeriods($pdo)
+            ]);
             break;
 
         case 'save_period':
@@ -2896,15 +2478,57 @@ try {
             break;
 
         case 'dashboard':
-            actionDashboard($pdo);
+            $periodId =
+                postInt('period_id');
+
+            if ($periodId <= 0) {
+                respond([
+                    'success' => false,
+                    'message' =>
+                        'Please select an accounting period.'
+                ], 400);
+            }
+
+            actionDashboard(
+                $pdo,
+                $periodId
+            );
             break;
 
         case 'daily_chart':
-            actionDailyChart($pdo);
+            $periodId =
+                postInt('period_id');
+
+            if ($periodId <= 0) {
+                respond([
+                    'success' => false,
+                    'message' =>
+                        'Please select an accounting period.'
+                ], 400);
+            }
+
+            actionDailyChart(
+                $pdo,
+                $periodId
+            );
             break;
 
         case 'manual_expenses':
-            actionManualExpenses($pdo);
+            $periodId =
+                postInt('period_id');
+
+            if ($periodId <= 0) {
+                respond([
+                    'success' => false,
+                    'message' =>
+                        'Please select an accounting period.'
+                ], 400);
+            }
+
+            actionManualExpenses(
+                $pdo,
+                $periodId
+            );
             break;
 
         case 'save_manual_expense':
@@ -2916,7 +2540,21 @@ try {
             break;
 
         case 'history':
-            actionHistory($pdo);
+            $periodId =
+                postInt('period_id');
+
+            if ($periodId <= 0) {
+                respond([
+                    'success' => false,
+                    'message' =>
+                        'Please select an accounting period.'
+                ], 400);
+            }
+
+            actionHistory(
+                $pdo,
+                $periodId
+            );
             break;
 
         default:
@@ -2926,14 +2564,15 @@ try {
                     'Unknown analytics action.'
             ], 400);
     }
-
 } catch (Throwable $e) {
+    error_log(
+        'Home analytics error: '
+        . $e->getMessage()
+    );
 
     respond([
         'success' => false,
         'message' =>
-            $e->getMessage(),
-        'error_type' =>
-            get_class($e)
+            'Unable to load analytics data.'
     ], 500);
 }
