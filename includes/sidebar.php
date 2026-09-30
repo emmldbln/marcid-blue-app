@@ -135,7 +135,7 @@ $navItems = [
 
 
         <a
-            href="#"
+            href="<?= htmlspecialchars($assetRoot) ?>auth/logout.php"
             class="nav-item"
         >
 

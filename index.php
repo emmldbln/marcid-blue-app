@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Marcid Blue - Login</title>
+
     <link rel="stylesheet" href="assets/css/app.css">
 
     <style>
@@ -73,50 +74,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             justify-content: center;
             padding: 24px;
-            background: linear-gradient(135deg, #eaf7fd 0%, #f5f8fb 50%, #e9f9f8 100%);
+            background: linear-gradient(
+                135deg,
+                #eaf7fd 0%,
+                #f5f8fb 50%,
+                #e9f9f8 100%
+            );
         }
 
         .login-card {
             width: 100%;
-            max-width: 420px;
+            max-width: 560px;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
             padding: 36px;
         }
-
         .login-brand {
             text-align: center;
             margin-bottom: 30px;
         }
 
         .login-logo {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 16px;
+            width: 500px;
+            height: 300px;
+            margin: -20px auto 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--primary);
-            color: white;
-            border-radius: 14px;
-            font-size: 30px;
-            box-shadow: var(--shadow-sm);
+            overflow: visible;
         }
 
-        .login-brand h1 {
-            font-size: 24px;
-            margin-bottom: 5px;
+        .login-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
         }
 
-        .login-brand p {
+        .login-subtitle {
+            margin: 0;
             color: var(--text-muted);
-            font-size: 13px;
+            font-size: 14px;
+            font-weight: 500;
         }
 
         .login-form {
-            margin-top: 10px;
+            margin-top: 24px;
         }
 
         .login-button {
@@ -145,25 +150,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 
 <body>
+
 <div class="login-page">
+
     <div class="login-card">
+
         <div class="login-brand">
+
             <div class="login-logo">
-                <img src="assets/images/mb-logo.png" alt="Marcid Blue Logo">
+                <img
+                    src="assets/images/mb-logo-binangonan.png"
+                    alt="Marcid Blue Binangonan Logo"
+                >
             </div>
-            <h1>Marcid Blue</h1>
-            <p>Water Station Management System</p>
+
+            <p class="login-subtitle">
+                Water Station Management System
+            </p>
+
         </div>
 
+
         <?php if ($error !== ''): ?>
+
             <div class="login-error">
                 <?= htmlspecialchars($error) ?>
             </div>
+
         <?php endif; ?>
 
+
         <form method="POST" class="login-form">
+
             <div class="form-group">
-                <label for="username" class="form-label">Username</label>
+
+                <label
+                    for="username"
+                    class="form-label"
+                >
+                    Username
+                </label>
+
                 <input
                     type="text"
                     id="username"
@@ -173,10 +200,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     autocomplete="username"
                     required
                 >
+
             </div>
 
+
             <div class="form-group">
-                <label for="password" class="form-label">Password</label>
+
+                <label
+                    for="password"
+                    class="form-label"
+                >
+                    Password
+                </label>
+
                 <input
                     type="password"
                     id="password"
@@ -186,17 +222,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     autocomplete="current-password"
                     required
                 >
+
             </div>
 
-            <button type="submit" class="btn btn-primary login-button">
+
+            <button
+                type="submit"
+                class="btn btn-primary login-button"
+            >
                 Log In
             </button>
+
         </form>
+
 
         <div class="login-footer">
             Authorized access only
         </div>
+
     </div>
+
 </div>
+
 </body>
 </html>
+
