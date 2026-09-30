@@ -570,6 +570,9 @@
 
         let total = 0;
 
+        /*
+         * Station Cash Advances
+         */
         getRows(
             '.expense-row'
         ).forEach(
@@ -588,6 +591,53 @@
                 const amount =
                     row.querySelector(
                         '.expense-amount'
+                    );
+
+                if (
+                    !category ||
+                    category.value !==
+                        'Cash Advance' ||
+                    !employee ||
+                    String(employee.value) !==
+                        targetId
+                ) {
+                    return;
+                }
+
+                total +=
+                    Number(
+                        amount
+                            ? amount.value
+                            : 0
+                    ) || 0;
+
+            }
+        );
+
+        /*
+         * Driver Cash Advances
+         *
+         * Driver expenses use their own row classes,
+         * so they must be included separately.
+         */
+        getRows(
+            '.driver-expense-row'
+        ).forEach(
+            row => {
+
+                const category =
+                    row.querySelector(
+                        '.driver-expense-category'
+                    );
+
+                const employee =
+                    row.querySelector(
+                        '.driver-expense-name'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.driver-expense-amount'
                     );
 
                 if (
@@ -1313,15 +1363,19 @@
                     );
 
                 /*
-                 * The previous payroll model stored the total
-                 * (Cash Advance + Remaining Salary) in the input.
-                 * Convert that saved total back to Remaining Salary.
+                 * Payroll state stores ONLY the amount entered
+                 * in Payroll Amount (Remaining).
+                 *
+                 * Cash Advance is calculated separately from
+                 * Station Expenses and Driver Expenses.
+                 *
+                 * Therefore the saved value must be restored
+                 * exactly as entered. Never subtract Cash Advance.
                  */
                 const remainingSalary =
                     Math.max(
                         0,
-                        savedAmount -
-                        cashAdvance
+                        savedAmount
                     );
 
                 input.value =
