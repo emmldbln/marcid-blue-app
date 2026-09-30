@@ -2853,18 +2853,6 @@ function openExpenseForm() {
     expenseDateInput.focus();
 
 
-    const period =
-        getSelectedPeriod();
-
-
-    if (period) {
-
-        document.getElementById(
-            'expensePeriod1'
-        ).value =
-            period.period_id;
-
-    }
 }
 
 
