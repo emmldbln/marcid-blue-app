@@ -2976,6 +2976,91 @@
     * ---------------------------------------------------------
     */
 
+    /*
+     * ---------------------------------------------------------
+     * SAVE BEFORE PAGE REFRESH / NAVIGATION
+     * ---------------------------------------------------------
+     *
+     * A normal debounce can still be cancelled by the browser
+     * when the user refreshes immediately after editing.
+     *
+     * Keepalive allows the final draft request to continue while
+     * the page is being unloaded.
+     * ---------------------------------------------------------
+     */
+    function saveDraftBeforeUnload() {
+
+        if (
+            isRestoring ||
+            dailyId <= 0
+        ) {
+            return;
+        }
+
+
+        clearTimeout(
+            autosaveTimer
+        );
+
+
+        const draft =
+            collectDraft();
+
+
+        const body =
+            new URLSearchParams();
+
+
+        body.set(
+            'action',
+            'save'
+        );
+
+
+        body.set(
+            'daily_id',
+            String(dailyId)
+        );
+
+
+        body.set(
+            'draft',
+            JSON.stringify(draft)
+        );
+
+
+        try {
+
+            fetch(
+                BACKEND_URL,
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type':
+                            'application/x-www-form-urlencoded; charset=UTF-8',
+
+                        Accept:
+                            'application/json'
+                    },
+                    body
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Marcid Blue: unable to save draft before page exit.',
+                error
+            );
+
+        }
+
+    }
+
+
     function scheduleAutosave() {
 
         if (
@@ -3725,6 +3810,12 @@
                 );
 
             }
+        );
+
+
+        window.addEventListener(
+            'beforeunload',
+            saveDraftBeforeUnload
         );
 
 
