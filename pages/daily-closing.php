@@ -1646,16 +1646,14 @@ $walkInOtherSales = 0.00;
     }
 
     /* =========================================================
-    CURRENT DEBT PANEL
+    DAILY CLOSING SIDE TABS
     ========================================================= */
 
+    .payroll-tab,
     .current-debt-tab {
         position: fixed;
-        top: 50%;
         right: 0;
         z-index: 9990;
-
-        transform: translateY(-50%);
 
         display: flex;
         align-items: center;
@@ -1666,16 +1664,10 @@ $walkInOtherSales = 0.00;
 
         padding: 14px 8px;
 
-        border: 1px solid #b91c1c;
-        border-right: 0;
-        border-radius: 12px 0 0 12px;
-
-        background: #dc2626;
-        color: #ffffff;
+        box-sizing: border-box;
+        cursor: pointer;
 
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-
-        cursor: pointer;
 
         transition:
             background 0.15s ease,
@@ -1683,9 +1675,59 @@ $walkInOtherSales = 0.00;
             box-shadow 0.15s ease;
     }
 
+
+    /* =========================================================
+    PAYROLL TAB
+    ========================================================= */
+
+    .payroll-tab {
+        top: calc(50% - 178px);
+
+        border: 1px solid #0f766e;
+        border-right: 0;
+        border-radius: 12px 0 0 12px;
+
+        background: #0f9f95;
+        color: #ffffff;
+    }
+
+    .payroll-tab:hover {
+        background: #0d857d;
+        border-color: #0b6f68;
+
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+    }
+
+    .payroll-tab:active {
+        background: #0b6f68;
+    }
+
+    .payroll-tab.is-hidden {
+        display: none;
+    }
+
+
+    /* =========================================================
+    CURRENT DEBT TAB
+    ========================================================= */
+
+    .current-debt-tab {
+        top: 50%;
+
+        transform: translateY(-50%);
+
+        border: 1px solid #b91c1c;
+        border-right: 0;
+        border-radius: 12px 0 0 12px;
+
+        background: #dc2626;
+        color: #ffffff;
+    }
+
     .current-debt-tab:hover {
         background: #b91c1c;
         border-color: #991b1b;
+
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
     }
 
@@ -1697,6 +1739,12 @@ $walkInOtherSales = 0.00;
         display: none;
     }
 
+
+    /* =========================================================
+    SIDE TAB LABELS
+    ========================================================= */
+
+    .payroll-tab-content,
     .current-debt-tab-content {
         display: flex;
         align-items: center;
@@ -1708,8 +1756,10 @@ $walkInOtherSales = 0.00;
         white-space: nowrap;
     }
 
+    .payroll-tab-label,
     .current-debt-tab-label {
         color: #ffffff;
+
         font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.04em;
@@ -1881,7 +1931,7 @@ $walkInOtherSales = 0.00;
         white-space: nowrap;
     }
 
-        .current-debt-item-paid .current-debt-customer,
+    .current-debt-item-paid .current-debt-customer,
     .current-debt-original-paid {
         text-decoration: line-through;
         opacity: 0.6;
@@ -1928,11 +1978,24 @@ $walkInOtherSales = 0.00;
     }
 
 
+    /* =========================================================
+    MOBILE
+    ========================================================= */
+
     @media (max-width: 650px) {
 
+        .payroll-tab,
         .current-debt-tab {
             width: 38px;
             min-height: 145px;
+        }
+
+        .payroll-tab {
+            top: calc(50% - 153px);
+        }
+
+        .current-debt-tab {
+            top: 50%;
         }
 
         .current-debt-drawer {
@@ -1954,13 +2017,24 @@ $walkInOtherSales = 0.00;
 <body>
 
 <!-- =========================================================
-     CURRENT DEBT
+     DAILY CLOSING SIDE TABS
      ========================================================= -->
 
-<div
-    class="current-debt-overlay"
-    id="currentDebtOverlay"
-></div>
+<button
+    type="button"
+    class="payroll-tab"
+    id="payrollTab"
+    aria-label="Open Payroll"
+    title="Open Payroll"
+>
+    <span class="payroll-tab-content">
+
+        <span class="payroll-tab-label">
+            PAYROLL
+        </span>
+
+    </span>
+</button>
 
 
 <button
@@ -1978,6 +2052,16 @@ $walkInOtherSales = 0.00;
 
     </span>
 </button>
+
+
+<!-- =========================================================
+     CURRENT DEBT
+     ========================================================= -->
+
+<div
+    class="current-debt-overlay"
+    id="currentDebtOverlay"
+></div>
 
 
 <aside
