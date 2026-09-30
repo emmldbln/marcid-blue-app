@@ -602,13 +602,16 @@
                     const employeeId =
                         input.dataset.payrollAmount;
 
-                    const payrollAmount =
+                    const remainingSalary =
                         Number(
                             input.value
                         ) || 0;
 
                     total +=
-                        payrollAmount;
+                        remainingSalary +
+                        getEmployeeCashAdvance(
+                            employeeId
+                        );
 
                 }
             );
@@ -1184,14 +1187,30 @@
                 const savedAmount =
                     payroll.amount !== undefined &&
                     payroll.amount !== null
-                        ? payroll.amount
-                        : '0.00';
+                        ? Number(
+                            payroll.amount
+                        ) || 0
+                        : 0;
 
+                const cashAdvance =
+                    getEmployeeCashAdvance(
+                        employeeId
+                    );
+
+                /*
+                 * The previous payroll model stored the total
+                 * (Cash Advance + Remaining Salary) in the input.
+                 * Convert that saved total back to Remaining Salary.
+                 */
+                const remainingSalary =
+                    Math.max(
+                        0,
+                        savedAmount -
+                        cashAdvance
+                    );
 
                 input.value =
-                    String(
-                        savedAmount
-                    );
+                    remainingSalary.toFixed(2);
 
 
                 /*
@@ -1216,7 +1235,8 @@
 
                     amountDisplay.textContent =
                         formatPayrollMoney(
-                            savedAmount
+                            remainingSalary +
+                            cashAdvance
                         );
 
                 }
@@ -1657,15 +1677,7 @@
                 */
 
                 amountInput.value =
-                    formatPayrollMoney(
-                        getEmployeeCashAdvance(
-                            employee.employee_id
-                        )
-                    ).replace(
-                        '₱',
-                        ''
-                    )
-                    || '0.00';
+                    '0.00';
 
 
                 amountInput.style.width =
@@ -1717,7 +1729,10 @@
 
                         amountDisplay.textContent =
                             formatPayrollMoney(
-                                numericValue
+                                numericValue +
+                                getEmployeeCashAdvance(
+                                    employee.employee_id
+                                )
                             );
 
 
@@ -3987,6 +4002,50 @@
      */
 
     function bindAutosaveEvents() {
+
+        /*
+         * Capture delivery edits explicitly. Delivery rows are
+         * dynamically created, so this keeps autosave active for
+         * both Shop Deliveries and Driver Deliveries.
+         */
+        document.addEventListener(
+            'input',
+            event => {
+
+                if (
+                    !event.target.matches(
+                        'input'
+                    )
+                ) {
+                    return;
+                }
+
+                scheduleAutosave();
+                scheduleCurrentDebtRefresh();
+
+            },
+            true
+        );
+
+        document.addEventListener(
+            'change',
+            event => {
+
+                if (
+                    !event.target.matches(
+                        'input, select'
+                    )
+                ) {
+                    return;
+                }
+
+                scheduleAutosave();
+                scheduleCurrentDebtRefresh();
+
+            },
+            true
+        );
+
 
         document.addEventListener(
             'input',
