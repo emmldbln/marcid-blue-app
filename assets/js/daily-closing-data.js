@@ -2402,27 +2402,54 @@
 
     /*
     * ---------------------------------------------------------
-    * CURRENT DEBT PANEL UI
+    * DAILY CLOSING SIDE PANELS
+    * ---------------------------------------------------------
+    *
+    * Payroll and Current Debt share the same overlay.
+    *
+    * Only one drawer may be open at a time.
+    * When either drawer is open, BOTH bookmarks are hidden.
+    * When both drawers are closed, BOTH bookmarks are shown.
     * ---------------------------------------------------------
     */
 
-    function bindCurrentDebtPanel() {
+    function bindSidePanels() {
 
-        const tab =
+        const payrollTab =
+            getElement(
+                'payrollTab'
+            );
+
+        const payrollDrawer =
+            getElement(
+                'payrollDrawer'
+            );
+
+        const payrollClose =
+            getElement(
+                'payrollClose'
+            );
+
+        const currentDebtTab =
             getElement(
                 'currentDebtTab'
             );
 
-        const drawer =
+        const currentDebtDrawer =
             getElement(
                 'currentDebtDrawer'
             );
 
-        const closeButton =
+        const currentDebtClose =
             getElement(
                 'currentDebtClose'
             );
 
+        /*
+         * Current Debt owns the shared overlay.
+         *
+         * There is intentionally NO payrollOverlay.
+         */
         const overlay =
             getElement(
                 'currentDebtOverlay'
@@ -2430,77 +2457,244 @@
 
 
         if (
-            !tab ||
-            !drawer ||
-            !closeButton ||
-            !overlay
+            !payrollTab &&
+            !currentDebtTab
         ) {
             return;
         }
 
 
-        function openPanel() {
+        function hideBothTabs() {
 
-            drawer.classList.add(
+            if (payrollTab) {
+                payrollTab.classList.add(
+                    'is-hidden'
+                );
+            }
+
+            if (currentDebtTab) {
+                currentDebtTab.classList.add(
+                    'is-hidden'
+                );
+            }
+
+        }
+
+
+        function showBothTabs() {
+
+            if (payrollTab) {
+                payrollTab.classList.remove(
+                    'is-hidden'
+                );
+            }
+
+            if (currentDebtTab) {
+                currentDebtTab.classList.remove(
+                    'is-hidden'
+                );
+            }
+
+        }
+
+
+        function closeAllSideDrawers() {
+
+            if (payrollDrawer) {
+
+                payrollDrawer.classList.remove(
+                    'open'
+                );
+
+                payrollDrawer.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+            }
+
+
+            if (currentDebtDrawer) {
+
+                currentDebtDrawer.classList.remove(
+                    'open'
+                );
+
+                currentDebtDrawer.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+            }
+
+
+            showBothTabs();
+
+
+            if (overlay) {
+                overlay.classList.remove(
+                    'open'
+                );
+            }
+
+        }
+
+
+        function openCurrentDebt() {
+
+            /*
+             * Always close Payroll first.
+             */
+            if (payrollDrawer) {
+
+                payrollDrawer.classList.remove(
+                    'open'
+                );
+
+                payrollDrawer.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+            }
+
+
+            if (!currentDebtDrawer) {
+                return;
+            }
+
+
+            currentDebtDrawer.classList.add(
                 'open'
             );
 
-            overlay.classList.add(
-                'open'
-            );
-
-            tab.classList.add(
-                'is-hidden'
-            );
-
-            drawer.setAttribute(
+            currentDebtDrawer.setAttribute(
                 'aria-hidden',
                 'false'
             );
+
+
+            /*
+             * Hide BOTH bookmarks.
+             */
+            hideBothTabs();
+
+
+            /*
+             * Use the shared Current Debt overlay.
+             */
+            if (overlay) {
+                overlay.classList.add(
+                    'open'
+                );
+            }
+
 
             refreshCurrentDebt();
 
         }
 
 
-        function closePanel() {
+        function openPayroll() {
 
-            drawer.classList.remove(
+            /*
+             * Always close Current Debt first.
+             */
+            if (currentDebtDrawer) {
+
+                currentDebtDrawer.classList.remove(
+                    'open'
+                );
+
+                currentDebtDrawer.setAttribute(
+                    'aria-hidden',
+                    'true'
+                );
+
+            }
+
+
+            if (!payrollDrawer) {
+                return;
+            }
+
+
+            payrollDrawer.classList.add(
                 'open'
             );
 
-            overlay.classList.remove(
-                'open'
-            );
-
-            tab.classList.remove(
-                'is-hidden'
-            );
-
-            drawer.setAttribute(
+            payrollDrawer.setAttribute(
                 'aria-hidden',
-                'true'
+                'false'
+            );
+
+
+            /*
+             * Hide BOTH bookmarks.
+             */
+            hideBothTabs();
+
+
+            /*
+             * Payroll uses the same overlay as Current Debt.
+             */
+            if (overlay) {
+                overlay.classList.add(
+                    'open'
+                );
+            }
+
+        }
+
+
+        if (currentDebtTab) {
+
+            currentDebtTab.addEventListener(
+                'click',
+                openCurrentDebt
             );
 
         }
 
 
-        tab.addEventListener(
-            'click',
-            openPanel
-        );
+        if (currentDebtClose) {
+
+            currentDebtClose.addEventListener(
+                'click',
+                closeAllSideDrawers
+            );
+
+        }
 
 
-        closeButton.addEventListener(
-            'click',
-            closePanel
-        );
+        if (payrollTab) {
+
+            payrollTab.addEventListener(
+                'click',
+                openPayroll
+            );
+
+        }
 
 
-        overlay.addEventListener(
-            'click',
-            closePanel
-        );
+        if (payrollClose) {
+
+            payrollClose.addEventListener(
+                'click',
+                closeAllSideDrawers
+            );
+
+        }
+
+
+        if (overlay) {
+
+            overlay.addEventListener(
+                'click',
+                closeAllSideDrawers
+            );
+
+        }
 
 
         document.addEventListener(
@@ -2511,13 +2705,16 @@
                     event.key ===
                     'Escape'
                 ) {
-                    closePanel();
+
+                    closeAllSideDrawers();
+
                 }
 
             }
         );
 
     }
+
 
     /*
      * ---------------------------------------------------------
@@ -2631,7 +2828,7 @@
 
 
         bindAutosaveEvents();
-        bindCurrentDebtPanel();
+        bindSidePanels();
 
 
         /*
