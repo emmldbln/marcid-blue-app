@@ -913,6 +913,28 @@
                     'function'
                 ) {
 
+                    const existingField =
+                        row.querySelector(
+                            '.expense-name'
+                        );
+
+                    if (existingField) {
+
+                        existingField.dataset.selectedEmployeeId =
+                            data.employee_id !==
+                                undefined &&
+                            data.employee_id !==
+                                null
+                                ? String(
+                                    data.employee_id
+                                )
+                                : '';
+
+                        existingField.dataset.description =
+                            data.name || '';
+
+                    }
+
                     window.marcidBlueExpenseControllerUpdateRow(
                         row,
                         true
