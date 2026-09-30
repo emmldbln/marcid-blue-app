@@ -3,23 +3,27 @@
     'use strict';
 
     /*
-     * The page is:
-     * Temporary/daily-closing-redesign.php
-     *
-     * The backend is:
-     * Temporary/daily-closing-scripts/daily-closing-backend.php
+     * ---------------------------------------------------------
+     * CONFIGURATION
+     * ---------------------------------------------------------
      */
+
     const BACKEND_URL =
-          'backend/daily-closing-backend.php';
+        'backend/daily-closing-backend.php';
+
+    const PAYROLL_BACKEND_URL =
+        'backend/payroll-backend.php';
 
     const AUTOSAVE_DELAY = 700;
 
     const CURRENT_DEBT_REFRESH_DELAY = 350;
 
-    const PAYROLL_BACKEND_URL = 'backend/payroll-backend.php';
 
-    let payrollEmployees = [];
-
+    /*
+     * ---------------------------------------------------------
+     * STATE
+     * ---------------------------------------------------------
+     */
 
     let dailyId = 0;
 
@@ -32,7 +36,10 @@
     let saveQueued = false;
 
     let currentDebtRefreshTimer = null;
+
     let currentDebtRequestId = 0;
+
+    let payrollEmployees = [];
 
 
     /*
@@ -135,12 +142,6 @@
 
                 let value = data[key];
 
-                /*
-                * Payment methods default to the first active
-                * method configured in Settings when the saved
-                * draft has no method.
-                */
-
                 if (
                     key === 'method' &&
                     (
@@ -153,6 +154,7 @@
                     value =
                         window.MARCID_BLUE_DEFAULT_PAYMENT_METHOD ||
                         'Cash';
+
                 }
 
                 setInputValue(
@@ -162,6 +164,46 @@
 
             }
         );
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * MONEY HELPERS
+     * ---------------------------------------------------------
+     */
+
+    function formatDebtMoney(value) {
+
+        const amount =
+            Number(value) || 0;
+
+        return '₱' +
+            amount.toLocaleString(
+                'en-PH',
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            );
+
+    }
+
+
+    function formatPayrollMoney(value) {
+
+        const amount =
+            Number(value) || 0;
+
+        return '₱' +
+            amount.toLocaleString(
+                'en-PH',
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            );
 
     }
 
@@ -325,6 +367,95 @@
 
     /*
      * ---------------------------------------------------------
+     * PAYROLL STATE
+     * ---------------------------------------------------------
+     */
+
+    function getPayrollAmountInput(employeeId) {
+
+        return document.querySelector(
+            '[data-payroll-amount="' +
+            String(employeeId) +
+            '"]'
+        );
+
+    }
+
+
+    function getPayrollState() {
+
+        return payrollEmployees.map(
+            employee => {
+
+                const employeeId =
+                    Number(
+                        employee.employee_id
+                    ) || 0;
+
+                const input =
+                    getPayrollAmountInput(
+                        employeeId
+                    );
+
+                const defaultAmount =
+                    Number(
+                        employee.daily_rate
+                    ) || 0;
+
+                const value =
+                    input
+                        ? input.value
+                        : String(defaultAmount);
+
+                return {
+
+                    employee_id:
+                        employeeId,
+
+                    full_name:
+                        employee.full_name || '',
+
+                    position:
+                        employee.position || '',
+
+                    daily_rate:
+                        defaultAmount,
+
+                    amount:
+                        value
+
+                };
+
+            }
+        );
+
+    }
+
+
+    function getPayrollTotal() {
+
+        return getPayrollState().reduce(
+            (
+                total,
+                employee
+            ) => {
+
+                return total +
+                    (
+                        Number(
+                            employee.amount
+                        ) || 0
+                    );
+
+            },
+            0
+        );
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
      * COMPLETE DRAFT
      * ---------------------------------------------------------
      */
@@ -344,7 +475,10 @@
                 collectShopState(),
 
             driver:
-                collectDriverState()
+                collectDriverState(),
+
+            payroll:
+                getPayrollState()
 
         };
 
@@ -448,14 +582,18 @@
         ensureRowCount(
             '#expenseRows',
             'addExpenseButton',
-            state.expenses.length
+            Array.isArray(state.expenses)
+                ? state.expenses.length
+                : 0
         );
 
 
         ensureRowCount(
             '#deliveryPaymentRows',
             'addDeliveryPaymentButton',
-            state.deliveries.length
+            Array.isArray(state.deliveries)
+                ? state.deliveries.length
+                : 0
         );
 
     }
@@ -470,7 +608,9 @@
         ensureRowCount(
             '#driverExpenseRows',
             'addDriverExpenseButton',
-            state.expenses.length
+            Array.isArray(state.expenses)
+                ? state.expenses.length
+                : 0
         );
 
 
@@ -491,7 +631,9 @@
 
 
         const targetCount =
-            state.deliveries.length;
+            Array.isArray(state.deliveries)
+                ? state.deliveries.length
+                : 0;
 
 
         const addOneButton =
@@ -548,13 +690,29 @@
         ensureShopRows(state);
 
 
+        const expenses =
+            Array.isArray(
+                state.expenses
+            )
+                ? state.expenses
+                : [];
+
+
+        const deliveries =
+            Array.isArray(
+                state.deliveries
+            )
+                ? state.deliveries
+                : [];
+
+
         const expenseRows =
             getRows(
                 '.expense-row'
             );
 
 
-        state.expenses.forEach(
+        expenses.forEach(
             (data, index) => {
 
                 setRowData(
@@ -582,7 +740,7 @@
             );
 
 
-        state.deliveries.forEach(
+        deliveries.forEach(
             (data, index) => {
 
                 setRowData(
@@ -638,13 +796,29 @@
         ensureDriverRows(state);
 
 
+        const expenses =
+            Array.isArray(
+                state.expenses
+            )
+                ? state.expenses
+                : [];
+
+
+        const deliveries =
+            Array.isArray(
+                state.deliveries
+            )
+                ? state.deliveries
+                : [];
+
+
         const expenseRows =
             getRows(
                 '.driver-expense-row'
             );
 
 
-        state.expenses.forEach(
+        expenses.forEach(
             (data, index) => {
 
                 setRowData(
@@ -672,7 +846,7 @@
             );
 
 
-        state.deliveries.forEach(
+        deliveries.forEach(
             (data, index) => {
 
                 setRowData(
@@ -707,6 +881,58 @@
 
     /*
      * ---------------------------------------------------------
+     * RESTORE PAYROLL
+     * ---------------------------------------------------------
+     */
+
+    function restorePayrollState(state) {
+
+        if (!Array.isArray(state)) {
+            return;
+        }
+
+        state.forEach(
+            payroll => {
+
+                const employeeId =
+                    Number(
+                        payroll.employee_id
+                    ) || 0;
+
+                if (employeeId <= 0) {
+                    return;
+                }
+
+                const input =
+                    getPayrollAmountInput(
+                        employeeId
+                    );
+
+                if (!input) {
+                    return;
+                }
+
+                if (
+                    payroll.amount !== undefined &&
+                    payroll.amount !== null
+                ) {
+
+                    input.value =
+                        payroll.amount;
+
+                }
+
+            }
+        );
+
+
+        updatePayrollTotal();
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
      * RECALCULATE
      * ---------------------------------------------------------
      */
@@ -725,6 +951,8 @@
             window
                 .marcidBlueDailyClosing
                 .calculateAll();
+
+            updatePayrollTotal();
 
             return;
 
@@ -750,14 +978,636 @@
                 }
             );
 
+
+        updatePayrollTotal();
+
     }
 
 
     /*
-    * ---------------------------------------------------------
-    * CURRENT DEBT
-    * ---------------------------------------------------------
-    */
+     * ---------------------------------------------------------
+     * PAYROLL
+     * ---------------------------------------------------------
+     */
+
+    function getPayrollListElement() {
+
+        return (
+            getElement('payrollList') ||
+            document.querySelector(
+                '.payroll-list'
+            ) ||
+            document.querySelector(
+                '[data-payroll-list]'
+            )
+        );
+
+    }
+
+
+    function getPayrollTotalElement() {
+
+        return (
+            getElement('payrollTotal') ||
+            document.querySelector(
+                '.payroll-total'
+            ) ||
+            document.querySelector(
+                '[data-payroll-total]'
+            )
+        );
+
+    }
+
+
+    function updatePayrollTotal() {
+
+        const total =
+            getPayrollTotal();
+
+
+        const totalElement =
+            getPayrollTotalElement();
+
+
+        if (totalElement) {
+
+            totalElement.textContent =
+                formatPayrollMoney(
+                    total
+                );
+
+        }
+
+
+        /*
+         * Let the Daily Closing calculator update
+         * Net Profit after payroll changes.
+         */
+        if (
+            window.marcidBlueDailyClosing &&
+            typeof
+                window
+                    .marcidBlueDailyClosing
+                    .calculateAll ===
+                'function'
+        ) {
+
+            window
+                .marcidBlueDailyClosing
+                .calculateAll();
+
+        }
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * RENDER PAYROLL
+     * ---------------------------------------------------------
+     *
+     * IMPORTANT:
+     * Payroll intentionally uses the same visual structure
+     * as Current Debt.
+     *
+     * There is NO TABLE here.
+     * ---------------------------------------------------------
+     */
+
+    function renderPayrollEmployees() {
+
+        const list =
+            getPayrollListElement();
+
+
+        if (!list) {
+
+            console.warn(
+                'Marcid Blue: payroll list element not found.'
+            );
+
+            return;
+
+        }
+
+
+        list.innerHTML = '';
+
+
+        if (
+            !Array.isArray(
+                payrollEmployees
+            ) ||
+            payrollEmployees.length === 0
+        ) {
+
+            const empty =
+                document.createElement(
+                    'div'
+                );
+
+            empty.className =
+                'payroll-empty';
+
+            empty.textContent =
+                'No active employees found.';
+
+            list.appendChild(
+                empty
+            );
+
+            updatePayrollTotal();
+
+            return;
+
+        }
+
+
+        payrollEmployees.forEach(
+            employee => {
+
+                const item =
+                    document.createElement(
+                        'div'
+                    );
+
+                item.className =
+                    'payroll-item';
+
+
+                /*
+                 * -------------------------------------------------
+                 * HEADER
+                 * -------------------------------------------------
+                 *
+                 * Employee name on the left.
+                 * Payroll amount on the right.
+                 * -------------------------------------------------
+                 */
+
+                const header =
+                    document.createElement(
+                        'div'
+                    );
+
+                header.className =
+                    'payroll-item-header';
+
+
+                const identity =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+                name.className =
+                    'payroll-employee-name';
+
+                name.textContent =
+                    employee.full_name ||
+                    'Unnamed Employee';
+
+
+                const position =
+                    document.createElement(
+                        'div'
+                    );
+
+                position.className =
+                    'payroll-employee-position';
+
+                position.textContent =
+                    employee.position ||
+                    '—';
+
+
+                identity.appendChild(
+                    name
+                );
+
+                identity.appendChild(
+                    position
+                );
+
+
+                const amountDisplay =
+                    document.createElement(
+                        'div'
+                    );
+
+                amountDisplay.className =
+                    'payroll-item-amount';
+
+
+                const initialAmount =
+                    Number(
+                        employee.daily_rate
+                    ) || 0;
+
+
+                amountDisplay.textContent =
+                    formatPayrollMoney(
+                        initialAmount
+                    );
+
+
+                header.appendChild(
+                    identity
+                );
+
+                header.appendChild(
+                    amountDisplay
+                );
+
+
+                item.appendChild(
+                    header
+                );
+
+
+                /*
+                 * -------------------------------------------------
+                 * DETAILS
+                 * -------------------------------------------------
+                 *
+                 * Same compact detail-card style as the Current
+                 * Debt drawer's item structure.
+                 * -------------------------------------------------
+                 */
+
+                const details =
+                    document.createElement(
+                        'div'
+                    );
+
+                details.className =
+                    'payroll-item-details';
+
+
+                /*
+                 * DAILY RATE
+                 */
+
+                const rateDetail =
+                    document.createElement(
+                        'div'
+                    );
+
+                rateDetail.className =
+                    'payroll-detail';
+
+
+                const rateLabel =
+                    document.createElement(
+                        'div'
+                    );
+
+                rateLabel.className =
+                    'payroll-detail-label';
+
+                rateLabel.textContent =
+                    'Daily Rate';
+
+
+                const rateValue =
+                    document.createElement(
+                        'div'
+                    );
+
+                rateValue.className =
+                    'payroll-detail-value';
+
+                rateValue.textContent =
+                    formatPayrollMoney(
+                        initialAmount
+                    );
+
+
+                rateDetail.appendChild(
+                    rateLabel
+                );
+
+                rateDetail.appendChild(
+                    rateValue
+                );
+
+
+                /*
+                 * PAYROLL AMOUNT
+                 */
+
+                const payrollDetail =
+                    document.createElement(
+                        'div'
+                    );
+
+                payrollDetail.className =
+                    'payroll-detail';
+
+
+                const payrollLabel =
+                    document.createElement(
+                        'div'
+                    );
+
+                payrollLabel.className =
+                    'payroll-detail-label';
+
+                payrollLabel.textContent =
+                    'Payroll Amount';
+
+
+                const amountInput =
+                    document.createElement(
+                        'input'
+                    );
+
+                amountInput.type =
+                    'number';
+
+                amountInput.min =
+                    '0';
+
+                amountInput.step =
+                    '0.01';
+
+                amountInput.inputMode =
+                    'decimal';
+
+                amountInput.className =
+                    'payroll-amount-input';
+
+                amountInput.dataset.payrollAmount =
+                    String(
+                        employee.employee_id
+                    );
+
+                amountInput.value =
+                    initialAmount.toFixed(2);
+
+
+                amountInput.style.width =
+                    '100%';
+
+                amountInput.style.boxSizing =
+                    'border-box';
+
+                amountInput.style.marginTop =
+                    '3px';
+
+                amountInput.style.padding =
+                    '0';
+
+                amountInput.style.border =
+                    '0';
+
+                amountInput.style.outline =
+                    'none';
+
+                amountInput.style.background =
+                    'transparent';
+
+                amountInput.style.color =
+                    'var(--text)';
+
+                amountInput.style.fontSize =
+                    '13px';
+
+                amountInput.style.fontWeight =
+                    '700';
+
+
+                amountInput.addEventListener(
+                    'input',
+                    () => {
+
+                        const numericValue =
+                            Number(
+                                amountInput.value
+                            ) || 0;
+
+
+                        amountDisplay.textContent =
+                            formatPayrollMoney(
+                                numericValue
+                            );
+
+
+                        updatePayrollTotal();
+
+                        scheduleAutosave();
+
+                    }
+                );
+
+
+                amountInput.addEventListener(
+                    'change',
+                    () => {
+
+                        const numericValue =
+                            Number(
+                                amountInput.value
+                            ) || 0;
+
+
+                        amountDisplay.textContent =
+                            formatPayrollMoney(
+                                numericValue
+                            );
+
+
+                        updatePayrollTotal();
+
+                        scheduleAutosave();
+
+                    }
+                );
+
+
+                payrollDetail.appendChild(
+                    payrollLabel
+                );
+
+                payrollDetail.appendChild(
+                    amountInput
+                );
+
+
+                details.appendChild(
+                    rateDetail
+                );
+
+                details.appendChild(
+                    payrollDetail
+                );
+
+
+                item.appendChild(
+                    details
+                );
+
+
+                list.appendChild(
+                    item
+                );
+
+            }
+        );
+
+
+        updatePayrollTotal();
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * LOAD PAYROLL EMPLOYEES
+     * ---------------------------------------------------------
+     */
+
+    async function loadPayrollEmployees() {
+
+        const list =
+            getPayrollListElement();
+
+
+        if (list) {
+
+            list.innerHTML = '';
+
+            const loading =
+                document.createElement(
+                    'div'
+                );
+
+            loading.className =
+                'payroll-loading';
+
+            loading.textContent =
+                'Loading payroll...';
+
+            list.appendChild(
+                loading
+            );
+
+        }
+
+
+        try {
+
+            const response =
+                await fetch(
+                    PAYROLL_BACKEND_URL +
+                    '?action=get_employees&_=' +
+                    Date.now(),
+                    {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            Accept:
+                                'application/json'
+                        }
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    'Payroll backend returned HTTP ' +
+                    response.status
+                );
+
+            }
+
+
+            const result =
+                await response.json();
+
+
+            if (!result.success) {
+
+                throw new Error(
+                    result.message ||
+                    'Unable to load employees.'
+                );
+
+            }
+
+
+            payrollEmployees =
+                Array.isArray(
+                    result.employees
+                )
+                    ? result.employees.filter(
+                        employee =>
+                            Number(
+                                employee.is_active
+                            ) === 1
+                    )
+                    : [];
+
+
+            renderPayrollEmployees();
+
+
+            console.info(
+                'Marcid Blue: payroll employees loaded.',
+                payrollEmployees
+            );
+
+
+        } catch (error) {
+
+            payrollEmployees = [];
+
+
+            if (list) {
+
+                list.innerHTML = '';
+
+                const errorElement =
+                    document.createElement(
+                        'div'
+                    );
+
+                errorElement.className =
+                    'payroll-empty payroll-error';
+
+                errorElement.textContent =
+                    'Unable to load payroll employees.';
+
+                list.appendChild(
+                    errorElement
+                );
+
+            }
+
+
+            console.error(
+                'Marcid Blue: unable to load payroll employees.',
+                error
+            );
+
+        }
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * CURRENT DEBT
+     * ---------------------------------------------------------
+     */
 
     function scheduleCurrentDebtRefresh() {
 
@@ -849,7 +1699,9 @@
                 requestId !==
                 currentDebtRequestId
             ) {
+
                 return;
+
             }
 
 
@@ -861,6 +1713,7 @@
                 );
 
                 return;
+
             }
 
 
@@ -880,14 +1733,14 @@
 
     }
 
-    function renderCurrentDebt(
-        result
-    ) {
+
+    function renderCurrentDebt(result) {
 
         const totalElement =
             getElement(
                 'currentDebtTotal'
             );
+
 
         const list =
             getElement(
@@ -901,10 +1754,10 @@
 
 
         /*
-        * =========================================================
-        * CURRENT DEBT
-        * =========================================================
-        */
+         * =========================================================
+         * CURRENT DEBT
+         * =========================================================
+         */
 
         const totalDebt =
             Number(
@@ -935,10 +1788,10 @@
 
 
         /*
-        * =========================================================
-        * NO CURRENT DEBT
-        * =========================================================
-        */
+         * =========================================================
+         * NO CURRENT DEBT
+         * =========================================================
+         */
 
         if (debtDates.length === 0) {
 
@@ -959,12 +1812,6 @@
 
         } else {
 
-            /*
-            * =====================================================
-            * EACH DATE
-            * =====================================================
-            */
-
             debtDates.forEach(
                 date => {
 
@@ -980,12 +1827,6 @@
                         return;
                     }
 
-
-                    /*
-                    * ---------------------------------------------
-                    * DATE HEADING
-                    * ---------------------------------------------
-                    */
 
                     const dateHeading =
                         document.createElement(
@@ -1046,42 +1887,11 @@
                     );
 
 
-                    /*
-                    * =================================================
-                    * GROUP BY CUSTOMER WITHIN THIS DATE ONLY
-                    * =================================================
-                    *
-                    * Same customer + same date:
-                    *
-                    *     Dennis ₱140
-                    *     Dennis ₱140
-                    *
-                    * becomes:
-                    *
-                    *     Dennis ₱280
-                    *             ₱140 + ₱140
-                    *
-                    *
-                    * Same customer + different date:
-                    *
-                    *     Sep 10  Dennis ₱140
-                    *     Sep 11  Dennis ₱140
-                    *
-                    * remains two separate entries.
-                    */
-
                     const customerGroups = {};
 
 
                     debts.forEach(
                         debt => {
-
-                            /*
-                            * Prefer customer_id.
-                            *
-                            * The fallback customer name is only
-                            * used if customer_id is unavailable.
-                            */
 
                             const customerId =
                                 debt.customer_id !== undefined &&
@@ -1134,12 +1944,6 @@
                     );
 
 
-                    /*
-                    * =================================================
-                    * RENDER EACH CUSTOMER
-                    * =================================================
-                    */
-
                     Object.values(
                         customerGroups
                     ).forEach(
@@ -1148,12 +1952,6 @@
                             const customerDebts =
                                 group.debts;
 
-
-                            /*
-                            * -----------------------------------------
-                            * TOTAL ORIGINAL AMOUNT
-                            * -----------------------------------------
-                            */
 
                             const totalOriginal =
                                 customerDebts.reduce(
@@ -1174,12 +1972,6 @@
                                 );
 
 
-                            /*
-                            * -----------------------------------------
-                            * TOTAL REMAINING AMOUNT
-                            * -----------------------------------------
-                            */
-
                             const totalRemaining =
                                 customerDebts.reduce(
                                     (
@@ -1198,12 +1990,6 @@
                                     0
                                 );
 
-
-                            /*
-                            * -----------------------------------------
-                            * TOTAL DRAFT PAYMENT
-                            * -----------------------------------------
-                            */
 
                             const totalDraftPayment =
                                 customerDebts.reduce(
@@ -1224,33 +2010,15 @@
                                 );
 
 
-                            /*
-                            * -----------------------------------------
-                            * HAS DRAFT PAYMENT?
-                            * -----------------------------------------
-                            */
-
                             const hasDraftPayment =
                                 totalDraftPayment >
                                 0.009;
 
 
-                            /*
-                            * -----------------------------------------
-                            * FULLY PAID IN CURRENT DRAFT?
-                            * -----------------------------------------
-                            */
-
                             const isDraftPaid =
                                 totalRemaining <= 0.009 &&
                                 hasDraftPayment;
 
-
-                            /*
-                            * -----------------------------------------
-                            * MAIN ITEM
-                            * -----------------------------------------
-                            */
 
                             const item =
                                 document.createElement(
@@ -1267,12 +2035,6 @@
                                 );
 
 
-                            /*
-                            * -----------------------------------------
-                            * HEADER
-                            * -----------------------------------------
-                            */
-
                             const header =
                                 document.createElement(
                                     'div'
@@ -1282,12 +2044,6 @@
                             header.className =
                                 'current-debt-item-header';
 
-
-                            /*
-                            * -----------------------------------------
-                            * CUSTOMER NAME
-                            * -----------------------------------------
-                            */
 
                             const name =
                                 document.createElement(
@@ -1304,12 +2060,6 @@
                                 'Unknown Customer';
 
 
-                            /*
-                            * -----------------------------------------
-                            * AMOUNT
-                            * -----------------------------------------
-                            */
-
                             const amount =
                                 document.createElement(
                                     'div'
@@ -1319,17 +2069,6 @@
                             amount.className =
                                 'current-debt-amount';
 
-
-                            /*
-                            * If today's draft payment changed
-                            * this customer's debt, show:
-                            *
-                            *     ₱280.00 → ₱180.00
-                            *
-                            * Otherwise:
-                            *
-                            *     ₱280.00
-                            */
 
                             if (
                                 hasDraftPayment
@@ -1361,7 +2100,6 @@
 
                                 arrowSpan.className =
                                     'current-debt-arrow';
-
 
                                 arrowSpan.textContent =
                                     ' → ';
@@ -1419,22 +2157,6 @@
                             );
 
 
-                            /*
-                            * =================================================
-                            * SAME-DAY TRANSACTION BREAKDOWN
-                            * =================================================
-                            *
-                            * Only show this when the customer has
-                            * multiple debt transactions on this date.
-                            *
-                            * Example:
-                            *
-                            * Dennis                 ₱280.00
-                            *                       ₱140 + ₱140
-                            *
-                            * A single transaction has no subtext.
-                            */
-
                             if (
                                 customerDebts.length > 1
                             ) {
@@ -1489,27 +2211,10 @@
 
 
         /*
-        * =========================================================
-        * CUSTOMER CREDIT
-        * =========================================================
-        *
-        * Credit remains separate from debt.
-        *
-        * Existing credit:
-        *
-        *     ₱140.00
-        *
-        * Existing + draft credit:
-        *
-        *     ₱140.00 → ₱210.00
-        *
-        * Draft-only credit:
-        *
-        *     ₱0.00 → ₱70.00
-        *
-        * This function only renders the result.
-        * It does NOT save anything to SQL.
-        */
+         * =========================================================
+         * CUSTOMER CREDIT
+         * =========================================================
+         */
 
         const totalCredit =
             Number(
@@ -1529,12 +2234,6 @@
             totalCredit > 0 ||
             credits.length > 0
         ) {
-
-            /*
-            * ---------------------------------------------
-            * CREDIT HEADING
-            * ---------------------------------------------
-            */
 
             const creditHeading =
                 document.createElement(
@@ -1574,12 +2273,6 @@
                 creditHeading
             );
 
-
-            /*
-            * ---------------------------------------------
-            * CREDIT CUSTOMERS
-            * ---------------------------------------------
-            */
 
             credits.forEach(
                 credit => {
@@ -1751,24 +2444,6 @@
 
     }
 
-    function formatDebtMoney(
-        value
-    ) {
-
-        const amount =
-            Number(value) || 0;
-
-
-        return '₱' +
-            amount.toLocaleString(
-                'en-PH',
-                {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }
-            );
-
-    }
 
     /*
      * ---------------------------------------------------------
@@ -1786,6 +2461,7 @@
                 'Marcid Blue: loading daily draft...'
             );
 
+
             const response =
                 await fetch(
                     BACKEND_URL +
@@ -1796,21 +2472,13 @@
                         credentials: 'same-origin',
                         cache: 'no-store',
                         headers: {
-                            'Accept': 'application/json'
+                            Accept:
+                                'application/json'
                         }
                     }
                 );
 
 
-            /*
-            * If there is no Open record, the backend returns 404.
-            *
-            * This can happen after the day has already been
-            * finalized and its status is Saved.
-            *
-            * We must NOT reopen the saved record.
-            * We only need its daily ID so Current Debt can load.
-            */
             if (response.status === 404) {
 
                 console.info(
@@ -1829,7 +2497,8 @@
                             credentials: 'same-origin',
                             cache: 'no-store',
                             headers: {
-                                'Accept': 'application/json'
+                                Accept:
+                                    'application/json'
                             }
                         }
                     );
@@ -1847,12 +2516,6 @@
 
                 const contextResult =
                     await contextResponse.json();
-
-
-                console.info(
-                    'Marcid Blue: daily context response:',
-                    contextResult
-                );
 
 
                 if (!contextResult.success) {
@@ -1885,16 +2548,6 @@
                 );
 
 
-                /*
-                * The record is already Saved.
-                *
-                * Do not restore a draft.
-                * Do not create a draft.
-                * Do not reopen the daily record.
-                *
-                * We only keep the daily ID so Current Debt
-                * can be loaded.
-                */
                 return;
 
             }
@@ -1983,10 +2636,19 @@
             );
 
 
-            /*
-            * The row controllers may need one browser frame
-            * to finish creating/updating the rows.
-            */
+            if (
+                Array.isArray(
+                    draft.payroll
+                )
+            ) {
+
+                restorePayrollState(
+                    draft.payroll
+                );
+
+            }
+
+
             requestAnimationFrame(
                 () => {
 
@@ -2092,7 +2754,8 @@
                         headers: {
                             'Content-Type':
                                 'application/x-www-form-urlencoded; charset=UTF-8',
-                            'Accept':
+
+                            Accept:
                                 'application/json'
                         },
                         body
@@ -2201,6 +2864,42 @@
             .forEach(
                 input => {
 
+                    if (
+                        input.matches(
+                            '.payroll-amount-input'
+                        )
+                    ) {
+
+                        const employeeId =
+                            Number(
+                                input.dataset.payrollAmount
+                            ) || 0;
+
+
+                        const employee =
+                            payrollEmployees.find(
+                                item =>
+                                    Number(
+                                        item.employee_id
+                                    ) === employeeId
+                            );
+
+
+                        input.value =
+                            employee
+                                ? (
+                                    Number(
+                                        employee.daily_rate
+                                    ) || 0
+                                ).toFixed(2)
+                                : '';
+
+
+                        return;
+
+                    }
+
+
                     input.value = '';
 
                 }
@@ -2275,6 +2974,8 @@
             );
 
 
+        updatePayrollTotal();
+
         recalculate();
 
     }
@@ -2315,7 +3016,8 @@
                         headers: {
                             'Content-Type':
                                 'application/x-www-form-urlencoded; charset=UTF-8',
-                            'Accept':
+
+                            Accept:
                                 'application/json'
                         },
                         body
@@ -2379,10 +3081,6 @@
         );
 
 
-        /*
-         * Prevent an autosave from running while the
-         * reset operation is deleting the saved draft.
-         */
         isRestoring = true;
 
 
@@ -2406,17 +3104,10 @@
 
 
     /*
-    * ---------------------------------------------------------
-    * DAILY CLOSING SIDE PANELS
-    * ---------------------------------------------------------
-    *
-    * Payroll and Current Debt share the same overlay.
-    *
-    * Only one drawer may be open at a time.
-    * When either drawer is open, BOTH bookmarks are hidden.
-    * When both drawers are closed, BOTH bookmarks are shown.
-    * ---------------------------------------------------------
-    */
+     * ---------------------------------------------------------
+     * DAILY CLOSING SIDE PANELS
+     * ---------------------------------------------------------
+     */
 
     function bindSidePanels() {
 
@@ -2425,36 +3116,37 @@
                 'payrollTab'
             );
 
+
         const payrollDrawer =
             getElement(
                 'payrollDrawer'
             );
+
 
         const payrollClose =
             getElement(
                 'payrollClose'
             );
 
+
         const currentDebtTab =
             getElement(
                 'currentDebtTab'
             );
+
 
         const currentDebtDrawer =
             getElement(
                 'currentDebtDrawer'
             );
 
+
         const currentDebtClose =
             getElement(
                 'currentDebtClose'
             );
 
-        /*
-         * Current Debt owns the shared overlay.
-         *
-         * There is intentionally NO payrollOverlay.
-         */
+
         const overlay =
             getElement(
                 'currentDebtOverlay'
@@ -2465,22 +3157,29 @@
             !payrollTab &&
             !currentDebtTab
         ) {
+
             return;
+
         }
 
 
         function hideBothTabs() {
 
             if (payrollTab) {
+
                 payrollTab.classList.add(
                     'is-hidden'
                 );
+
             }
 
+
             if (currentDebtTab) {
+
                 currentDebtTab.classList.add(
                     'is-hidden'
                 );
+
             }
 
         }
@@ -2489,15 +3188,20 @@
         function showBothTabs() {
 
             if (payrollTab) {
+
                 payrollTab.classList.remove(
                     'is-hidden'
                 );
+
             }
 
+
             if (currentDebtTab) {
+
                 currentDebtTab.classList.remove(
                     'is-hidden'
                 );
+
             }
 
         }
@@ -2537,9 +3241,11 @@
 
 
             if (overlay) {
+
                 overlay.classList.remove(
                     'open'
                 );
+
             }
 
         }
@@ -2547,9 +3253,6 @@
 
         function openCurrentDebt() {
 
-            /*
-             * Always close Payroll first.
-             */
             if (payrollDrawer) {
 
                 payrollDrawer.classList.remove(
@@ -2565,7 +3268,9 @@
 
 
             if (!currentDebtDrawer) {
+
                 return;
+
             }
 
 
@@ -2579,19 +3284,15 @@
             );
 
 
-            /*
-             * Hide BOTH bookmarks.
-             */
             hideBothTabs();
 
 
-            /*
-             * Use the shared Current Debt overlay.
-             */
             if (overlay) {
+
                 overlay.classList.add(
                     'open'
                 );
+
             }
 
 
@@ -2602,30 +3303,6 @@
 
         async function openPayroll() {
 
-            if (currentDebtDrawer) {
-                currentDebtDrawer.classList.remove('open');
-                currentDebtDrawer.setAttribute('aria-hidden', 'true');
-            }
-
-            if (!payrollDrawer) {
-                return;
-            }
-
-            payrollDrawer.classList.add('open');
-            payrollDrawer.setAttribute('aria-hidden', 'false');
-            hideBothTabs();
-
-            if (overlay) {
-                overlay.classList.add('open');
-            }
-
-            await loadPayrollEmployees();
-
-        }
-
-            /*
-             * Always close Current Debt first.
-             */
             if (currentDebtDrawer) {
 
                 currentDebtDrawer.classList.remove(
@@ -2641,7 +3318,9 @@
 
 
             if (!payrollDrawer) {
+
                 return;
+
             }
 
 
@@ -2655,20 +3334,19 @@
             );
 
 
-            /*
-             * Hide BOTH bookmarks.
-             */
             hideBothTabs();
 
 
-            /*
-             * Payroll uses the same overlay as Current Debt.
-             */
             if (overlay) {
+
                 overlay.classList.add(
                     'open'
                 );
+
             }
+
+
+            await loadPayrollEmployees();
 
         }
 
@@ -2764,7 +3442,20 @@
 
                 }
 
+
+                if (
+                    event.target.matches(
+                        '.payroll-amount-input'
+                    )
+                ) {
+
+                    updatePayrollTotal();
+
+                }
+
+
                 scheduleAutosave();
+
                 scheduleCurrentDebtRefresh();
 
             }
@@ -2785,8 +3476,22 @@
 
                 }
 
+
+                if (
+                    event.target.matches(
+                        '.payroll-amount-input'
+                    )
+                ) {
+
+                    updatePayrollTotal();
+
+                }
+
+
                 scheduleAutosave();
+
                 scheduleCurrentDebtRefresh();
+
             }
         );
 
@@ -2809,12 +3514,20 @@
 
 
                 if (!target) {
+
                     return;
+
                 }
 
 
                 setTimeout(
-                    () => scheduleAutosave(),
+                    () => {
+
+                        scheduleAutosave();
+
+                        scheduleCurrentDebtRefresh();
+
+                    },
                     50
                 );
 
@@ -2842,6 +3555,138 @@
 
     /*
      * ---------------------------------------------------------
+     * FINALIZE
+     * ---------------------------------------------------------
+     */
+
+    async function finalizeDailyClosing() {
+
+        const button =
+            getElement(
+                'finalizeDailyClosingButton'
+            );
+
+
+        if (!button) {
+
+            console.error(
+                'Finalize button not found.'
+            );
+
+            return;
+
+        }
+
+
+        const confirmed =
+            window.confirm(
+                'Are you sure you want to finalize and close this day?\n\n' +
+                'Once finalized, the daily record will be saved and closed.'
+            );
+
+
+        if (!confirmed) {
+
+            return;
+
+        }
+
+
+        button.disabled = true;
+
+
+        const originalText =
+            button.textContent;
+
+
+        button.textContent =
+            'Finalizing...';
+
+
+        try {
+
+            await saveDraft();
+
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                'action',
+                'finalize'
+            );
+
+
+            formData.append(
+                'daily_id',
+                String(dailyId)
+            );
+
+
+            const response =
+                await fetch(
+                    BACKEND_URL,
+                    {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        body: formData
+                    }
+                );
+
+
+            const result =
+                await response.json();
+
+
+            if (
+                !response.ok ||
+                !result.success
+            ) {
+
+                throw new Error(
+                    result.message ||
+                    'Unable to finalize the daily closing.'
+                );
+
+            }
+
+
+            window.alert(
+                result.message ||
+                'Daily closing finalized successfully.'
+            );
+
+
+            window.location.reload();
+
+
+        } catch (error) {
+
+            console.error(
+                'Finalize daily closing error:',
+                error
+            );
+
+
+            window.alert(
+                error.message ||
+                'Unable to finalize the daily closing.'
+            );
+
+
+            button.disabled = false;
+
+            button.textContent =
+                originalText;
+
+        }
+
+    }
+
+
+    /*
+     * ---------------------------------------------------------
      * STARTUP
      * ---------------------------------------------------------
      */
@@ -2854,13 +3699,10 @@
 
 
         bindAutosaveEvents();
+
         bindSidePanels();
 
 
-        /*
-         * Wait until the redesign's own JavaScript has
-         * finished initializing its rows and controls.
-         */
         await new Promise(
             resolve =>
                 setTimeout(
@@ -2870,12 +3712,119 @@
         );
 
 
+        /*
+         * Load active employees before loading the draft.
+         * This is important because payroll draft values need
+         * actual employee inputs to restore into.
+         */
+        await loadPayrollEmployees();
+
+
+        /*
+         * Load today's Daily Closing draft.
+         */
         await loadDraft();
+
+
+        /*
+         * Restore payroll one more time after the employees
+         * have definitely been rendered.
+         */
+        try {
+
+            if (dailyId > 0) {
+
+                const draftResponse =
+                    await fetch(
+                        BACKEND_URL +
+                        '?action=load&_=' +
+                        Date.now(),
+                        {
+                            method: 'GET',
+                            credentials: 'same-origin',
+                            cache: 'no-store',
+                            headers: {
+                                Accept:
+                                    'application/json'
+                            }
+                        }
+                    );
+
+
+                if (draftResponse.ok) {
+
+                    const draftResult =
+                        await draftResponse.json();
+
+
+                    if (
+                        draftResult.success &&
+                        draftResult.has_draft &&
+                        draftResult.draft &&
+                        Array.isArray(
+                            draftResult.draft.payroll
+                        )
+                    ) {
+
+                        restorePayrollState(
+                            draftResult.draft.payroll
+                        );
+
+                    }
+
+                }
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                'Marcid Blue: unable to restore payroll draft.',
+                error
+            );
+
+        }
+
 
         await refreshCurrentDebt();
 
     }
 
+
+    /*
+     * ---------------------------------------------------------
+     * PUBLIC API
+     * ---------------------------------------------------------
+     */
+
+    window.marcidBlueDailyClosingData = {
+
+        collectDraft,
+
+        saveDraft,
+
+        loadDraft,
+
+        reset:
+            resetDailyClosing,
+
+        finalizeDailyClosing,
+
+        getDailyId:
+            () => dailyId,
+
+        getPayrollTotal,
+
+        getPayrollState
+
+    };
+
+
+    /*
+     * ---------------------------------------------------------
+     * DOM READY
+     * ---------------------------------------------------------
+     */
 
     if (
         document.readyState ===
@@ -2895,97 +3844,5 @@
         initialize();
 
     }
-
-
-    /*
-     * ---------------------------------------------------------
-     * PUBLIC API
-     * ---------------------------------------------------------
-     */
-
-        window.marcidBlueDailyClosingData = {
-        collectDraft,
-        saveDraft,
-        loadDraft,
-        reset: resetDailyClosing,
-        finalizeDailyClosing,
-        getDailyId: () => dailyId
-    };
-
-
-    const finalizeButton = document.getElementById(
-        'finalizeDailyClosingButton'
-    );
-
-    if (finalizeButton) {
-        finalizeButton.addEventListener(
-            'click',
-            finalizeDailyClosing
-        );
-    }
-
-    async function finalizeDailyClosing() {
-    const button = document.getElementById('finalizeDailyClosingButton');
-
-    if (!button) {
-        console.error('Finalize button not found.');
-        return;
-    }
-
-    const confirmed = window.confirm(
-        'Are you sure you want to finalize and close this day?\n\n' +
-        'Once finalized, the daily record will be saved and closed.'
-    );
-
-    if (!confirmed) {
-        return;
-    }
-
-    button.disabled = true;
-    const originalText = button.textContent;
-    button.textContent = 'Finalizing...';
-
-    try {
-        // Make sure the latest values are saved into the draft first.
-        const draft = collectDraft();
-        await saveDraft(draft);
-
-        const formData = new FormData();
-        formData.append('action', 'finalize');
-        formData.append('daily_id', String(dailyId));
-
-        const response = await fetch(BACKEND_URL, {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-            throw new Error(
-                result.message || 'Unable to finalize the daily closing.'
-            );
-        }
-
-        alert(
-            result.message ||
-            'Daily closing finalized successfully.'
-        );
-
-        // Reload the page so the newly saved/closed state is displayed.
-        window.location.reload();
-
-    } catch (error) {
-        console.error('Finalize daily closing error:', error);
-
-        alert(
-            error.message ||
-            'Unable to finalize the daily closing.'
-        );
-
-        button.disabled = false;
-        button.textContent = originalText;
-    }
-}
 
 })();
