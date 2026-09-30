@@ -18,6 +18,10 @@
 
     const CURRENT_DEBT_REFRESH_DELAY = 350;
 
+    /* Browser-side draft cache. This is the immediate autosave layer. */
+    const LOCAL_DRAFT_KEY_PREFIX =
+        'marcidBlueDailyClosingDraft:';
+
 
     /*
      * ---------------------------------------------------------
@@ -56,6 +60,87 @@
      * GENERAL HELPERS
      * ---------------------------------------------------------
      */
+
+    function getLocalDraftKey() {
+
+        return LOCAL_DRAFT_KEY_PREFIX + String(dailyId);
+
+    }
+
+
+    function saveDraftToBrowser(draft) {
+
+        if (!draft || dailyId <= 0) {
+            return;
+        }
+
+        try {
+            localStorage.setItem(
+                getLocalDraftKey(),
+                JSON.stringify(draft)
+            );
+        } catch (error) {
+            console.warn(
+                'Marcid Blue: unable to save browser draft.',
+                error
+            );
+        }
+
+    }
+
+
+    function loadDraftFromBrowser() {
+
+        if (dailyId <= 0) {
+            return null;
+        }
+
+        try {
+            const raw =
+                localStorage.getItem(
+                    getLocalDraftKey()
+                );
+
+            if (!raw) {
+                return null;
+            }
+
+            const draft = JSON.parse(raw);
+
+            return draft && typeof draft === 'object'
+                ? draft
+                : null;
+
+        } catch (error) {
+            console.warn(
+                'Marcid Blue: unable to load browser draft.',
+                error
+            );
+            return null;
+        }
+
+    }
+
+
+    function clearBrowserDraft() {
+
+        if (dailyId <= 0) {
+            return;
+        }
+
+        try {
+            localStorage.removeItem(
+                getLocalDraftKey()
+            );
+        } catch (error) {
+            console.warn(
+                'Marcid Blue: unable to clear browser draft.',
+                error
+            );
+        }
+
+    }
+
 
     function getElement(id) {
 
@@ -2025,6 +2110,8 @@
         const draft =
             collectDraft();
 
+        saveDraftToBrowser(draft);
+
 
         const params =
             new URLSearchParams();
@@ -2994,6 +3081,32 @@
             );
 
 
+            const browserDraft =
+                loadDraftFromBrowser();
+
+            if (browserDraft) {
+
+                console.info(
+                    'Marcid Blue: restoring browser-side daily draft.'
+                );
+
+                restoreShopState(browserDraft.shop);
+                restoreDriverState(browserDraft.driver);
+
+                if (Array.isArray(browserDraft.payroll)) {
+                    restorePayrollState(browserDraft.payroll);
+                }
+
+                requestAnimationFrame(() => {
+                    recalculate();
+                    scheduleCurrentDebtRefresh();
+                });
+
+                return;
+
+            }
+
+
             if (
                 !result.has_draft ||
                 !result.draft
@@ -3220,6 +3333,9 @@
         }
 
 
+        /* Persist the latest form state immediately in the browser. */
+        saveDraftToBrowser(collectDraft());
+
         clearTimeout(
             autosaveTimer
         );
@@ -3418,6 +3534,8 @@
 
             }
 
+
+            clearBrowserDraft();
 
         } catch (error) {
 
