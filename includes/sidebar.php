@@ -28,6 +28,7 @@ $validPages = [
     'customers',
     'daily-records',
     'daily-closing',
+    'payroll',
     'settings'
 ];
 
@@ -58,6 +59,12 @@ $navItems = [
         'href' => $pageRoot . 'daily-closing.php',
         'icon' => '🧾',
         'label' => 'Daily Closing'
+    ],
+
+    'payroll' => [
+        'href' => $pageRoot . 'payroll.php',
+        'icon' => '💰',
+        'label' => 'Payroll'
     ],
 
     'settings' => [
@@ -94,7 +101,7 @@ $navItems = [
 
         <?php foreach ($navItems as $key => $item): ?>
 
-            <?php if ($key === 'settings') continue; ?>
+            <?php if ($key === 'payroll' || $key === 'settings') continue; ?>
 
             <a
                 href="<?= htmlspecialchars($item['href']) ?>"
@@ -118,6 +125,20 @@ $navItems = [
         >
             System
         </div>
+
+
+        <a
+            href="<?= htmlspecialchars($navItems['payroll']['href']) ?>"
+            class="nav-item<?= $currentPage === 'payroll' ? ' active' : '' ?>"
+        >
+
+            💰
+
+            <span>
+                Payroll
+            </span>
+
+        </a>
 
 
         <a
