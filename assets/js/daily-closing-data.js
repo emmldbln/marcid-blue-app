@@ -18,11 +18,6 @@
 
     const CURRENT_DEBT_REFRESH_DELAY = 350;
 
-    /* Browser-side draft cache. This is the immediate autosave layer. */
-    const LOCAL_DRAFT_KEY_PREFIX =
-        'marcidBlueDailyClosingDraft:';
-
-
     /*
      * ---------------------------------------------------------
      * STATE
@@ -60,87 +55,6 @@
      * GENERAL HELPERS
      * ---------------------------------------------------------
      */
-
-    function getLocalDraftKey() {
-
-        return LOCAL_DRAFT_KEY_PREFIX + String(dailyId);
-
-    }
-
-
-    function saveDraftToBrowser(draft) {
-
-        if (!draft || dailyId <= 0) {
-            return;
-        }
-
-        try {
-            localStorage.setItem(
-                getLocalDraftKey(),
-                JSON.stringify(draft)
-            );
-        } catch (error) {
-            console.warn(
-                'Marcid Blue: unable to save browser draft.',
-                error
-            );
-        }
-
-    }
-
-
-    function loadDraftFromBrowser() {
-
-        if (dailyId <= 0) {
-            return null;
-        }
-
-        try {
-            const raw =
-                localStorage.getItem(
-                    getLocalDraftKey()
-                );
-
-            if (!raw) {
-                return null;
-            }
-
-            const draft = JSON.parse(raw);
-
-            return draft && typeof draft === 'object'
-                ? draft
-                : null;
-
-        } catch (error) {
-            console.warn(
-                'Marcid Blue: unable to load browser draft.',
-                error
-            );
-            return null;
-        }
-
-    }
-
-
-    function clearBrowserDraft() {
-
-        if (dailyId <= 0) {
-            return;
-        }
-
-        try {
-            localStorage.removeItem(
-                getLocalDraftKey()
-            );
-        } catch (error) {
-            console.warn(
-                'Marcid Blue: unable to clear browser draft.',
-                error
-            );
-        }
-
-    }
-
 
     function getElement(id) {
 
@@ -2110,9 +2024,6 @@
         const draft =
             collectDraft();
 
-        saveDraftToBrowser(draft);
-
-
         const params =
             new URLSearchParams();
 
@@ -3080,33 +2991,6 @@
                 dailyId
             );
 
-
-            const browserDraft =
-                loadDraftFromBrowser();
-
-            if (browserDraft) {
-
-                console.info(
-                    'Marcid Blue: restoring browser-side daily draft.'
-                );
-
-                restoreShopState(browserDraft.shop);
-                restoreDriverState(browserDraft.driver);
-
-                if (Array.isArray(browserDraft.payroll)) {
-                    restorePayrollState(browserDraft.payroll);
-                }
-
-                requestAnimationFrame(() => {
-                    recalculate();
-                    scheduleCurrentDebtRefresh();
-                });
-
-                return;
-
-            }
-
-
             if (
                 !result.has_draft ||
                 !result.draft
@@ -3533,10 +3417,6 @@
                 );
 
             }
-
-
-            clearBrowserDraft();
-
         } catch (error) {
 
             console.error(
@@ -3970,6 +3850,7 @@
 
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
+
             }
         );
 
@@ -4038,36 +3919,11 @@
 
         bindAutosaveEvents();
 
+
         /*
-         * Safety-net autosave.
-         *
-         * Dynamic delivery rows and browser lifecycle events can
-         * occasionally bypass a debounced save. While the page
-         * has unsaved changes, check every 2 seconds and persist
-         * the latest complete Daily Closing draft.
+         * Wait until the redesign's own JavaScript has
+         * finished initializing its rows and controls.
          */
-        autosaveInterval =
-            setInterval(
-                () => {
-
-                    if (
-                        hasUnsavedChanges &&
-                        !isRestoring &&
-                        dailyId > 0 &&
-                        !isSaving
-                    ) {
-
-                        saveDraft();
-
-                    }
-
-                },
-                2000
-            );
-
-        bindSidePanels();
-
-
         await new Promise(
             resolve =>
                 setTimeout(
@@ -4077,119 +3933,12 @@
         );
 
 
-        /*
-         * Load active employees before loading the draft.
-         * This is important because payroll draft values need
-         * actual employee inputs to restore into.
-         */
-        await loadPayrollEmployees();
-
-
-        /*
-         * Load today's Daily Closing draft.
-         */
         await loadDraft();
-
-
-        /*
-         * Restore payroll one more time after the employees
-         * have definitely been rendered.
-         */
-        try {
-
-            if (dailyId > 0) {
-
-                const draftResponse =
-                    await fetch(
-                        BACKEND_URL +
-                        '?action=load&_=' +
-                        Date.now(),
-                        {
-                            method: 'GET',
-                            credentials: 'same-origin',
-                            cache: 'no-store',
-                            headers: {
-                                Accept:
-                                    'application/json'
-                            }
-                        }
-                    );
-
-
-                if (draftResponse.ok) {
-
-                    const draftResult =
-                        await draftResponse.json();
-
-
-                    if (
-                        draftResult.success &&
-                        draftResult.has_draft &&
-                        draftResult.draft &&
-                        Array.isArray(
-                            draftResult.draft.payroll
-                        )
-                    ) {
-
-                        restorePayrollState(
-                            draftResult.draft.payroll
-                        );
-
-                    }
-
-                }
-
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Marcid Blue: unable to restore payroll draft.',
-                error
-            );
-
-        }
-
 
         await refreshCurrentDebt();
 
     }
 
-
-    /*
-     * ---------------------------------------------------------
-     * PUBLIC API
-     * ---------------------------------------------------------
-     */
-
-    window.marcidBlueDailyClosingData = {
-
-        collectDraft,
-
-        saveDraft,
-
-        loadDraft,
-
-        reset:
-            resetDailyClosing,
-
-        finalizeDailyClosing,
-
-        getDailyId:
-            () => dailyId,
-
-        getPayrollTotal,
-
-        getPayrollState
-
-    };
-
-
-    /*
-     * ---------------------------------------------------------
-     * DOM READY
-     * ---------------------------------------------------------
-     */
 
     if (
         document.readyState ===
