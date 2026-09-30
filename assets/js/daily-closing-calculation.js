@@ -1544,6 +1544,10 @@
                     target.classList.contains(
                         'delivery-payment'
                     )
+                    ||
+                    target.classList.contains(
+                        'payroll-amount-input'
+                    )
                 ) {
 
                     calculateShop();

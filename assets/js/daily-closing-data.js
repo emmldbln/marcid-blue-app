@@ -434,24 +434,22 @@
 
     function getPayrollTotal() {
 
-        return getPayrollState().reduce(
-            (
-                total,
-                employee
-            ) => {
+    let total = 0;
 
-                return total +
-                    (
-                        Number(
-                            employee.amount
-                        ) || 0
-                    );
+    document
+        .querySelectorAll('.payroll-amount-input')
+        .forEach(
+            input => {
 
-            },
-            0
+                total +=
+                    Number(input.value) || 0;
+
+            }
         );
 
-    }
+    return total;
+
+}
 
 
     /*
