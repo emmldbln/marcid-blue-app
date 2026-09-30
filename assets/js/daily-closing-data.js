@@ -602,16 +602,13 @@
                     const employeeId =
                         input.dataset.payrollAmount;
 
-                    const remainingSalary =
+                    const payrollAmount =
                         Number(
                             input.value
                         ) || 0;
 
                     total +=
-                        remainingSalary +
-                        getEmployeeCashAdvance(
-                            employeeId
-                        );
+                        payrollAmount;
 
                 }
             );
@@ -1219,14 +1216,7 @@
 
                     amountDisplay.textContent =
                         formatPayrollMoney(
-                            (
-                                Number(
-                                    savedAmount
-                                ) || 0
-                            ) +
-                            getEmployeeCashAdvance(
-                                employeeId
-                            )
+                            savedAmount
                         );
 
                 }
@@ -1483,10 +1473,11 @@
                 *
                 * IMPORTANT:
                 *
-                * This is the total payroll shown in the header.
+                * This is the total Payroll Amount.
                 *
-                * It includes Cash Advance plus the remaining
-                * salary entered below.
+                * It starts with the employee's Cash Advance.
+                * The user then adds the remaining salary to this
+                * same Payroll Amount.
                 * -------------------------------------------------
                 */
 
@@ -1656,7 +1647,9 @@
                 * IMPORTANT
                 * -------------------------------------------------
                 *
-                * New Remaining Payroll Amount = 0.
+                * New Payroll Amount starts at the Cash Advance.
+                *
+                * The user adds the remaining salary to this amount.
                 *
                 * A saved draft will overwrite this value later
                 * through restorePayrollState().
@@ -1664,7 +1657,15 @@
                 */
 
                 amountInput.value =
-                    '0.00';
+                    formatPayrollMoney(
+                        getEmployeeCashAdvance(
+                            employee.employee_id
+                        )
+                    ).replace(
+                        '₱',
+                        ''
+                    )
+                    || '0.00';
 
 
                 amountInput.style.width =
@@ -1721,18 +1722,6 @@
 
 
                         updatePayrollTotal();
-
-                    amountDisplay.textContent =
-                        formatPayrollMoney(
-                            (
-                                Number(
-                                    amountInput.value
-                                ) || 0
-                            ) +
-                            getEmployeeCashAdvance(
-                                employee.employee_id
-                            )
-                        );
 
                         scheduleAutosave();
 
