@@ -29,6 +29,10 @@
 
     let autosaveTimer = null;
 
+    let autosaveInterval = null;
+
+    let hasUnsavedChanges = false;
+
     let isRestoring = false;
 
     let isSaving = false;
@@ -3206,6 +3210,8 @@
                     }
 
 
+                    hasUnsavedChanges = false;
+
                     console.info(
                         'Marcid Blue: draft saved successfully.'
                     );
@@ -3386,6 +3392,8 @@
         * Only one save happens after the user stops editing.
         * -----------------------------------------------------
         */
+
+        hasUnsavedChanges = true;
 
         clearTimeout(
             autosaveTimer
@@ -4020,6 +4028,8 @@
                     return;
                 }
 
+                hasUnsavedChanges = true;
+
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
 
@@ -4038,6 +4048,8 @@
                 ) {
                     return;
                 }
+
+                hasUnsavedChanges = true;
 
                 scheduleAutosave();
                 scheduleCurrentDebtRefresh();
@@ -4324,6 +4336,33 @@
 
 
         bindAutosaveEvents();
+
+        /*
+         * Safety-net autosave.
+         *
+         * Dynamic delivery rows and browser lifecycle events can
+         * occasionally bypass a debounced save. While the page
+         * has unsaved changes, check every 2 seconds and persist
+         * the latest complete Daily Closing draft.
+         */
+        autosaveInterval =
+            setInterval(
+                () => {
+
+                    if (
+                        hasUnsavedChanges &&
+                        !isRestoring &&
+                        dailyId > 0 &&
+                        !isSaving
+                    ) {
+
+                        saveDraft();
+
+                    }
+
+                },
+                2000
+            );
 
         bindSidePanels();
 
