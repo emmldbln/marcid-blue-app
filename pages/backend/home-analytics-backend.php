@@ -1512,40 +1512,41 @@ function getManualExpenses(
     int $periodId
 ): array {
 
-    $period =
-        getPeriod(
-            $pdo,
-            $periodId
-        );
+    getPeriod(
+        $pdo,
+        $periodId
+    );
 
     $stmt = $pdo->prepare(
         "SELECT
-            e.*,
+            e.expense_id,
+            e.period_id,
+            e.category,
+            e.description,
+            e.amount,
+            e.expense_date,
+            e.expense_end_date,
 
-            p1.analytics_year AS period_year,
-            p1.analytics_month AS period_month,
-            p1.period_start AS period_start,
-            p1.period_end AS period_end,
-
-            p2.analytics_year AS end_period_year,
-            p2.analytics_month AS end_period_month,
-            p2.period_start AS end_period_start,
-            p2.period_end AS end_period_end
+            p.analytics_year AS period_year,
+            p.analytics_month AS period_month,
+            p.period_start AS period_start,
+            p.period_end AS period_end
 
          FROM analytics_manual_expenses e
 
-         INNER JOIN analytics_periods p1
-            ON p1.period_id = e.period_id
+         INNER JOIN analytics_periods p
+            ON p.period_id = e.period_id
 
-         LEFT JOIN analytics_periods p2
-            ON p2.period_id = e.end_period_id
+         WHERE e.period_id = ?
 
          ORDER BY
             e.expense_date DESC,
             e.expense_id DESC"
     );
 
-    $stmt->execute();
+    $stmt->execute([
+        $periodId
+    ]);
 
     $result = [];
 
@@ -1554,54 +1555,26 @@ function getManualExpenses(
         as $expense
     ) {
 
-        $coverage =
-            manualExpenseCoverage(
-                $expense
-            );
+        $expenseDate =
+            (string)$expense['expense_date'];
 
-        if (!$coverage) {
+        $expenseEndDate =
+            !empty($expense['expense_end_date'])
+                ? (string)$expense['expense_end_date']
+                : $expenseDate;
+
+        if (!validDate($expenseDate)) {
             continue;
         }
 
-        $daysInExpense =
-            overlapDays(
-                $coverage['start'],
-                $coverage['end'],
-                $coverage['start'],
-                $coverage['end']
-            );
-
-        if ($daysInExpense <= 0) {
-            continue;
+        if (!validDate($expenseEndDate)) {
+            $expenseEndDate =
+                $expenseDate;
         }
 
-        $periodDays =
-            overlapDays(
-                $coverage['start'],
-                $coverage['end'],
-                $period['period_start'],
-                $period['period_end']
-            );
-
-        $allocated =
-            $periodDays > 0
-                ? (
-                    (float)$expense['amount']
-                    *
-                    (
-                        $periodDays
-                        /
-                        $daysInExpense
-                    )
-                )
-                : 0.00;
-
-        /*
-         * Only show an expense in this period
-         * when it actually overlaps this period.
-         */
-        if ($periodDays <= 0) {
-            continue;
+        if ($expenseEndDate < $expenseDate) {
+            $expenseEndDate =
+                $expenseDate;
         }
 
         $result[] = [
@@ -1620,26 +1593,27 @@ function getManualExpenses(
                 ),
 
             'allocated_amount' =>
-                money($allocated),
+                money(
+                    (float)$expense['amount']
+                ),
 
             'expense_date' =>
-                (string)$expense['expense_date'],
+                $expenseDate,
 
             'expense_end_date' =>
-                $coverage['end'],
+                $expenseEndDate,
 
             'period_id' =>
                 (int)$expense['period_id'],
 
-            'end_period_id' =>
-                $expense['end_period_id'] !== null
-                    ? (int)$expense['end_period_id']
-                    : null,
+            'period_label' =>
+                formatPeriodRange(
+                    (string)$expense['period_start'],
+                    (string)$expense['period_end']
+                ),
 
             'notes' =>
-                $expense['notes'] !== null
-                    ? (string)$expense['notes']
-                    : ''
+                ''
         ];
     }
 
@@ -1661,7 +1635,7 @@ function calculateManualExpenseTotal(
 
     foreach ($expenses as $expense) {
         $total +=
-            (float)$expense['allocated_amount'];
+            (float)$expense['amount'];
     }
 
     return money($total);
