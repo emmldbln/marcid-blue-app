@@ -3300,11 +3300,20 @@
 
             }
 
+            /*
+             * Driver/Station Cash Advance rows may have been rebuilt
+             * during restore, so refresh the Payroll display after
+             * every restored row is in place.
+             */
+            updatePayrollCashAdvances();
+
 
             requestAnimationFrame(
                 () => {
 
                     recalculate();
+
+                    updatePayrollCashAdvances();
 
                     scheduleCurrentDebtRefresh();
 
