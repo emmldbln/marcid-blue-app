@@ -1158,6 +1158,7 @@
             */
 
             let payrollTotal = 0;
+            let payrollCashAdvanceTotal = 0;
 
 
             if (
@@ -1177,9 +1178,49 @@
             }
 
 
+            if (
+                window.marcidBlueGetPayrollCashAdvanceTotal
+                &&
+                typeof
+                    window.marcidBlueGetPayrollCashAdvanceTotal
+                    === 'function'
+            ) {
+
+                payrollCashAdvanceTotal =
+                    Number(
+                        window.marcidBlueGetPayrollCashAdvanceTotal()
+                    ) || 0;
+
+            }
+
+
             payrollTotal =
                 roundMoney(
                     payrollTotal
+                );
+
+            payrollCashAdvanceTotal =
+                roundMoney(
+                    payrollCashAdvanceTotal
+                );
+
+            /*
+             * Cash Advances are already included in Station / Driver
+             * Expenses, so subtracting the full Payroll Total here
+             * would count them twice.
+             *
+             * Payroll's additional impact on Net Profit is only the
+             * remaining salary:
+             *
+             * Total Payroll - Cash Advances = Remaining Payroll.
+             */
+            const payrollExpense =
+                roundMoney(
+                    Math.max(
+                        0,
+                        payrollTotal -
+                        payrollCashAdvanceTotal
+                    )
                 );
 
 
@@ -1192,7 +1233,7 @@
             const netProfit =
                 roundMoney(
                     totalRevenue
-                    - payrollTotal
+                    - payrollExpense
                 );
 
 
@@ -1544,6 +1585,14 @@
                     target.classList.contains(
                         'payroll-amount-input'
                     )
+                    ||
+                    target.classList.contains(
+                        'expense-amount'
+                    )
+                    ||
+                    target.classList.contains(
+                        'driver-expense-amount'
+                    )
                 ) {
 
                     calculateShop();
@@ -1615,9 +1664,38 @@
                     target.closest(
                         '#driverDeliveriesPanel'
                     )
+                    ||
+                    target.classList.contains(
+                        'expense-category'
+                    )
+                    ||
+                    target.classList.contains(
+                        'expense-name'
+                    )
+                    ||
+                    target.classList.contains(
+                        'driver-expense-category'
+                    )
+                    ||
+                    target.classList.contains(
+                        'driver-expense-name'
+                    )
+                    ||
+                    target.classList.contains(
+                        'payroll-amount-input'
+                    )
                 ) {
 
                     calculateEverything();
+
+                    if (
+                        window.marcidBlueUpdatePayrollCashAdvances &&
+                        typeof
+                            window.marcidBlueUpdatePayrollCashAdvances
+                            === 'function'
+                    ) {
+                        window.marcidBlueUpdatePayrollCashAdvances();
+                    }
                 }
             }
         );
