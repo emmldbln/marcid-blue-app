@@ -200,6 +200,175 @@ final class DailyRecordRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+     /*
+     * ---------------------------------------------------------
+     * PAYROLL
+     * ---------------------------------------------------------
+     *
+     * Finalized payroll is stored in daily_payroll.
+     *
+     * payroll_amount = Remaining Payroll
+     *
+     * Cash Advance is already stored separately in expenses.
+     *
+     * Daily Rate is intentionally not displayed or used.
+     */
+
+    public function getPayroll(
+        int $dailyId,
+        array $expenses
+    ): array {
+
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                dp.employee_id,
+                e.full_name AS employee_name,
+                dp.payroll_amount
+
+             FROM daily_payroll dp
+
+             INNER JOIN employees e
+                ON e.employee_id = dp.employee_id
+
+             WHERE dp.daily_id = ?
+
+             ORDER BY
+                e.full_name ASC,
+                dp.employee_id ASC"
+        );
+
+        $stmt->execute([
+            $dailyId
+        ]);
+
+        $payrollRows =
+            $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+        /*
+         * -----------------------------------------------------
+         * CASH ADVANCES
+         * -----------------------------------------------------
+         */
+
+        $cashAdvances = [];
+
+        foreach ($expenses as $expense) {
+
+            if (
+                trim(
+                    (string) (
+                        $expense['category']
+                        ?? ''
+                    )
+                ) !== 'Cash Advance'
+            ) {
+                continue;
+            }
+
+
+            $employeeName =
+                trim(
+                    (string) (
+                        $expense['description']
+                        ?? ''
+                    )
+                );
+
+
+            if ($employeeName === '') {
+                continue;
+            }
+
+
+            $key =
+                strtolower(
+                    $employeeName
+                );
+
+
+            if (!isset($cashAdvances[$key])) {
+                $cashAdvances[$key] = 0.00;
+            }
+
+
+            $cashAdvances[$key] +=
+                (float) (
+                    $expense['amount']
+                    ?? 0
+                );
+        }
+
+
+        /*
+         * -----------------------------------------------------
+         * COMBINE PAYROLL VALUES
+         * -----------------------------------------------------
+         */
+
+        foreach ($payrollRows as &$payroll) {
+
+            $employeeName =
+                trim(
+                    (string) (
+                        $payroll['employee_name']
+                        ?? ''
+                    )
+                );
+
+
+            $key =
+                strtolower(
+                    $employeeName
+                );
+
+
+            $cashAdvance =
+                round(
+                    (float) (
+                        $cashAdvances[$key]
+                        ?? 0
+                    ),
+                    2
+                );
+
+
+            $remainingPayroll =
+                round(
+                    (float) (
+                        $payroll['payroll_amount']
+                        ?? 0
+                    ),
+                    2
+                );
+
+
+            $totalPayroll =
+                round(
+                    $cashAdvance +
+                    $remainingPayroll,
+                    2
+                );
+
+
+            $payroll['cash_advance'] =
+                $cashAdvance;
+
+
+            $payroll['remaining_payroll'] =
+                $remainingPayroll;
+
+
+            $payroll['total_payroll'] =
+                $totalPayroll;
+        }
+
+        unset($payroll);
+
+
+        return $payrollRows;
+    }
+
 
     /*
      * ---------------------------------------------------------
@@ -573,6 +742,11 @@ $expenses = $repository->getExpenses(
     $dailyId
 );
 
+$payroll = $repository->getPayroll(
+    $dailyId,
+    $expenses
+);
+
 $debts = $repository->getDebts(
     $dailyId
 );
@@ -612,6 +786,48 @@ $creditTotal =
     $repository->calculateCreditTotal(
         $credits
     );
+
+    $payrollCashAdvanceTotal = round(
+    array_sum(
+        array_map(
+            static fn(array $row): float =>
+                (float) (
+                    $row['cash_advance']
+                    ?? 0
+                ),
+            $payroll
+        )
+    ),
+    2
+);
+
+$remainingPayrollTotal = round(
+    array_sum(
+        array_map(
+            static fn(array $row): float =>
+                (float) (
+                    $row['remaining_payroll']
+                    ?? 0
+                ),
+            $payroll
+        )
+    ),
+    2
+);
+
+$payrollTotal = round(
+    array_sum(
+        array_map(
+            static fn(array $row): float =>
+                (float) (
+                    $row['total_payroll']
+                    ?? 0
+                ),
+            $payroll
+        )
+    ),
+    2
+);
 
 
 /*
@@ -653,10 +869,17 @@ $otherSales = (float) (
  * =========================================================
  */
 
-$netProfit = round(
+$totalRevenue = round(
     $walkInTotal
     + $otherSales
     + $paymentTotal,
+    2
+);
+
+$netProfit = round(
+    $totalRevenue
+    - $expenseTotal
+    - $remainingPayrollTotal,
     2
 );
 
@@ -1016,6 +1239,24 @@ $assetRoot = '../../';
         .expenses-table th,
         .expenses-table td {
             width: 25%;
+        }
+
+        /* =========================================================
+           PAYROLL TABLE
+           ========================================================= */
+
+        .payroll-table th:first-child,
+        .payroll-table td:first-child {
+            width: 34%;
+        }
+
+        .payroll-table th:nth-child(2),
+        .payroll-table td:nth-child(2),
+        .payroll-table th:nth-child(3),
+        .payroll-table td:nth-child(3),
+        .payroll-table th:nth-child(4),
+        .payroll-table td:nth-child(4) {
+            width: 22%;
         }
 
 
@@ -1941,7 +2182,112 @@ $assetRoot = '../../';
                         <?php endif; ?>
 
                     </section>
+                    
+                     <!-- =================================================
+                         PAYROLL
+                         ================================================= -->
 
+                    <section class="report-section">
+
+                        <div class="report-section-header">
+
+                            <h3>
+                                Payroll
+                            </h3>
+
+                            <span>
+                                <?= DailyRecordFormatter::recordLabel(
+                                    count($payroll)
+                                ) ?>
+                            </span>
+
+                        </div>
+
+
+                        <?php if (empty($payroll)): ?>
+
+                            <div class="report-empty">
+                                No payroll recorded for this day.
+                            </div>
+
+                        <?php else: ?>
+
+                            <table class="report-table payroll-table">
+
+                                <thead>
+
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th class="number">Cash Advance</th>
+                                        <th class="number">Remaining Payroll</th>
+                                        <th class="number">Total Payroll</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                    <?php foreach ($payroll as $row): ?>
+
+                                        <tr>
+
+                                            <td class="strong">
+                                                <?= DailyRecordFormatter::escape(
+                                                    $row['employee_name']
+                                                        ?? 'Unknown Employee'
+                                                ) ?>
+                                            </td>
+
+                                            <td class="number">
+                                                <?= DailyRecordFormatter::money(
+                                                    $row['cash_advance']
+                                                        ?? 0
+                                                ) ?>
+                                            </td>
+
+                                            <td class="number">
+                                                <?= DailyRecordFormatter::money(
+                                                    $row['remaining_payroll']
+                                                        ?? 0
+                                                ) ?>
+                                            </td>
+
+                                            <td class="number strong">
+                                                <?= DailyRecordFormatter::money(
+                                                    $row['total_payroll']
+                                                        ?? 0
+                                                ) ?>
+                                            </td>
+
+                                        </tr>
+
+                                    <?php endforeach; ?>
+
+                                </tbody>
+
+                            </table>
+
+                            <div class="report-total-row">
+
+                                <div class="report-total">
+
+                                    <span class="report-total-label">
+                                        Total Payroll
+                                    </span>
+
+                                    <span class="report-total-value">
+                                        <?= DailyRecordFormatter::money(
+                                            $payrollTotal
+                                        ) ?>
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        <?php endif; ?>
+
+                    </section>
 
                 </div>
 
