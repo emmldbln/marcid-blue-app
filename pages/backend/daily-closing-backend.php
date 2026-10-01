@@ -3545,6 +3545,9 @@ final class DailyClosingService
                 function (
                     array $expense,
                     string $location
+                ) use (
+                    $dailyRecord,
+                    $dailyId
                 ): void {
 
                     $category =

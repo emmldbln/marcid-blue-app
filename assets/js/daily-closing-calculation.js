@@ -1132,12 +1132,6 @@
             * ---------------------------------------------------------
             * TOTAL REVENUE
             * ---------------------------------------------------------
-            *
-            * Based on actual money received:
-            *
-            * Walk-in Sales
-            * + Other / Additional Sales
-            * + Actual Delivery Payments
             */
 
             const totalRevenue =
@@ -1150,77 +1144,39 @@
 
             /*
             * ---------------------------------------------------------
-            * PAYROLL
+            * REMAINING PAYROLL
             * ---------------------------------------------------------
             *
-            * Payroll is separate from Station / Driver Expenses.
-            * It is deducted directly from Net Profit.
+            * Cash Advances are already recorded under Station /
+            * Driver Expenses.
+            *
+            * Therefore, only the amount entered in
+            * Payroll Amount (Remaining) is deducted here.
             */
 
-            let payrollTotal = 0;
-            let payrollCashAdvanceTotal = 0;
+            let remainingPayroll =
+                0;
 
 
-            if (
-                window.marcidBlueDailyClosingData &&
-                typeof
-                    window.marcidBlueDailyClosingData
-                        .getPayrollTotal ===
-                    'function'
-            ) {
+            document
+                .querySelectorAll(
+                    '.payroll-amount-input'
+                )
+                .forEach(
+                    input => {
 
-                payrollTotal =
-                    Number(
-                        window.marcidBlueDailyClosingData
-                            .getPayrollTotal()
-                    ) || 0;
+                        remainingPayroll +=
+                            Number(
+                                input.value
+                            ) || 0;
 
-            }
-
-
-            if (
-                window.marcidBlueGetPayrollCashAdvanceTotal
-                &&
-                typeof
-                    window.marcidBlueGetPayrollCashAdvanceTotal
-                    === 'function'
-            ) {
-
-                payrollCashAdvanceTotal =
-                    Number(
-                        window.marcidBlueGetPayrollCashAdvanceTotal()
-                    ) || 0;
-
-            }
-
-
-            payrollTotal =
-                roundMoney(
-                    payrollTotal
+                    }
                 );
 
-            payrollCashAdvanceTotal =
-                roundMoney(
-                    payrollCashAdvanceTotal
-                );
 
-            /*
-             * Cash Advances are already included in Station / Driver
-             * Expenses, so subtracting the full Payroll Total here
-             * would count them twice.
-             *
-             * Payroll's additional impact on Net Profit is only the
-             * remaining salary:
-             *
-             * Total Payroll - Cash Advances = Remaining Payroll.
-             */
-            const payrollExpense =
+            remainingPayroll =
                 roundMoney(
-                    Math.max(
-                        0,
-                        payrollTotal -
-                        payrollCashAdvanceTotal
-                    )
+                    remainingPayroll
                 );
 
 
@@ -1228,12 +1184,16 @@
             * ---------------------------------------------------------
             * NET PROFIT
             * ---------------------------------------------------------
+            *
+            * Raw Net Profit
+            * - Remaining Payroll
+            * = Net Profit After Payroll
             */
 
             const netProfit =
                 roundMoney(
                     totalRevenue
-                    - payrollExpense
+                    - remainingPayroll
                 );
 
 
@@ -1255,7 +1215,6 @@
 
             return netProfit;
         }
-
 
         // =========================================================
         // CURRENT DRAFT DEBT
