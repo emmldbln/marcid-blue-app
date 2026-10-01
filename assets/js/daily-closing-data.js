@@ -744,6 +744,51 @@
     window.marcidBlueUpdatePayrollTotal =
         updatePayrollTotal;
 
+    window.marcidBlueGetPayrollCashAdvanceTotal =
+        getPayrollCashAdvanceTotal;
+
+
+    function getPayrollCashAdvanceTotal() {
+
+        let total = 0;
+
+        getRows(
+            '.expense-row, .driver-expense-row'
+        ).forEach(
+            row => {
+
+                const category =
+                    row.querySelector(
+                        '.expense-category, .driver-expense-category'
+                    );
+
+                const amount =
+                    row.querySelector(
+                        '.expense-amount, .driver-expense-amount'
+                    );
+
+                if (
+                    !category ||
+                    category.value !==
+                        'Cash Advance'
+                ) {
+                    return;
+                }
+
+                total +=
+                    Number(
+                        amount
+                            ? amount.value
+                            : 0
+                    ) || 0;
+
+            }
+        );
+
+        return total;
+
+    }
+
 
     function getPayrollTotal() {
 
@@ -1299,14 +1344,26 @@
                     );
 
                 if (nameField) {
+
+                    const savedEmployeeId =
+                        data.employee_id != null
+                            ? String(data.employee_id)
+                            : '';
+
                     nameField.value =
                         data.category === 'Cash Advance'
-                            ? (
-                                data.employee_id != null
-                                    ? String(data.employee_id)
-                                    : ''
-                            )
+                            ? savedEmployeeId
                             : (data.name ?? '');
+
+                    if (
+                        data.category === 'Cash Advance'
+                    ) {
+
+                        nameField.dataset.selectedEmployeeId =
+                            savedEmployeeId;
+
+                    }
+
                 }
 
             }
