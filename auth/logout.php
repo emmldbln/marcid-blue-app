@@ -4,5 +4,10 @@ require_once 'auth.php';
 
 logout();
 
-header('Location: /marcid-blue/');
+if (($_SERVER['HTTP_HOST'] ?? '') === 'localhost') {
+    header('Location: /marcid-blue/');
+} else {
+    header('Location: /');
+}
+
 exit;
